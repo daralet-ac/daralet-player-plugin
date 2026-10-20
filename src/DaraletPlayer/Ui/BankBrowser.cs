@@ -284,6 +284,10 @@ namespace DaraletPlayer.Ui {
                 // centred, as the game's equipment panel is
                 ImGui.SetCursorPosX(Math.Max(ImGui.GetCursorPosX(), (ImGui.GetWindowWidth() - dollWidth) / 2));
                 RenderPaperdoll((float)Math.Floor(sigilGap));
+
+                // how much wider the window has to be for the whole paperdoll, with a little room either side (Reset width)
+                retailWidthShort = dollWidth + style.WindowPadding.X * 2 + RetailDollMargin * 2 - ImGui.GetWindowWidth();
+                retailDrawnFrame = ImGui.GetFrameCount();
             }
             ImGui.EndChild();
 
@@ -1123,6 +1127,19 @@ namespace DaraletPlayer.Ui {
         /// it's negative), or null when no grid was drawn last frame.
         /// </summary>
         public float? GridWidthShort => gridDrawnFrame >= ImGui.GetFrameCount() - 1 ? gridWidthShort : (float?)null;
+
+        /// <summary>The room either side of the Retail paperdoll that Reset width leaves.</summary>
+        private const float RetailDollMargin = 6;
+
+        private float retailWidthShort;
+        private int retailDrawnFrame = -1;
+
+        /// <summary>
+        /// For the Retail layout: how much wider the window would have to be for the paperdoll and the packs beside it to
+        /// fit with a little room (the grid below then has a little over seven columns), or null when it wasn't drawn last
+        /// frame.
+        /// </summary>
+        public float? RetailWidthShort => retailDrawnFrame >= ImGui.GetFrameCount() - 1 ? retailWidthShort : (float?)null;
 
         /// <summary>
         /// An item from here let go outside every window (the plugin's and UtilityBelt's): into the game world, where it's

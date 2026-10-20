@@ -199,8 +199,10 @@ namespace DaraletPlayer.Ui {
             }
             Widgets.Tip("Lays the window out like the game's inventory: what you're wearing at the top, the chosen pack's items as icons below it, and your packs down the right, icons only (hover one for its name). Off, it's the Carried tab's view, with the /bank buttons.");
 
-            // the grid says how far off six columns it is; only a grid that's showing can (Retail, or Grid in the plain view)
-            var widthShort = carriedWindowBrowser.GridWidthShort;
+            // Retail: wide enough for the paperdoll and the packs beside it, which leaves the grid below a little over seven
+            // columns. The plain view: the grid says how far off six columns it is, when it's showing (Grid)
+            var retail = settings.Data.CarriedRetail;
+            var widthShort = retail ? carriedWindowBrowser.RetailWidthShort : carriedWindowBrowser.GridWidthShort;
             ImGui.SameLine();
             ImGui.BeginDisabled(widthShort == null);
 
@@ -209,7 +211,9 @@ namespace DaraletPlayer.Ui {
             }
 
             ImGui.EndDisabled();
-            Widgets.Tip($"Makes the window just wide enough for {BankBrowser.RetailColumns} columns of items, as the game's pack has, with no gap before the scrollbar. Its height stays. Needs the items as a grid: Retail, or Grid.");
+            Widgets.Tip(retail
+                ? "Makes the window just wide enough for what you're wearing and your packs beside it, as the game's inventory is; the items below get the rest of the width. Its height stays."
+                : $"Makes the window just wide enough for {BankBrowser.RetailColumns} columns of items, with no gap before the scrollbar. Its height stays. Needs the items as a grid (Grid).");
 
             // the game's inventory has no /bank buttons; the plain view keeps them, and has Loot marks over its items
             if (!settings.Data.CarriedRetail) {
