@@ -10,7 +10,7 @@ using ImGuiNET;
 namespace DaraletPlayer.Ui {
     /// <summary>
     /// Packs and what's in them: the packs on the left, what's in the chosen one on the right, as a list or a grid. Drag an
-    /// item onto a pack, or right-click it, to move it; hover it for its details. One of these shows your bank and its packs
+    /// item onto a pack, or right-click it, to move it, or onto another item to put it in that place; hover it for its details. One of these shows your bank and its packs
     /// (the server says which container is the bank and numbers its packs, @playerui bank), another the packs you carry.
     /// The items are Decal's (WorldFilter); moving is the game's own move, so the server checks it like a drag in the game.
     /// </summary>
@@ -35,6 +35,11 @@ namespace DaraletPlayer.Ui {
         private string search = "";
         private string inscription = "";
         private int inscriptionFor;
+        private string inscriptionSeen;
+
+        /// <summary>The Tags list's AND, and the group ticked words join (-1 for the last).</summary>
+        private bool tagAnd;
+        private int tagGroup = -1;
         private int dragged;
 
         /// <summary>The packs you carry rather than your bank's.</summary>
@@ -95,6 +100,9 @@ namespace DaraletPlayer.Ui {
         /// <param name="bank">The open bank, for the bank's view; the packs you carry don't need it.</param>
         public void Render(BankInfo bank = null) {
             Snapshot(bank);
+
+            // a tool waiting for a target: what it is, and the target cursor
+            ItemUser.Render();
 
             // the paperdoll slides out: turning Worn on or off makes the window that much wider or narrower, so the packs and
             // items keep their room (squeezing them hid the very checkbox that turns it off)
@@ -192,6 +200,7 @@ namespace DaraletPlayer.Ui {
                 }
 
                 DragSource(item);
+                UseClicks(item);
                 ShowTooltip(item, iconHovered: false);
                 ItemMenu(item);
             }
@@ -264,7 +273,7 @@ namespace DaraletPlayer.Ui {
             var searching = search.Trim().Length > 0;
 
             if (!searching && holder?.PackNumber > 0) {
-                RenderInscribe(holder);
+                RenderPackSettings(holder);
             }
 
             var items = searching
@@ -354,6 +363,8 @@ namespace DaraletPlayer.Ui {
                     }
 
                     DragSource(item);
+                    UseClicks(item);
+                    ItemTarget(item);
                     ShowTooltip(item, iconHovered: false);
                     ItemMenu(item);
                 }
@@ -376,7 +387,7 @@ namespace DaraletPlayer.Ui {
                 ImGui.TableSetupColumn("Where", ImGuiTableColumnFlags.WidthFixed, 120);
             }
             Widgets.HeadersRow(
-                "Drag an item onto a pack on the left to move it there. Right-click it for the game's appraisal and a menu to move it. Hover it for its details.",
+                "Drag an item onto a pack on the left to move it there, or onto another item to put it in that item's place. Right-click it for the game's appraisal and a menu to move it. Hover it for its details.",
                 "What a vendor would pay for it, in pyreals.",
                 "How heavy it is.",
                 "Which pack it's in.");
@@ -388,6 +399,8 @@ namespace DaraletPlayer.Ui {
                 var iconHovered = icons.Draw(Icon(item), item.Mark);
                 ImGui.Selectable(item.Stack > 1 ? $"{item.Name} ({item.Stack:N0})##item-{item.Id}" : $"{item.Name}##item-{item.Id}");
                 DragSource(item);
+                UseClicks(item);
+                ItemTarget(item);
                 ShowTooltip(item, iconHovered);
                 ItemMenu(item);
 
@@ -406,66 +419,222 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// The box to change what a bank pack collects, which sends /bank inscribe with its number.
+        /// A bank pack's own settings, above its items: what it collects (Tags) and how it looks (Icon). Each pick is sent at
+        /// once, /bank inscribe or /bank icon with the pack's number.
         /// </summary>
-        private void RenderInscribe(Holder holder) {
-            if (inscriptionFor != holder.Id) {
+        private void RenderPackSettings(Holder holder) {
+            // the pack's tags as last sent, until the server's next bank reply says what they are (it may have refused)
+            if (inscriptionFor != holder.Id || holder.Inscription != inscriptionSeen) {
+                if (inscriptionFor != holder.Id) {
+                    tagGroup = -1;
+                }
+
                 inscriptionFor = holder.Id;
+                inscriptionSeen = holder.Inscription;
                 inscription = holder.Inscription ?? "";
             }
 
-            ImGui.SetNextItemWidth(220);
-            ImGui.InputTextWithHint("##bank-inscription", "weapons, swords t6...", ref inscription, 100);
-            Widgets.Tip("What this pack collects: category, type and tier words, in comma-separated groups (\"swords t6\" is tier 6 swords). Pick words from Tags, or type them.");
+            RenderTagList(holder);
             ImGui.SameLine();
-            RenderTagList();
-            ImGui.SameLine();
-
-            if (ImGui.Button("Tag pack")) {
-                feed.SendCommand(BankCommands.Inscribe(holder.PackNumber, inscription));
-            }
-            Widgets.Tip($"Inscribes this pack with what it should collect, for deposits, withdrawals and sorts: category, type and tier words. Sends {BankCommands.Inscribe(holder.PackNumber, "...")}. Empty clears it.");
+            RenderIconList(holder);
         }
 
         /// <summary>
-        /// The Tags drop-down: every word /bank inscribe knows, ticked when the box has it; ticking one adds it to the box
-        /// and unticking takes it out. Nothing is sent until Tag pack.
+        /// The Tags drop-down: every word /bank inscribe knows, ticked when the pack has it. Ticking or unticking one tags the
+        /// pack straight away with the new list.
         /// </summary>
-        private void RenderTagList() {
-            ImGui.SetNextItemWidth(ImGui.CalcTextSize("Tags").X + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 2);
+        private void RenderTagList(Holder holder) {
+            var preview = string.IsNullOrWhiteSpace(inscription) ? "No tags" : "Tags: " + inscription.Trim();
+
+            ImGui.SetNextItemWidth(Math.Min(320, Math.Max(120, ImGui.GetContentRegionAvail().X * 0.6f)));
 
             // the list is four columns wide, not as narrow as the box
             ImGui.SetNextWindowSizeConstraints(new Vector2(ImGui.GetFontSize() * 33, 0), new Vector2(float.MaxValue, ImGui.GetFontSize() * 30));
 
-            if (!ImGui.BeginCombo("##bank-tag-list", "Tags", ImGuiComboFlags.HeightLarge)) {
-                Widgets.Tip("Pick the words this pack collects from a list, instead of typing them. Then press Tag pack.");
+            if (!ImGui.BeginCombo("##bank-tag-list", preview, ImGuiComboFlags.HeightLarge)) {
+                Widgets.Tip($"What this pack collects, for deposits, withdrawals and sorts. Tick the words in the list: each tick tags the pack at once ({BankCommands.Inscribe(holder.PackNumber, "...")}).");
                 return;
             }
 
-            TagSection("Categories", BankCommands.Categories);
+            if (ImGui.Selectable("Clear all tags", false, ImGuiSelectableFlags.DontClosePopups)) {
+                SetTags(holder, "");
+            }
+            Widgets.Tip($"Takes every tag off this pack: {BankCommands.Inscribe(holder.PackNumber, "")}.");
+            ImGui.Separator();
+
+            RenderTagMode(holder);
+            ImGui.Separator();
+
+            TagSection(holder, "Categories", BankCommands.Categories);
 
             foreach (var (category, types) in BankCommands.Types) {
-                TagSection(category, types);
+                TagSection(holder, category, types);
             }
 
-            TagSection("Tiers (with a category or type: \"swords t6\"; alone: any gear of that tier)", BankCommands.Tiers);
+            TagSection(holder, "Tiers (alone: any gear of that tier; with AND, \"swords t6\": tier 6 swords)", BankCommands.Tiers);
             ImGui.EndCombo();
         }
 
-        private void TagSection(string heading, string[] tags) {
+        /// <summary>
+        /// OR or AND: whether a ticked word is a tag of its own (the pack takes anything matching any tag) or joins a group
+        /// ("swords" and "t6" make "swords t6": only what matches both), and which group, in AND.
+        /// </summary>
+        private void RenderTagMode(Holder holder) {
+            if (ImGui.RadioButton("OR##tag-or", !tagAnd)) {
+                tagAnd = false;
+            }
+            Widgets.Tip("Each word you tick is a tag of its own: the pack takes anything matching any of them (\"swords, gems\" is swords or gems).");
+            ImGui.SameLine();
+
+            if (ImGui.RadioButton("AND##tag-and", tagAnd)) {
+                tagAnd = true;
+                tagGroup = -1;
+            }
+            Widgets.Tip("Each word you tick joins the group picked here: the pack takes only what matches every word in it (\"swords t6\" is tier 6 swords). The ticks show that group's words.");
+
+            if (!tagAnd) {
+                return;
+            }
+
+            var groups = BankCommands.Groups(inscription);
+
+            // the last group until another's picked; one past the end is a new group, which the next tick starts
+            if (tagGroup < 0 || tagGroup > groups.Count) {
+                tagGroup = Math.Max(0, groups.Count - 1);
+            }
+
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(ImGui.GetFontSize() * 14);
+
+            var preview = tagGroup < groups.Count ? groups[tagGroup] : "(new group)";
+
+            if (ImGui.BeginCombo("##tag-group", preview)) {
+                for (var i = 0; i < groups.Count; i++) {
+                    if (ImGui.Selectable($"{groups[i]}##tag-group-{i}", i == tagGroup)) {
+                        tagGroup = i;
+                    }
+                }
+
+                if (ImGui.Selectable("(new group)", tagGroup >= groups.Count)) {
+                    tagGroup = groups.Count;
+                }
+
+                ImGui.EndCombo();
+            }
+            Widgets.Tip("The group ticked words join. (new group) starts another, which the pack takes as well as the others.");
+
+            if (tagGroup < groups.Count) {
+                ImGui.SameLine();
+
+                if (ImGui.SmallButton("Remove group")) {
+                    SetTags(holder, BankCommands.RemoveGroup(inscription, tagGroup));
+                    tagGroup = -1;
+                }
+                Widgets.Tip($"Takes the \"{groups[tagGroup]}\" tag off the pack, every word in it.");
+            }
+        }
+
+        private void SetTags(Holder holder, string tags) {
+            inscription = tags;
+            feed.SendCommand(BankCommands.Inscribe(holder.PackNumber, tags));
+        }
+
+        /// <summary>
+        /// The Icon drop-down: every style and color /bank icon gives a pack, and the pack's own icon back. Picking one sends
+        /// it at once; the pack's new icon shows once the client has the pack's new description.
+        /// </summary>
+        private void RenderIconList(Holder holder) {
+            ImGui.SetNextItemWidth(ImGui.CalcTextSize("Icon").X + ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 2);
+            ImGui.SetNextWindowSizeConstraints(new Vector2(ImGui.GetFontSize() * 30, 0), new Vector2(float.MaxValue, ImGui.GetFontSize() * 30));
+
+            if (!ImGui.BeginCombo("##bank-icon-list", "Icon", ImGuiComboFlags.HeightLarge)) {
+                Widgets.Tip($"Changes this pack's icon to a pack, sack or pouch in a color ({BankCommands.Icon(holder.PackNumber, "<style>", "<color>")}). Only the icon changes.");
+                return;
+            }
+
+            if (ImGui.Selectable("Its own icon")) {
+                feed.SendCommand(BankCommands.IconDefault(holder.PackNumber));
+            }
+            Widgets.Tip($"Gives the pack back the icon it came with: {BankCommands.IconDefault(holder.PackNumber)}.");
+
+            var drawList = ImGui.GetWindowDrawList();
+            var swatch = ImGui.GetTextLineHeight() * 0.8f;
+            var cell = ImGui.GetFontSize() * 6;
+
+            foreach (var (style, label, colors) in BankCommands.PackIcons) {
+                ImGui.Spacing();
+                Widgets.TextDisabled(label);
+
+                for (var i = 0; i < colors.Length; i++) {
+                    var color = colors[i];
+
+                    if (i % 5 != 0) {
+                        ImGui.SameLine(cell * (i % 5) + ImGui.GetStyle().WindowPadding.X);
+                    }
+
+                    // a square of the color, then its name
+                    var at = ImGui.GetCursorScreenPos();
+                    var top = (ImGui.GetTextLineHeight() - swatch) / 2;
+                    ImGui.SetCursorScreenPos(at + new Vector2(swatch + ImGui.GetStyle().ItemInnerSpacing.X, 0));
+
+                    if (ImGui.Selectable($"{color}##icon-{style}-{color}", false, ImGuiSelectableFlags.None, new Vector2(cell - swatch - ImGui.GetStyle().ItemSpacing.X * 2, 0))) {
+                        feed.SendCommand(BankCommands.Icon(holder.PackNumber, style, color));
+                    }
+                    Widgets.Tip($"A {color} {label.ToLowerInvariant()}: {BankCommands.Icon(holder.PackNumber, style, color)}.");
+
+                    drawList.AddRectFilled(at + new Vector2(0, top), at + new Vector2(swatch, top + swatch), ImGui.GetColorU32(Swatch(color)), 2);
+                    drawList.AddRect(at + new Vector2(0, top), at + new Vector2(swatch, top + swatch), ImGui.GetColorU32(ImGuiCol.Border), 2);
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        /// <summary>Roughly the color each icon is, for its square in the Icon list.</summary>
+        private static Vector4 Swatch(string color) {
+            switch (color) {
+                case "black": return new Vector4(0.12f, 0.12f, 0.12f, 1);
+                case "white": return new Vector4(0.92f, 0.92f, 0.9f, 1);
+                case "gray": return new Vector4(0.55f, 0.55f, 0.55f, 1);
+                case "blue": return new Vector4(0.2f, 0.35f, 0.8f, 1);
+                case "teal": return new Vector4(0.15f, 0.6f, 0.6f, 1);
+                case "green": return new Vector4(0.2f, 0.6f, 0.25f, 1);
+                case "yellow": return new Vector4(0.9f, 0.8f, 0.2f, 1);
+                case "red": return new Vector4(0.75f, 0.15f, 0.15f, 1);
+                case "purple": return new Vector4(0.5f, 0.25f, 0.65f, 1);
+                default: return new Vector4(0.5f, 0.33f, 0.18f, 1);
+            }
+        }
+
+        private void TagSection(Holder holder, string heading, string[] tags) {
             Widgets.TextDisabled(heading);
 
             for (var i = 0; i < tags.Length; i++) {
                 var tag = tags[i];
-                var has = BankCommands.HasTag(inscription, tag);
+                // AND: ticked when the picked group has it; OR: when any tag has it
+                var has = tagAnd ? BankCommands.GroupHasTag(inscription, tagGroup, tag) : BankCommands.HasTag(inscription, tag);
 
                 // a few to a row: the list would be very long one to a line
                 if (i % 4 != 0) {
                     ImGui.SameLine(ImGui.GetFontSize() * 8 * (i % 4) + ImGui.GetStyle().WindowPadding.X);
                 }
 
-                if (ImGui.Checkbox($"{tag}##tag-{heading}-{tag}", ref has)) {
-                    inscription = BankCommands.ToggleTag(inscription, tag);
+                // a tier shows its levels too: "t5 (50-74)"; the word put in the box is still just "t5"
+                var label = BankCommands.TierLevels.TryGetValue(tag, out var levels) ? $"{tag} ({levels})" : tag;
+
+                if (ImGui.Checkbox($"{label}##tag-{heading}-{tag}", ref has)) {
+                    if (tagAnd) {
+                        var count = BankCommands.Groups(inscription).Count;
+                        SetTags(holder, BankCommands.ToggleInGroup(inscription, tagGroup, tag));
+
+                        // a word that started a new group: the next ones join it
+                        if (tagGroup >= count) {
+                            tagGroup = count;
+                        }
+                    }
+                    else {
+                        SetTags(holder, BankCommands.ToggleTag(inscription, tag));
+                    }
                 }
             }
 
@@ -473,7 +642,8 @@ namespace DaraletPlayer.Ui {
         }
 
         private void DragSource(Item item) {
-            if (!ImGui.BeginDragDropSource()) {
+            // no preview tooltip: a tooltip is a faded box beside the mouse, and the game's own drag is just the icon
+            if (!ImGui.BeginDragDropSource(ImGuiDragDropFlags.SourceNoPreviewTooltip)) {
                 return;
             }
 
@@ -481,22 +651,43 @@ namespace DaraletPlayer.Ui {
             dragged = item.Id;
             ImGui.SetDragDropPayload(DragType, IntPtr.Zero, 0);
 
-            // what follows the mouse: the item's icon, the grid's size, with its stack in the corner, and its name
+            // what follows the mouse: the item's icon, the grid's size, centred on the mouse, drawn over every window at full
+            // strength, with its stack in the corner
             var size = GridIconSize;
-            var at = ImGui.GetCursorScreenPos();
-            var top = ImGui.GetCursorPosY();
-            var drawList = ImGui.GetWindowDrawList();
+            var at = ImGui.GetMousePos() - new Vector2(size / 2, size / 2);
+            var drawList = ImGui.GetForegroundDrawList();
 
-            if (icons.DrawAt(drawList, Icon(item), at, size) && item.Stack > 1) {
-                ItemIcons.StackCount(drawList, item.Stack, at, size);
+            if (icons.DrawAt(drawList, Icon(item), at, size)) {
+                if (item.Stack > 1) {
+                    ItemIcons.StackCount(drawList, item.Stack, at, size);
+                }
+            }
+            else {
+                // no icon (yet): its name, so something follows the mouse
+                drawList.AddText(at, ImGui.GetColorU32(ImGuiCol.Text), item.Name);
             }
 
-            ImGui.Dummy(new Vector2(size, size));
-            ImGui.SameLine();
-            ImGui.SetCursorPosY(top + (size - ImGui.GetTextLineHeight()) / 2);
-            Widgets.Text(item.Stack > 1 ? $"{item.Name} ({item.Stack:N0})" : item.Name);
-
             ImGui.EndDragDropSource();
+        }
+
+        /// <summary>
+        /// An item as a place to drop another: the dragged one goes where it is, in its pack and in its place, the way
+        /// dropping onto an item in the game's pack does. In the same pack that just moves it along the pack.
+        /// </summary>
+        private unsafe void ItemTarget(Item target) {
+            if (!ImGui.BeginDragDropTarget()) {
+                return;
+            }
+
+            if (Accepted() && dragged != 0) {
+                if (dragged != target.Id) {
+                    MoveTo(dragged, target);
+                }
+
+                dragged = 0;
+            }
+
+            ImGui.EndDragDropTarget();
         }
 
         /// <summary>
@@ -508,12 +699,12 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            if (ImGui.AcceptDragDropPayload(DragType).NativePtr != null && dragged != 0) {
+            if (Accepted() && dragged != 0) {
                 var item = CoreManager.Current.WorldFilter[dragged];
 
-                // one already worn is left where it is
+                // one already worn is left where it is; the rest go on as a double-click puts them on, replacing what's there
                 if (item != null && item.Values(LongValueKey.EquippedSlots, 0) == 0) {
-                    CoreManager.Current.Actions.UseItem(dragged, 0);
+                    ItemUser.Wield(dragged);
                     snapshotAt = DateTime.MinValue;
                 }
 
@@ -523,12 +714,30 @@ namespace DaraletPlayer.Ui {
             ImGui.EndDragDropTarget();
         }
 
+        /// <summary>
+        /// Whether an item was just dropped on the last item drawn, framing it while one is held over it. ImGui's own frame
+        /// is drawn a few pixels outside the item, so a slot along the edge of the items lost the sides the edge cut off;
+        /// this one is drawn just inside it.
+        /// </summary>
+        private static unsafe bool Accepted() {
+            var payload = ImGui.AcceptDragDropPayload(DragType, ImGuiDragDropFlags.AcceptBeforeDelivery | ImGuiDragDropFlags.AcceptNoDrawDefaultRect);
+
+            if (payload.NativePtr == null) {
+                return false;
+            }
+
+            ImGui.GetWindowDrawList().AddRect(ImGui.GetItemRectMin() + Vector2.One, ImGui.GetItemRectMax() - Vector2.One,
+                ImGui.GetColorU32(ImGuiCol.DragDropTarget), 0, ImDrawFlags.None, 2);
+
+            return payload.IsDelivery();
+        }
+
         private unsafe void DropTarget(int containerId) {
             if (!ImGui.BeginDragDropTarget()) {
                 return;
             }
 
-            if (ImGui.AcceptDragDropPayload(DragType).NativePtr != null && dragged != 0) {
+            if (Accepted() && dragged != 0) {
                 Move(dragged, containerId);
                 dragged = 0;
             }
@@ -536,10 +745,41 @@ namespace DaraletPlayer.Ui {
             ImGui.EndDragDropTarget();
         }
 
-        /// <summary>Right-clicking an item: appraising it, and where to move it.</summary>
+        private bool InBank(Item item) => holders.Any(h => h.InBank && h.Id == item.Container);
+
+        /// <summary>Where the item is, as a tool's use flags name it: worn, in your packs, or in the open bank.</summary>
+        private UsePlace PlaceOf(Item item) => item.Worn != 0 ? UsePlace.Wielded : InBank(item) ? UsePlace.Viewed : UsePlace.Contained;
+
+        /// <summary>
+        /// The item drawn just before, for Use: a double-click uses what you carry or wear, and while a tool is up, a click
+        /// on any item uses the tool on it (ItemUser).
+        /// </summary>
+        private void UseClicks(Item item) {
+            ItemUser.Item(item.Id, PlaceOf(item), usable: !InBank(item));
+        }
+
+        /// <summary>Right-clicking an item: using it, appraising it, and where to move it.</summary>
         private void ItemMenu(Item item) {
-            if (!ImGui.BeginPopupContextItem($"item-menu-{item.Id}")) {
+            // the right-click that puts a tool down isn't one for the menu
+            if (ItemUser.TakesClicks || !ImGui.BeginPopupContextItem($"item-menu-{item.Id}")) {
                 return;
+            }
+
+            // what double-clicking it does, for what you carry or wear: the game uses nothing straight from a bank
+            var useLabel = InBank(item) ? null : ItemUser.MenuLabel(item.Id);
+
+            if (useLabel != null) {
+                if (ImGui.MenuItem(useLabel)) {
+                    ItemUser.Use(item.Id);
+                }
+                Widgets.Tip("What double-clicking it does in the game's inventory: wear or wield it (or take it off), use it, or, for a tool used on something, turn the mouse into a target to pick what.");
+
+                // a wielded caster's double-click casts with it, so taking it off needs its own line
+                if (item.Worn != 0 && useLabel != "Take off" && ImGui.MenuItem("Take off")) {
+                    ItemUser.TakeOff(item.Id);
+                }
+
+                ImGui.Separator();
             }
 
             Appraisal.MenuItems(unchecked((uint)item.Id));
@@ -574,8 +814,13 @@ namespace DaraletPlayer.Ui {
         /// The item's every stat, as the server describes it (@playerui describe, asked for the first time the mouse is over
         /// it; the client's own appraisal has too few). Until the answer comes, what the client was sent with it.
         /// </summary>
-        private void ShowTooltip(Item item, bool iconHovered) {
+        private unsafe void ShowTooltip(Item item, bool iconHovered) {
             if (!ImGui.IsItemHovered() && !iconHovered) {
+                return;
+            }
+
+            // nothing but the icon follows the mouse while an item is dragged
+            if (ImGui.GetDragDropPayload().NativePtr != null) {
                 return;
             }
 
@@ -583,15 +828,15 @@ namespace DaraletPlayer.Ui {
             feed.Describe(guid);
 
             if (feed.Described.TryGetValue(guid, out var described)) {
-                ItemTooltip.Show(ItemLines.Build(described), iconHovered);
+                ItemTooltip.Show(ItemUse.With(ItemLines.Build(described), guid), iconHovered);
                 return;
             }
 
-            ItemTooltip.Show(new List<ItemLine> {
+            ItemTooltip.Show(ItemUse.With(new List<ItemLine> {
                 new ItemLine(item.Name, ItemLineStyle.Title),
                 new ItemLine($"Value: {item.Value:N0}   Burden: {item.Burden:N0}{(item.Stack > 1 ? $"   Stack: {item.Stack:N0}" : "")}", ItemLineStyle.Detail),
                 new ItemLine("Getting the details...", ItemLineStyle.Detail),
-            }, iconHovered);
+            }, guid), iconHovered);
         }
 
         /// <summary>
@@ -617,6 +862,23 @@ namespace DaraletPlayer.Ui {
 
             // stack: true merges a stackable item into a matching stack in the pack, as dropping it in the game does
             CoreManager.Current.Actions.MoveItem(itemId, containerId, 0, true);
+            snapshotAt = DateTime.MinValue;
+        }
+
+        /// <summary>
+        /// Puts an item in a pack at a place (the slot of the item it was dropped on). The server takes it out and puts it
+        /// back in at that place, the same as a drag in the game's own pack. Not merged into a stack: that would send it to
+        /// whatever matching stack the pack has, not where it was dropped. Dropped on a stack like it, though, it merges.
+        /// </summary>
+        private void MoveTo(int itemId, Item target) {
+            if (itemId == 0 || target.Container == 0) {
+                return;
+            }
+
+            var item = CoreManager.Current.WorldFilter[itemId];
+            var merge = item != null && target.Name == item.Name && (target.Stack > 1 || item.Values(LongValueKey.StackCount, 1) > 1);
+
+            CoreManager.Current.Actions.MoveItem(itemId, target.Container, target.Slot, merge);
             snapshotAt = DateTime.MinValue;
         }
 

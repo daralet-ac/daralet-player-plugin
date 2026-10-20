@@ -962,7 +962,7 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            ItemTooltip.Show(ItemLines.Build(item), iconHovered: true);
+            ItemTooltip.Show(ItemUse.With(ItemLines.Build(item), item.Guid), iconHovered: true);
         }
 
         private static Vector4 OutcomeColor(LootOutcome outcome) {

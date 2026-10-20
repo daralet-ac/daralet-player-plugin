@@ -85,7 +85,12 @@ namespace DaraletPlayer.Ui {
             foreach (var worn in Equipped()) {
                 feed.Describe(worn);
             }
+
+            ItemUse.Request(item);
         }
+
+        /// <summary>Whether it can be worn or wielded: only then is it compared with what you're wearing.</summary>
+        private bool IsEquippable => (CoreManager.Current.WorldFilter[unchecked((int)guid)]?.Values(LongValueKey.EquipableSlots, 0) ?? 0) != 0;
 
         /// <summary>
         /// What you're wearing that this item would replace: everything equipped in a place it can go (both rings for a ring,
@@ -128,10 +133,11 @@ namespace DaraletPlayer.Ui {
                 }
 
                 ImGui.Separator();
-                RenderLines(ItemLines.Build(item), wrap);
+                var lines = ItemLines.Build(item);
+                lines.AddRange(ItemUse.Lines(guid, waiting: true));
+                RenderLines(lines, wrap);
 
                 // last, and closed until opened: the item's own stats come first
-                ImGui.Spacing();
                 RenderCompare(item);
             }
             finally {
@@ -145,16 +151,21 @@ namespace DaraletPlayer.Ui {
         /// than one worn item it would replace (two rings), a choice of which.
         /// </summary>
         private void RenderCompare(CorpseItemInfo item) {
+            // only for something you can wear or wield: there's nothing to compare a gem or a scroll with
+            if (!IsEquippable) {
+                return;
+            }
+
             var equipped = Equipped();
+
+            ImGui.Spacing();
 
             if (!ImGui.CollapsingHeader($"Compared with what you're wearing##compare-{guid}")) {
                 return;
             }
 
             if (equipped.Count == 0) {
-                Widgets.TextDisabled(CoreManager.Current.WorldFilter[unchecked((int)guid)]?.Values(LongValueKey.EquipableSlots, 0) > 0
-                    ? "You're wearing nothing where this goes."
-                    : "This isn't something you wear.");
+                Widgets.TextDisabled("You're wearing nothing where this goes.");
                 return;
             }
 

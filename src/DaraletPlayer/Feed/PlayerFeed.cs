@@ -30,6 +30,9 @@ namespace DaraletPlayer.Feed {
         public const string KindCorpse = "corpse";
         public const string KindSalvage = "salvage";
         public const string KindDescribe = "describe";
+        public const string KindCharacter = "character";
+        public const string KindQuests = "quests";
+        public const string KindAbandon = "abandon";
 
         // chat types, which Decal passes as the colour
         private const int TellChat = 3;
@@ -122,6 +125,14 @@ namespace DaraletPlayer.Feed {
         /// <summary>The arena as you see it, or null before the first reply.</summary>
         public ArenaInfo Arena { get; private set; }
         public DateTime ArenaUpdatedAt { get; private set; } = DateTime.MinValue;
+
+        /// <summary>Your character stats, the Combat Focus appraisal's, or null before the first reply.</summary>
+        public CharacterInfo Character { get; private set; }
+        public DateTime CharacterUpdatedAt { get; private set; } = DateTime.MinValue;
+
+        /// <summary>Your contracts, as the Quests tab shows them, or null before the first reply.</summary>
+        public QuestsInfo Quests { get; private set; }
+        public DateTime QuestsUpdatedAt { get; private set; } = DateTime.MinValue;
 
         /// <summary>The last corpse the server described, or null.</summary>
         public CorpseInfo Corpse { get; private set; }
@@ -372,6 +383,14 @@ namespace DaraletPlayer.Feed {
                 case KindArena:
                     Arena = Json.Read<ArenaInfo>(json);
                     ArenaUpdatedAt = DateTime.UtcNow;
+                    break;
+                case KindCharacter:
+                    Character = Json.Read<CharacterInfo>(json);
+                    CharacterUpdatedAt = DateTime.UtcNow;
+                    break;
+                case KindQuests:
+                    Quests = Json.Read<QuestsInfo>(json);
+                    QuestsUpdatedAt = DateTime.UtcNow;
                     break;
                 case KindMarket:
                     Market = Json.Read<MarketInfo>(json);

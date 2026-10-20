@@ -143,7 +143,8 @@ threat table, or `"status":"gone"`). Another player as a target gets only `"stat
 shows the health percentage the client already has (game event `0x01C0`), never their spells or exact vitals. The server
 ignores a request of the same kind sooner than 400ms after the last (`PlayerUi.MinInterval`), and the plugin never asks
 sooner than 500ms (`PlayerFeed.MinInterval`); polling goes through `PlayerFeed.Refresh`. `bankwindow` and `lootwindow`
-(`on|off`, answering `{"on":...}`) are described below. The server can also send a reply unasked (`PlayerUiProtocol.Send`),
+(`on|off`, answering `{"on":...}`) are described below. `character` sends your character stats (`{"sections":[{"title",
+"lines"}]}`), for the Character tab. The server can also send a reply unasked (`PlayerUiProtocol.Send`),
 which the plugin reads the same as one it asked for.
 
 **Map places indoors:** the game's `GetMapCoords` gives nothing for any indoor cell (0x0100 and up), buildings included.
@@ -272,6 +273,22 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   filter keys exist. **To file / From file** save and load profiles as `.json` in `Documents\Decal Plugins\Daralet\Loot
   Profiles` (`LootFiles`).
 
+- **Character tab** (`Ui/CharacterTab.cs`): everything the Combat Focus appraisal shows under Character Stats (gear mods,
+  ratings, ward, armor level, resistances, jewel effects), from `@playerui character`, every two seconds while the tab is
+  open. Server side, `Player.GetStatsSheetSections` (`WorldObjects/Player_StatsSheet.cs`) builds the sections and both the
+  appraisal's text (`GetStatsSheetText`) and the reply (`PlayerUiCharacter`) come from it, so they can't disagree. Each
+  line is split at its first ": " into stat and value (`StatsSectionInfo.Split`); in a wide window the sections go in two
+  columns.
+
+- **Quests tab** (`Ui/QuestsTab.cs`): your contracts, labelled as quests, from `@playerui quests` every five seconds while
+  open. The client is only sent each contract's id, stage and timers (`GameEventSendClientContractTracker`); the server
+  sends the rest of its portal.dat ContractTable entry too (`Entity/PlayerUi/PlayerUiQuestData.cs`): descriptions, the
+  start and end NPCs, and their places and the quest area's, placed like buildings (`PlayerUiData.BuildingMapCoords`,
+  `Town.IsOnMap` leaving out dungeons). Each place's Go makes it the World tab's destination (`WorldTab.GoTo`). Abandon
+  (asked twice) is `@playerui abandon <contract id>`, the Contracts panel's own `HandleActionAbandonContract`, which
+  keeps the starter contracts until they're done (`Player.CanAbandonContract`). Stages are available, started (a
+  progress counter too) and done.
+
 - **Arena and Leaderboards tabs** (`Ui/ArenaTab.cs`, `Ui/LeaderboardsTab.cs`, `Feed/ArenaCommands.cs`,
   `Feed/Leaderboards.cs`): the leaderboards are the website's (`leaderboards.js`), read from `/api/leaderboards/...` with
   one `LeaderboardRow` for every board. A new board is a row in `Leaderboards.All`. One `MarketApi` (one `HttpClient`) is
@@ -287,9 +304,15 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
 - **Inventory tab** (`Ui/BankTab.cs`, `Ui/BankBrowser.cs`, `Ui/BankCommandBar.cs`, `Feed/BankCommands.cs`): sub tabs Carried
   (your packs, anywhere) and Bank (the bank's packs, while it's open). The `/bank` buttons are a `BankCommandBar` above the
   items in each, and in the Bank window: one bar, shared, so its "what" box carries over. Deposit with the box empty
-  is Deposit packs (your "deposit"-tagged packs), with words in it a deposit of those. A bank pack's tag box has a **Tags**
-  drop-down of every `/bank` word, ticked when the box has it (`BankCommands.HasTag` / `ToggleTag`, comma-separated groups); the bank's views add Withdraw, Sort
-  and Search; the rest are under More. The last command's first reply
+  is Deposit packs (your "deposit"-tagged packs), with words in it a deposit of those. A bank pack has a **Tags**
+  drop-down of every `/bank` word, ticked when the pack has it (`BankCommands.HasTag` / `ToggleTag`, comma-separated
+  groups), each tick sending `/bank inscribe` at once (the plugin keeps what it sent until the next bank reply). Groups are
+  OR (a comma) and the words in one AND (a space): the list's **OR** makes each tick its own group (`ToggleTag`), its
+  **AND** adds the word to a picked group, or a new one (`ToggleInGroup`), and ticks then show that group. And an
+  **Icon** drop-down of every style and color `/bank icon` takes (`BankCommands.PackIcons`, copied from daralet-ACE's
+  `Entity/PackIcons.cs`: pouches have no white), plus the pack's own icon back; the bank's views add Withdraw, Sort
+  and Search, and Carried has its own Sort, the server's `/sort` of your packs (`Commands/PlayerCommands/Sort.cs`, no bank
+  needed, no words); the rest are under More. The last command's first reply
   line shows under the buttons, and hovering it shows the whole reply. Carried and Bank are each a `BankBrowser`
   (`carried: true` for yours), with their own selected pack and search. **Show my packs** on the Bank view
   (`SettingsData.BankShowCarried`) lists your packs there too, above the bank's, to drag between them. **Bank window**
@@ -298,7 +321,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   bank, which `BankTab` follows every frame, so it works with the main window closed.
   `PlayerFeed.SendCommand` keeps the System and Help chat (types 5 and 15, Decal's `e.Color`) that comes back within three
   seconds as the command's reply. The items show as a list or, with **Grid** (`SettingsData.BankGrid`), as icons only, as
-  many to a row as fit, each with the list's hover, drag and right-click; a stack shows its size in the corner. **Worn**
+  many to a row as fit, each with the list's hover, drag and right-click; a stack shows its size in the corner. A drag shows
+  only the item's icon, centred on the mouse and drawn on the foreground draw list (no preview tooltip, which ImGui fades).
+  Dropped on another item, it goes to that item's container and slot (`BankBrowser.MoveTo`, `MoveItem` without stacking,
+  unless it's a stack of the same thing), which is how items are reordered within a pack. **Worn**
   (`SettingsData.BankShowWorn`) slides out a paperdoll of what you're wearing on the right (`BankBrowser.RenderWorn`), laid
   out as the game's equipment panel by `EquipSlots` (the game's EquipMask bits, one square per slot; an item covering
   several shows in each; an empty one shows the game's own picture of it, `EquipSlot.EmptyIcon`, found in portal.dat by the
@@ -307,6 +333,22 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   packs, where it can't be squeezed out. Its items have the list's hover and right-click; dragging one onto a pack or onto
   the items takes it off into that pack, and dropping an item on a square wears it (`Actions.UseItem`, the game's own
   use).
+
+- **Use** (`Ui/ItemUser.cs`, `Feed/UseRules.cs`): double-clicking an item you carry or wear in the Inventory tab's lists,
+  or Use in its right-click menu, does what a double-click in the game's inventory does. Gear goes on with the game's own
+  auto-wield (`Actions.AutoWield`), or comes off into the main pack. The server won't put anything over a taken slot
+  ("You must remove your..."), and a plugin's AutoWield doesn't take anything off first the way the client's double-click
+  does, so `ItemUser.Wield` takes off what's in the way (`UseRules.ToTakeOff`: covering armor, the left ring or bracelet
+  when both are full, the main hand, the off hand for a two-hander, caster or bow, after the server's
+  `CheckWeaponCollision`) one item at a time, 250ms apart, then wields; dropping onto a Worn square does the same. A tool
+  whose use flags have target bits (ACE's `Usable`, high 16 bits) and whose source bits (low 16) allow where it is (a
+  caster's `SourceWieldedTargetRemote` only once wielded, so a caster in a pack is wielded) turns the mouse into a reticle (drawn on the foreground draw list: a plugin can't change the
+  game's cursor), and the next item clicked in any list gets it (`Actions.ApplyItem`). Anything else is `UseItem`. A target
+  must be in a place the flags allow (worn = Wielded, packs = Contained, the open bank = Viewed, the tool itself = ObjSelf)
+  and of a kind its TargetType has (`TargetType & ItemType`, the server's own check in `HandleActionUseWithTarget`); the
+  bar above the list adds "On yourself" (Self) and "On <selection>" (Remote or Viewed). Escape or right-click puts the
+  tool down. Decal's names for these keys come from the network header flags: `LongValueKey.Unknown10` is the use flags
+  (flag 0x10), `UsageMask` the TargetType, `Category` the ItemType. Each use logs them to log.txt (`[use]` lines).
 
 - **Item icons** (`Ui/ItemIcons.cs`, `Feed/IconLayers.cs`): every item list (bank, Loot tab, Corpse window, Market) draws
   an item's underlay, icon and overlay before its name. UtilityBelt.Service's only icon loader is meant for its scripts
@@ -328,14 +370,19 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
 - **Appraisal** (`Ui/Appraisal.cs`, `Ui/AppraisalWindow.cs`, `Feed/ItemCompare.cs`): Appraise and Appraise in new window
   in an item's right-click menu in the Corpse window or the bank (`Appraisal.MenuItems`; nothing happens until one is
   picked). Appraise reuses the first window, a new window opens another (up to 6, titles numbered, since UtilityBelt knows
-  a window by its title). Each compares the item with what you're wearing where it goes (`AppraisalWindow.Equipped`:
+  a window by its title). Each compares the item (only one with `EquipableSlots`: the section is left out for anything
+  else) with what you're wearing where it goes (`AppraisalWindow.Equipped`:
   `EquipableSlots` against worn `EquippedSlots`, any weapon for a weapon), with `ItemCompare` saying which way each stat is
   better; ` describe` covers equipped items for this. A
   plugin can't open the game's appraisal panel: Decal's `Actions.RequestId` only sends the request, and the client shows
   only appraisals it started itself. So with **Plugin appraisal** (`SettingsData.AppraiseInPlugin`, on by default, on the
   window's top line) the plugin's Appraisal window shows it: the icon a size up with the loot rule's mark, the name, kind
   and tier, what your loot rules make of it, and `ItemLines` with a bar for each roll's quality. A corpse item uses the
-  corpse's description; a carried or banked one is described on request. Off, right-click just selects the item, for the
+  corpse's description; a carried or banked one is described on request. An item you can't wear or wield, or a trinket
+  or sigil, also shows its Use text and long description, here and in the bank's and the Loot tab's tooltips
+  (`Ui/ItemUse.cs`: `StringValueKey.UsageInstructions`, `FullDescription`). The server's description doesn't carry them:
+  they reach Decal only with an appraisal, so the first look asks for one (`Actions.RequestId`, once an item, unless
+  `HasIdData`), and the game's panel stays shut. Market search tooltips have none: those items aren't in Decal. Off, right-click just selects the item, for the
   game's appraise key.
 
 - **Floating windows** (`Ui/FloatingWindow.cs`): small auto-sized UB huds that stay on screen (fellowship vitals, target,

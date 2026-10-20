@@ -472,6 +472,11 @@ namespace DaraletPlayer.Ui {
             return destination;
         }
 
+        /// <summary>Makes a spot on the map the destination, for other tabs (a quest's NPC): the arrow window shows the way.</summary>
+        public void GoTo(string name, float x, float y) {
+            SetDestination(new Destination { Name = name, X = x, Y = y });
+        }
+
         private void SetDestination(Destination destination) {
             settings.Data.Destination = destination;
             settings.Changed();

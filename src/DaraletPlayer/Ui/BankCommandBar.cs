@@ -79,6 +79,14 @@ namespace DaraletPlayer.Ui {
                 ImGui.EndDisabled();
                 Widgets.Tip($"Lists the bank's items matching the box, and where they are: {BankCommands.Search("<what>")}. The answer shows on the line below. Needs your bank open.");
             }
+            else {
+                // your own packs sort anywhere, with the server's /sort; it sorts everything, whatever's in the box
+                ImGui.SameLine();
+                if (ImGui.Button("Sort##carried-sort")) {
+                    feed.SendCommand(BankCommands.SortCarried);
+                }
+                Widgets.Tip($"Sorts the packs you carry: files items into your named and inscribed packs, combines stacks and orders the rest by kind. Sends {BankCommands.SortCarried}. Sorts everything, whatever's in the box. No bank needed.");
+            }
 
             ImGui.SameLine();
             if (ImGui.Button("More...##bank-more")) {

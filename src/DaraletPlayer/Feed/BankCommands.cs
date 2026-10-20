@@ -24,6 +24,12 @@ namespace DaraletPlayer.Feed {
         /// <summary>Loot tiers, which can go with a category or type ("swords t6") or alone ("t6": any gear of that tier).</summary>
         public static readonly string[] Tiers = { "t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7" };
 
+        /// <summary>The character levels each tier's loot drops for, by tier word, for the Tags list.</summary>
+        public static readonly Dictionary<string, string> TierLevels = new Dictionary<string, string> {
+            ["t0"] = "1-9", ["t1"] = "10-19", ["t2"] = "20-29", ["t3"] = "30-39",
+            ["t4"] = "40-49", ["t5"] = "50-74", ["t6"] = "75-99", ["t7"] = "100+",
+        };
+
         public static string Deposit(string what) {
             return "/bank deposit " + Clean(what);
         }
@@ -44,6 +50,9 @@ namespace DaraletPlayer.Feed {
             return cleaned.Length == 0 ? "/bank sort" : "/bank sort " + cleaned;
         }
 
+        /// <summary>/sort (Sort.cs in daralet-ACE): sorts the packs you carry, with no bank needed. It takes no words.</summary>
+        public const string SortCarried = "/sort";
+
         public static string Search(string what) {
             return "/bank search " + Clean(what);
         }
@@ -59,6 +68,29 @@ namespace DaraletPlayer.Feed {
 
         public static string AutoSort(bool on) {
             return on ? "/bank autosort on" : "/bank autosort off";
+        }
+
+        /// <summary>
+        /// The icons /bank icon gives a pack (PackIcons in daralet-ACE): each style, by its word, with the colors it comes
+        /// in. Belt pouches have no white.
+        /// </summary>
+        public static readonly (string Style, string Label, string[] Colors)[] PackIcons = {
+            ("pack", "Pack", BagColors()),
+            ("sack", "Sack", BagColors()),
+            ("pouch", "Belt pouch", PouchColors()),
+            ("small pouch", "Small belt pouch", PouchColors()),
+        };
+
+        private static string[] BagColors() => new[] { "brown", "black", "white", "gray", "blue", "teal", "green", "yellow", "red", "purple" };
+        private static string[] PouchColors() => new[] { "brown", "black", "gray", "blue", "teal", "green", "yellow", "red", "purple" };
+
+        /// <summary>/bank icon for a pack in the bank, by its number: a style and color, or its own icon back.</summary>
+        public static string Icon(int packNumber, string style, string color) {
+            return $"/bank icon {packNumber} {style} {color}";
+        }
+
+        public static string IconDefault(int packNumber) {
+            return $"/bank icon {packNumber} default";
         }
 
         /// <summary>
@@ -91,6 +123,52 @@ namespace DaraletPlayer.Feed {
             }
             else {
                 groups.Add(new List<string> { tag });
+            }
+
+            return string.Join(", ", groups.Select(g => string.Join(" ", g)));
+        }
+
+        /// <summary>
+        /// The inscription's tags, one per comma-separated group, as written ("swords t6"): a pack takes an item that
+        /// matches any of them, and matching one takes every word in it.
+        /// </summary>
+        public static List<string> Groups(string inscription) {
+            return TagGroups(inscription).Select(g => string.Join(" ", g)).ToList();
+        }
+
+        /// <summary>Whether a group (by its place in Groups) has the word.</summary>
+        public static bool GroupHasTag(string inscription, int group, string tag) {
+            var groups = TagGroups(inscription);
+            return group >= 0 && group < groups.Count && groups[group].Contains(tag, StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// The inscription with a word added to one group, or taken out of it if it's there (AND: "swords" and "t6" make
+        /// "swords t6"). A group left with no words goes; with no groups yet, the word starts one.
+        /// </summary>
+        public static string ToggleInGroup(string inscription, int group, string tag) {
+            var groups = TagGroups(inscription);
+
+            if (group < 0 || group >= groups.Count) {
+                groups.Add(new List<string> { tag });
+            }
+            else if (groups[group].Contains(tag, StringComparer.OrdinalIgnoreCase)) {
+                groups[group] = groups[group].Where(w => !string.Equals(w, tag, StringComparison.OrdinalIgnoreCase)).ToList();
+                groups = groups.Where(g => g.Count > 0).ToList();
+            }
+            else {
+                groups[group].Add(tag);
+            }
+
+            return string.Join(", ", groups.Select(g => string.Join(" ", g)));
+        }
+
+        /// <summary>The inscription without one of its groups.</summary>
+        public static string RemoveGroup(string inscription, int group) {
+            var groups = TagGroups(inscription);
+
+            if (group >= 0 && group < groups.Count) {
+                groups.RemoveAt(group);
             }
 
             return string.Join(", ", groups.Select(g => string.Join(" ", g)));

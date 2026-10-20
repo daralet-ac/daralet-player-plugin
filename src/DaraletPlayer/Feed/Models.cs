@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 
@@ -91,6 +92,76 @@ namespace DaraletPlayer.Feed {
     [DataContract]
     public class WindowSettingInfo {
         [DataMember(Name = "on")] public bool On;
+    }
+
+    /// <summary>
+    /// Your character stats, the ones the Combat Focus appraisal shows at its bottom (@playerui character, PlayerUiCharacter
+    /// in daralet-ACE, from Player.GetStatsSheetSections), for the Character tab.
+    /// </summary>
+    [DataContract]
+    public class CharacterInfo {
+        [DataMember(Name = "sections")] public List<StatsSectionInfo> Sections;
+    }
+
+    /// <summary>
+    /// Your contracts, as the game's Contracts panel lists them, with the rest of each one's ContractTable entry (@playerui
+    /// quests, PlayerUiQuests in daralet-ACE), for the Quests tab.
+    /// </summary>
+    [DataContract]
+    public class QuestsInfo {
+        [DataMember(Name = "quests")] public List<QuestInfo> Quests;
+    }
+
+    /// <summary>
+    /// One contract (PlayerUiQuest). Stage is available, started or done; DoneIn and RepeatsIn are seconds from when the
+    /// reply was sent. A place is null in a dungeon, and empty fields are left out of the reply.
+    /// </summary>
+    [DataContract]
+    public class QuestInfo {
+        [DataMember(Name = "id")] public uint Id;
+        [DataMember(Name = "name")] public string Name;
+        [DataMember(Name = "description")] public string Description;
+        [DataMember(Name = "progress")] public string Progress;
+        [DataMember(Name = "stage")] public string Stage;
+        [DataMember(Name = "solves")] public int? Solves;
+        [DataMember(Name = "maxSolves")] public int? MaxSolves;
+        [DataMember(Name = "doneIn")] public double? DoneIn;
+        [DataMember(Name = "repeatsIn")] public double? RepeatsIn;
+        [DataMember(Name = "startNpc")] public string StartNpc;
+        [DataMember(Name = "endNpc")] public string EndNpc;
+        [DataMember(Name = "startAt")] public PlaceInfo StartAt;
+        [DataMember(Name = "endAt")] public PlaceInfo EndAt;
+        [DataMember(Name = "area")] public PlaceInfo Area;
+        [DataMember(Name = "canAbandon")] public bool CanAbandon;
+
+        public bool IsDone => Stage == "done";
+        public bool IsStarted => Stage == "started";
+
+        /// <summary>The order the tab lists them in: what you're doing, then what you've taken on, then what's done.</summary>
+        public int SortOrder => IsStarted ? 0 : IsDone ? 2 : 1;
+    }
+
+    /// <summary>A spot on the map (PlayerUiPlace), in map coordinates: east and north positive.</summary>
+    [DataContract]
+    public class PlaceInfo {
+        [DataMember(Name = "mapX")] public float MapX;
+        [DataMember(Name = "mapY")] public float MapY;
+    }
+
+    /// <summary>A section of the character stats ("Gear Mods"), and its lines; none when it has nothing to show.</summary>
+    [DataContract]
+    public class StatsSectionInfo {
+        [DataMember(Name = "title")] public string Title;
+        [DataMember(Name = "lines")] public List<string> Lines;
+
+        /// <summary>
+        /// A line as the stat and its value, split at its first ": " ("Attack Skill: +5%" is "Attack Skill" and "+5%"), for
+        /// the tab's two columns; a line without one is all stat.
+        /// </summary>
+        public static (string Stat, string Value) Split(string line) {
+            var at = (line ?? "").IndexOf(": ", StringComparison.Ordinal);
+            return at < 0 ? ((line ?? "").Trim(), "") : (line.Substring(0, at).Trim(), line.Substring(at + 2).Trim());
+        }
     }
 
     [DataContract]

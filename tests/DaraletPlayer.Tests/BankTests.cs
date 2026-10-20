@@ -1,3 +1,4 @@
+using System.Linq;
 using DaraletPlayer.Feed;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -18,6 +19,33 @@ namespace DaraletPlayer.Tests {
             Assert.AreEqual("/bank autosort on", BankCommands.AutoSort(true));
             Assert.AreEqual("/bank inscribe 2 weapons, swords t6", BankCommands.Inscribe(2, "weapons, swords t6"));
             Assert.AreEqual("/bank inscribe 2 clear", BankCommands.Inscribe(2, "  "));
+            // PackIcons.TryParse reads "small pouch" as one style
+            Assert.AreEqual("/bank icon 3 small pouch blue", BankCommands.Icon(3, "small pouch", "blue"));
+            Assert.AreEqual("/bank icon 3 default", BankCommands.IconDefault(3));
+        }
+
+        [TestMethod]
+        public void AndPutsAWordInAGroupOrTakesItOut() {
+            Assert.AreEqual("swords t6", BankCommands.ToggleInGroup("swords", 0, "t6"));
+            Assert.AreEqual("swords t6, gems t5", BankCommands.ToggleInGroup("swords t6, gems", 1, "t5"));
+            // out of that group only: the other keeps it
+            Assert.AreEqual("swords, gems t6", BankCommands.ToggleInGroup("swords t6, gems t6", 0, "t6"));
+            // a group left empty goes
+            Assert.AreEqual("gems", BankCommands.ToggleInGroup("swords, gems", 0, "swords"));
+            // no groups yet: it starts one
+            Assert.AreEqual("swords", BankCommands.ToggleInGroup("", 0, "swords"));
+
+            Assert.IsTrue(BankCommands.GroupHasTag("swords t6, gems", 0, "t6"));
+            Assert.IsFalse(BankCommands.GroupHasTag("swords t6, gems", 1, "t6"));
+            CollectionAssert.AreEqual(new[] { "swords t6", "gems" }, BankCommands.Groups("swords t6, gems"));
+            Assert.AreEqual("gems", BankCommands.RemoveGroup("swords t6, gems", 0));
+        }
+
+        [TestMethod]
+        public void PouchesHaveNoWhite() {
+            // PackIcons.PouchColors in daralet-ACE: a white pouch is the gray one
+            Assert.IsTrue(BankCommands.PackIcons.Single(p => p.Style == "sack").Colors.Contains("white"));
+            Assert.IsFalse(BankCommands.PackIcons.Single(p => p.Style == "pouch").Colors.Contains("white"));
         }
 
         [TestMethod]

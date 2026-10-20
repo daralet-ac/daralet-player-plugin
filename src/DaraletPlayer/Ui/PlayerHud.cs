@@ -21,6 +21,8 @@ namespace DaraletPlayer.Ui {
         private readonly BankTab bankTab;
         private readonly MarketTab marketTab;
         private readonly ArenaTab arenaTab;
+        private readonly CharacterTab characterTab;
+        private readonly QuestsTab questsTab;
         private readonly LootTab lootTab;
         private readonly LeaderboardsTab leaderboardsTab;
         private readonly MarketApi api = new MarketApi();
@@ -41,6 +43,8 @@ namespace DaraletPlayer.Ui {
             bankTab = new BankTab(feed, icons, settings);
             marketTab = new MarketTab(feed, api, icons);
             arenaTab = new ArenaTab(feed, api);
+            characterTab = new CharacterTab(feed);
+            questsTab = new QuestsTab(feed, worldTab.GoTo);
             lootTab = new LootTab(feed, settings, icons);
             leaderboardsTab = new LeaderboardsTab(feed, api);
 
@@ -50,7 +54,9 @@ namespace DaraletPlayer.Ui {
                 ("World", "A map of Dereth with Daralet's towns, dungeons, lifestones and portals, you and your fellowship, and an arrow to point you anywhere on it.", worldTab.Render),
                 ("Fellowship", "Your fellowship's health, stamina and mana, and a vitals window you can place anywhere on screen.", fellowshipTab.Render),
                 ("Target", "Your selected target's vitals, buffs, debuffs and threat table, and a tracked target you can watch alongside it.", targetTab.Render),
-                ("Loot", "Loot rules in named loot profiles you can swap, and what happens when you open a corpse or a chest: loot, salvage, or just show what matches.", lootTab.Render),
+                ("Character", "Your character stats, as the Combat Focus appraisal shows them: gear mods, ratings, ward, armor level, resistances and jewel effects.", characterTab.Render),
+                ("Quests", "Your quests, what the game's Contracts panel lists: their progress and timers, who gives them and who takes them back, and where, with an arrow to point you there.", questsTab.Render),
+                ("Loot","Loot rules in named loot profiles you can swap, and what happens when you open a corpse or a chest: loot, salvage, or just show what matches.", lootTab.Render),
                 ("Inventory", "The packs you carry, your bank's packs while it's open, and every /bank command as a button.", bankTab.Render),
                 ("Market", "Your listings, sales and expired items, the Market Broker's actions near the market stand, and a search of everything on the market.", marketTab.Render),
                 ("Arena", "Your arena ratings and where you stand, the /arena commands as buttons, duels to watch, and the top ratings.", arenaTab.Render),
