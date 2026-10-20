@@ -374,12 +374,7 @@ namespace DaraletPlayer.Ui {
         }
 
         private static Vector4 OutcomeColor(LootOutcome outcome) {
-            switch (outcome) {
-                case LootOutcome.Keep: return Colors.Good;
-                case LootOutcome.Salvage: return Colors.Warning;
-                case LootOutcome.Notify: return Colors.Info;
-                default: return Colors.Muted;
-            }
+            return ItemTooltip.OutcomeColor(outcome);
         }
 
         public void Dispose() {

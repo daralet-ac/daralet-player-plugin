@@ -26,9 +26,10 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>
         /// Shows lines as a tooltip for the item drawn just before this, while the mouse is over it, or over the item's icon
-        /// (iconHovered, from ItemIcons.Draw).
+        /// (iconHovered, from ItemIcons.Draw). With a rule (the first in the active loot profile it matches), says which at the
+        /// bottom, in its outcome's colour.
         /// </summary>
-        public static void Show(List<ItemLine> lines, bool iconHovered = false) {
+        public static void Show(List<ItemLine> lines, bool iconHovered = false, LootRule rule = null) {
             if (!ImGui.IsItemHovered() && !iconHovered) {
                 return;
             }
@@ -66,8 +67,23 @@ namespace DaraletPlayer.Ui {
                 }
             }
 
+            if (rule != null) {
+                ImGui.Separator();
+                Widgets.TextColored(OutcomeColor(rule.Outcome), $"Loot rule: {rule.Name} ({rule.Outcome})");
+            }
+
             ImGui.PopTextWrapPos();
             ImGui.EndTooltip();
+        }
+
+        /// <summary>Each loot outcome's colour, as the Loot tab's rule list shows it.</summary>
+        public static Vector4 OutcomeColor(LootOutcome outcome) {
+            switch (outcome) {
+                case LootOutcome.Keep: return Colors.Good;
+                case LootOutcome.Salvage: return Colors.Warning;
+                case LootOutcome.Notify: return Colors.Info;
+                default: return Colors.Muted;
+            }
         }
 
         /// <summary>A line in its style's colour, wrapping at whatever width is pushed. The Appraisal window draws them too.</summary>

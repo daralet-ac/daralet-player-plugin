@@ -36,6 +36,7 @@ namespace DaraletPlayer.Ui {
             this.feed = feed;
             this.settings = settings;
             icons = new ItemIcons(settings);
+            ItemUser.Icons = icons;
 
             fellowshipTab = new FellowshipTab(feed, settings);
             targetTab = new TargetTab(feed, settings);
@@ -165,6 +166,7 @@ namespace DaraletPlayer.Ui {
 
             try {
                 Appraisal.Stop();
+                ItemUser.Icons = null;
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);

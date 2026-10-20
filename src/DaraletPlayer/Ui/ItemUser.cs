@@ -34,6 +34,9 @@ namespace DaraletPlayer.Ui {
 
         public static bool Targeting => tool != 0;
 
+        /// <summary>For the game's reticle pictures: set by PlayerHud while it runs.</summary>
+        internal static ItemIcons Icons;
+
         /// <summary>The frame a right-click or Escape put the tool down.</summary>
         private static int cancelledFrame = -1;
 
@@ -232,6 +235,11 @@ namespace DaraletPlayer.Ui {
             var hovered = ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem);
 
             if (!Targeting) {
+                // a click selects it, as in the game's own pack: the lists frame the selection, and the game's keys act on it
+                if (ImGui.IsItemClicked(ImGuiMouseButton.Left) && CoreManager.Current.Actions.CurrentSelection != id) {
+                    CoreManager.Current.Actions.SelectItem(id);
+                }
+
                 if (usable && hovered && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left)) {
                     Use(id);
                 }
@@ -281,7 +289,7 @@ namespace DaraletPlayer.Ui {
 
         private static void RenderBar() {
             Widgets.TextColored(Colors.Info, $"Using the {toolName}: click what to use it on.");
-            Widgets.Tip("The tool works on what its kind allows, the game's own rules: the mark under the mouse turns green over something it works on, red over something it doesn't. Escape or right-click puts it down.");
+            Widgets.Tip("The tool works on what its kind allows, the game's own rules: the reticle under the mouse is the game's yellow one, and turns red over something it doesn't work on. Escape or right-click puts it down.");
 
             if (UseRules.Targets(toolUsable, UsePlace.Self)) {
                 ImGui.SameLine();
@@ -326,6 +334,17 @@ namespace DaraletPlayer.Ui {
             drawnFrame = frame;
 
             // what was hovered last frame: the lists drawn after this one haven't said yet this frame
+            var cantUse = hoverFrame >= frame - 1 && hoverValid == false;
+
+            // the game's own reticles, at their size: yellow with nothing under it or something it works on, red over
+            // something it doesn't
+            const float artSize = 32;
+
+            if (Icons != null && Icons.DrawArt(ImGui.GetForegroundDrawList(), cantUse ? ItemIcons.ArtReticleInvalid : ItemIcons.ArtReticle,
+                ImGui.GetMousePos() - new Vector2(artSize / 2, artSize / 2), artSize)) {
+                return;
+            }
+
             var colour = hoverFrame >= frame - 1 && hoverValid.HasValue ? (hoverValid.Value ? CanUse : CantUse) : Ready;
             var c = ImGui.GetColorU32(colour);
             var shadow = ImGui.GetColorU32(new Vector4(0, 0, 0, 0.8f));

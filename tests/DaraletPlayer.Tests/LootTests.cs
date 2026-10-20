@@ -136,6 +136,81 @@ namespace DaraletPlayer.Tests {
             Assert.IsFalse(Loot.Matches(new LootRule { NameContains = "frost" }, Sword()));
         }
 
+        private static CorpseItemInfo Wand(double elemental = 1.08, double restoration = 1.05) {
+            return new CorpseItemInfo {
+                Guid = 3, Name = "Fire Wand", Value = 4000,
+                Item = new MarketListing { ItemName = "Fire Wand", ItemCategory = "Weapon", WeaponClass = "WarMagic", ItemTier = 7, ElementalDamageMod = elemental, RestorationMod = restoration, DamageType = "Fire" },
+            };
+        }
+
+        [TestMethod]
+        public void WeaponSubtypesHaveTheirOwnDamageStats() {
+            var subtype = Key("Weapon", "weaponSubtype");
+
+            Assert.IsTrue(Loot.Matches(new LootRule { Category = "Weapon", Values = { [subtype] = "Melee" } }, Sword()));
+            Assert.IsFalse(Loot.Matches(new LootRule { Category = "Weapon", Values = { [subtype] = "Caster" } }, Sword()));
+            Assert.IsTrue(Loot.Matches(new LootRule { Category = "Weapon", Values = { [subtype] = "Caster" } }, Wand()));
+
+            var casterRule = new LootRule { Category = "Weapon", Values = { [subtype] = "Caster", [Key("Weapon", "minElementalDamageMod")] = "8", [Key("Weapon", "minRestorationMod")] = "5" } };
+            Assert.IsTrue(Loot.Matches(casterRule, Wand()));
+            Assert.IsFalse(Loot.Matches(casterRule, Wand(elemental: 1.07)), "7% elemental is under 8%");
+            Assert.IsFalse(Loot.Matches(casterRule, Wand(restoration: 1.04)), "4% restoration is under 5%");
+
+            // a box the subtype doesn't show (left filled in from before) doesn't count
+            casterRule.Values[Key("Weapon", "minBaseDamage")] = "9999";
+            Assert.IsTrue(Loot.Matches(casterRule, Wand()));
+
+            var missile = new CorpseItemInfo { Name = "Bow", Item = new MarketListing { ItemCategory = "Weapon", WeaponClass = "Missile", DamageMod = 1.2 } };
+            Assert.IsTrue(Loot.Matches(new LootRule { Category = "Weapon", Values = { [subtype] = "Missile", [Key("Weapon", "minDamageMod")] = "20" } }, missile));
+            Assert.IsFalse(Loot.Matches(new LootRule { Category = "Weapon", Values = { [subtype] = "Missile", [Key("Weapon", "minDamageMod")] = "21" } }, missile));
+        }
+
+        [TestMethod]
+        public void DamageElementsMatchAnyTicked() {
+            var element = Key("Weapon", "damageType");
+            var axe = new CorpseItemInfo { Name = "Axe", Item = new MarketListing { ItemCategory = "Weapon", WeaponClass = "Martial", DamageType = "Slashing/Piercing" } };
+
+            Assert.IsTrue(Loot.Matches(new LootRule { Category = "Weapon", Values = { [element] = "Cold,Fire" } }, Wand()));
+            Assert.IsFalse(Loot.Matches(new LootRule { Category = "Weapon", Values = { [element] = "Cold,Acid" } }, Wand()));
+            Assert.IsTrue(Loot.Matches(new LootRule { Category = "Weapon", Values = { [element] = "Piercing" } }, axe));
+            Assert.IsTrue(Loot.Matches(new LootRule { Category = "Weapon", Values = { [element] = "" } }, axe), "none ticked is any");
+        }
+
+        [TestMethod]
+        public void BurdenAndValuePerBurdenWorkForAnyCategory() {
+            var sword = Sword();
+            sword.Burden = 250; // value 5000, so 20 a unit of burden
+
+            Assert.IsTrue(Loot.Matches(new LootRule { Category = "Weapon", Values = { [Key(null, "maxBurden")] = "250" } }, sword));
+            Assert.IsFalse(Loot.Matches(new LootRule { Values = { [Key(null, "maxBurden")] = "249" } }, sword));
+            Assert.IsTrue(Loot.Matches(new LootRule { Values = { [Key(null, "minValuePerBurden")] = "20" } }, sword));
+            Assert.IsFalse(Loot.Matches(new LootRule { Values = { [Key(null, "minValuePerBurden")] = "21" } }, sword));
+
+            sword.Burden = 0;
+            Assert.IsTrue(Loot.Matches(new LootRule { Values = { [Key(null, "minValuePerBurden")] = "5000" } }, sword), "burden 0 counts as 1");
+        }
+
+        [TestMethod]
+        public void RollRangesShowForTheRulesTiers() {
+            // as PlayerUiRollRanges in daralet-ACE writes it (RollRangesJsonHasTheNamesThePluginReads pins the same names)
+            var ranges = Json.Read<RollRangesInfo>("{\"ranges\":[{\"category\":\"Weapon\",\"stat\":\"AttackMod\",\"tier\":7,\"min\":13.13,\"max\":27.5},"
+                + "{\"category\":\"Weapon\",\"stat\":\"AttackMod\",\"tier\":8,\"min\":15,\"max\":30},"
+                + "{\"category\":\"Jewelry\",\"stat\":\"GearDamage\",\"tier\":8,\"min\":3,\"max\":7}]}");
+            MarketFilter Filter(string category, string param) => MarketSearch.Filters.Single(f => f.Category == category && f.Param == param);
+
+            Assert.AreEqual("Loot rolls it in: T6 13.1-27.5%, T7 15-30%.", ranges.Describe(Filter("Weapon", "minAttackMod"), "", ""));
+            Assert.AreEqual("Loot rolls it in: T7 15-30%.", ranges.Describe(Filter("Weapon", "minAttackMod"), "7", ""), "only the rule's tiers");
+            Assert.AreEqual("Loot rolls it in: T7 3-7.", ranges.Describe(Filter("Jewelry", "minGearDamage"), "", ""));
+            Assert.IsNull(ranges.Describe(Filter("Weapon", "minDps"), "", ""), "the server has no range for it");
+            Assert.IsNull(ranges.Describe(Filter("Weapon", "minAttackMod"), "", "5"), "none at those tiers");
+        }
+
+        [TestMethod]
+        public void TheMarketSearchLeavesOutLootOnlyFilters() {
+            var values = new Dictionary<string, string> { [Key("Weapon", "weaponSubtype")] = "Caster", [Key("Weapon", "damageType")] = "Fire" };
+            Assert.AreEqual("itemCategory=Weapon&page=1&pageSize=20", MarketSearch.Query("", "Weapon", "", "", values, "", false, 1));
+        }
+
         [TestMethod]
         public void PriceIsTheItemsValueAndSalvageableOnlyCounts() {
             Assert.IsTrue(Loot.Matches(new LootRule { Values = { [Key(null, "minPrice")] = "4000" } }, Sword()));

@@ -36,6 +36,8 @@
     <EmbeddedResource Include="Resources\dereth-map.png" LogicalName="DaraletPlayer.Resources.dereth-map.png" />
     <!-- GoArrow's locations.xml, Phenyl's Daralet edition; a locations.xml next to the dll is read instead (Map/Locations.cs) -->
     <EmbeddedResource Include="Resources\locations.xml" LogicalName="DaraletPlayer.Resources.locations.xml" />
+    <!-- the game's own UI pictures, from the client: the main pack, the selection frame, the target reticles (ItemIcons.DrawArt) -->
+    <EmbeddedResource Include="Resources\ui\*.png" LogicalName="DaraletPlayer.Resources.ui.%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <!-- UtilityBelt.Service is installed on the client separately, so it's only referenced for compiling. 2.2.12 is the version

@@ -33,6 +33,7 @@ namespace DaraletPlayer.Feed {
         public const string KindCharacter = "character";
         public const string KindQuests = "quests";
         public const string KindAbandon = "abandon";
+        public const string KindRollRanges = "rollranges";
 
         // chat types, which Decal passes as the colour
         private const int TellChat = 3;
@@ -129,6 +130,9 @@ namespace DaraletPlayer.Feed {
         /// <summary>Your character stats, the Combat Focus appraisal's, or null before the first reply.</summary>
         public CharacterInfo Character { get; private set; }
         public DateTime CharacterUpdatedAt { get; private set; } = DateTime.MinValue;
+
+        /// <summary>The ranges loot rolls each filter stat in, the same for everyone, or null before the first reply.</summary>
+        public RollRangesInfo RollRanges { get; private set; }
 
         /// <summary>Your contracts, as the Quests tab shows them, or null before the first reply.</summary>
         public QuestsInfo Quests { get; private set; }
@@ -387,6 +391,9 @@ namespace DaraletPlayer.Feed {
                 case KindCharacter:
                     Character = Json.Read<CharacterInfo>(json);
                     CharacterUpdatedAt = DateTime.UtcNow;
+                    break;
+                case KindRollRanges:
+                    RollRanges = Json.Read<RollRangesInfo>(json);
                     break;
                 case KindQuests:
                     Quests = Json.Read<QuestsInfo>(json);

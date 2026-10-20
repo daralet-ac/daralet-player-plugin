@@ -379,7 +379,7 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RenderFilters() {
-            var shown = MarketSearch.Filters.Where(f => f.Category == null || f.Category == category).ToList();
+            var shown = MarketSearch.Filters.Where(f => !f.LootOnly && (f.Category == null || f.Category == category)).ToList();
 
             if (!ImGui.BeginTable("market-filter-table", 3, ImGuiTableFlags.SizingStretchSame)) {
                 return;

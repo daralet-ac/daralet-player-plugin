@@ -231,9 +231,14 @@ namespace DaraletPlayer.Feed {
         private static readonly Dictionary<string, (Func<CorpseItemInfo, double?> Get, bool PerSlot)> Numbers =
             new Dictionary<string, (Func<CorpseItemInfo, double?>, bool)>(StringComparer.OrdinalIgnoreCase) {
                 ["Price"] = (i => i.Value, false),
+                ["Burden"] = (i => i.Burden, false),
+                ["ValuePerBurden"] = (i => (double)i.Value / Math.Max(i.Burden, 1), false),
                 ["Dps"] = (i => i.Item?.Dps, false),
                 ["BaseDamage"] = (i => i.Item?.BaseDamage, false),
                 ["DamageVariance"] = (i => i.Item?.DamageVariance, false),
+                ["DamageMod"] = (i => i.Item?.DamageMod, false),
+                ["ElementalDamageMod"] = (i => i.Item?.ElementalDamageMod, false),
+                ["RestorationMod"] = (i => i.Item?.RestorationMod, false),
                 ["Speed"] = (i => i.Item?.Speed, false),
                 ["AttackMod"] = (i => i.Item?.WeaponOffense, false),
                 ["PhysDefMod"] = (i => i.Item?.WeaponPhysicalDefense, false),
@@ -296,6 +301,8 @@ namespace DaraletPlayer.Feed {
         private static readonly Dictionary<string, (Func<MarketListing, IEnumerable<string>> Get, bool Contains)> Words =
             new Dictionary<string, (Func<MarketListing, IEnumerable<string>>, bool)>(StringComparer.OrdinalIgnoreCase) {
                 ["weaponClass"] = (l => One(l.WeaponClass), false),
+                ["weaponSubtype"] = (l => One(MarketSearch.SubtypeOf(l.WeaponClass)), false),
+                ["damageType"] = (l => (l.DamageType ?? "").Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries), false),
                 ["armorWeightClass"] = (l => One(l.ArmorWeightClass), false),
                 ["jewelrySlot"] = (l => One(l.JewelrySlot), false),
                 ["sigilTrinketType"] = (l => One(l.SigilTrinketType), false),
@@ -318,6 +325,9 @@ namespace DaraletPlayer.Feed {
         /// </summary>
         private static readonly Dictionary<string, string[]> RollStats = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase) {
             ["BaseDamage"] = new[] { "Damage", "Damage Modifier" },
+            ["DamageMod"] = new[] { "Damage Modifier" },
+            ["ElementalDamageMod"] = new[] { "Elemental Damage Bonus" },
+            ["RestorationMod"] = new[] { "Restoration Healing Bonus" },
             ["AttackMod"] = new[] { "Bonus to Attack Skill" },
             ["PhysDefMod"] = new[] { "Bonus to Physical Defense" },
             ["MagicDefMod"] = new[] { "Bonus to Magic Defense" },
@@ -437,8 +447,11 @@ namespace DaraletPlayer.Feed {
                 return false;
             }
 
+            var subtype = SubtypeOf(rule);
+
             foreach (var filter in MarketSearch.Filters) {
-                if (filter.Category != null && filter.Category != category) {
+                // a filter the rule's category or weapon subtype doesn't show doesn't count, though its box may still be filled in
+                if ((filter.Category != null && filter.Category != category) || !filter.ForSubtype(subtype)) {
                     continue;
                 }
 
@@ -464,6 +477,13 @@ namespace DaraletPlayer.Feed {
             return true;
         }
 
+        /// <summary>The weapon subtype a Weapon rule picked (MarketSearch.WeaponSubtypes), or "" for any.</summary>
+        public static string SubtypeOf(LootRule rule) {
+            return rule.Category == "Weapon" && rule.Values != null && rule.Values.TryGetValue(SubtypeKey, out var subtype) ? subtype ?? "" : "";
+        }
+
+        public static readonly string SubtypeKey = MarketSearch.Filters.Single(f => f.Param == "weaponSubtype").Key;
+
         private static bool FilterHolds(MarketFilter filter, string value, CorpseItemInfo item) {
             var param = filter.Param;
 
@@ -477,8 +497,11 @@ namespace DaraletPlayer.Feed {
                     return false;
                 }
 
-                var wanted = Squash(value);
-                return words.Get(item.Item).Any(v => words.Contains ? Squash(v).Contains(wanted) : Squash(v) == wanted);
+                // a multi-choice is several values, comma-separated, any one of which will do
+                var wanted = filter.Kind == FilterKind.Multi
+                    ? value.Split(',').Select(Squash).Where(w => w.Length > 0).ToList()
+                    : new List<string> { Squash(value) };
+                return words.Get(item.Item).Any(v => wanted.Any(w => words.Contains ? Squash(v).Contains(w) : Squash(v) == w));
             }
 
             var isMin = param.StartsWith("min", StringComparison.Ordinal);

@@ -289,6 +289,15 @@ namespace DaraletPlayer.Ui {
             }
         }
 
+        private const float DefaultMinWidth = 300;
+        private float minWidth = DefaultMinWidth;
+        private float? pendingWidth;
+
+        /// <summary>Makes a window you size yourself this wide, from its next frame; its height stays. Its size is kept as ever.</summary>
+        public void SetWidth(float width) {
+            pendingWidth = Math.Max(100, width);
+        }
+
         private void Hud_OnPreRender(object sender, EventArgs e) {
             try {
                 var flags = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoSavedSettings;
@@ -313,8 +322,15 @@ namespace DaraletPlayer.Ui {
                     positioned = true;
                 }
 
+                if (defaultSize.HasValue && pendingWidth.HasValue) {
+                    // a width asked for (SetWidth) is allowed under the usual smallest, so it's exactly what was asked
+                    minWidth = Math.Min(DefaultMinWidth, pendingWidth.Value);
+                    ImGui.SetNextWindowSize(new Vector2(pendingWidth.Value, Placement.Height ?? defaultSize.Value.Y), ImGuiCond.Always);
+                    pendingWidth = null;
+                }
+
                 if (defaultSize.HasValue) {
-                    ImGui.SetNextWindowSizeConstraints(new Vector2(300, 200), new Vector2(float.MaxValue, float.MaxValue));
+                    ImGui.SetNextWindowSizeConstraints(new Vector2(minWidth, 200), new Vector2(float.MaxValue, float.MaxValue));
                 }
 
                 var alpha = Placement.BackgroundAlpha;

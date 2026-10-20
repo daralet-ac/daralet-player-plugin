@@ -132,6 +132,12 @@ namespace DaraletPlayer {
         [DataMember(Name = "bankWindow")] public bool BankWindow;
 
         /// <summary>
+        /// The Carried window is laid out like the game's inventory: what you're wearing at the top, the chosen pack's items
+        /// as a grid below it, and the packs down the right as icons only.
+        /// </summary>
+        [DataMember(Name = "carriedRetail")] public bool CarriedRetail;
+
+        /// <summary>
         /// Opening a corpse or a chest shows what's in it in the plugin's Corpse window instead of the game's (@playerui
         /// lootwindow).
         /// </summary>
@@ -204,6 +210,7 @@ namespace DaraletPlayer {
             ArrowShowDetails = true;
             AppraiseInPlugin = true;
             BankShowWorn = true;
+            CarriedRetail = true;
             Loot = new LootData();
         }
     }

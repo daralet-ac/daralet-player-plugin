@@ -410,6 +410,16 @@ namespace DaraletPlayer.Ui {
 
                     ImGui.PopStyleColor();
                     Widgets.Tip($"{rule.Outcome}. Click to edit it.");
+
+                    // the rule's mark at the row's right end, as it looks on an icon, to tell the rules apart at a glance
+                    if (LootMarks.Marks(rule)) {
+                        var size = ImGui.GetItemRectSize().Y;
+                        var at = new Vector2(ImGui.GetItemRectMax().X - size, ImGui.GetItemRectMin().Y);
+                        var drawList = ImGui.GetWindowDrawList();
+                        drawList.AddRectFilled(at, at + new Vector2(size, size), ImGui.GetColorU32(ImGuiCol.FrameBg));
+                        ItemIcons.DrawMark(drawList, rule, at, size);
+                    }
+
                     ImGui.PopID();
                 }
             }
@@ -475,10 +485,15 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("Deletes this rule.");
 
             foreach (var (outcome, label, tip) in Outcomes) {
+                // in the colour the rule list shows each outcome in
+                ImGui.PushStyleColor(ImGuiCol.Text, OutcomeColor(outcome));
+
                 if (ImGui.RadioButton(label, rule.Outcome == outcome)) {
                     rule.Outcome = outcome;
                     changed = true;
                 }
+
+                ImGui.PopStyleColor();
                 Widgets.Tip(tip);
                 ImGui.SameLine();
             }
@@ -512,7 +527,13 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("Only items salvaging could turn into salvage (not retained, not unstable, with a material).");
 
             ImGui.Separator();
-            changed |= RenderFilters(rule);
+
+            // the ranges are the same for everyone and don't change, so once is enough; until a reply, ask every 30 seconds
+            if (feed.RollRanges == null) {
+                feed.Refresh(PlayerFeed.KindRollRanges, TimeSpan.FromSeconds(30));
+            }
+
+            changed |= RenderFilters(rule, feed.RollRanges);
 
             if (changed) {
                 settings.Changed();
@@ -551,9 +572,13 @@ namespace DaraletPlayer.Ui {
         /// <summary>
         /// The Search tab's filters for the rule's category (and for all), as boxes. "Price" is the item's vendor value here.
         /// </summary>
-        private static bool RenderFilters(LootRule rule) {
+        private static readonly string ClassKey = MarketSearch.Filters.Single(f => f.Category == "Weapon" && f.Param == "weaponClass").Key;
+
+        private static bool RenderFilters(LootRule rule, RollRangesInfo rollRanges) {
             var changed = false;
-            var shown = MarketSearch.Filters.Where(f => f.Category == null || f.Category == rule.Category).ToList();
+            // a weapon subtype shows only the filters for it: each has its own damage stat
+            var subtype = Loot.SubtypeOf(rule);
+            var shown = MarketSearch.Filters.Where(f => (f.Category == null || f.Category == rule.Category) && f.ForSubtype(subtype)).ToList();
 
             if (!ImGui.BeginTable("rule-filters", 2, ImGuiTableFlags.SizingStretchSame)) {
                 return false;
@@ -591,10 +616,27 @@ namespace DaraletPlayer.Ui {
                         changed = true;
                     }
                 }
-                else if (filter.Kind == FilterKind.Choice) {
-                    if (Widgets.Choice($"##{filter.Key}", filter.Options, ref value)) {
+                else if (filter.Kind == FilterKind.Multi) {
+                    if (Widgets.MultiChoice($"##{filter.Key}", filter.Options, ref value)) {
                         rule.Values[filter.Key] = value;
                         changed = true;
+                    }
+                }
+                else if (filter.Kind == FilterKind.Choice) {
+                    // with a subtype picked, Class offers only that subtype's classes
+                    var options = filter.Key == ClassKey && subtype.Length > 0
+                        ? filter.Options.Where(o => o.Value == "" || MarketSearch.SubtypeOf(o.Value) == subtype).ToArray()
+                        : filter.Options;
+
+                    if (Widgets.Choice($"##{filter.Key}", options, ref value)) {
+                        rule.Values[filter.Key] = value;
+                        changed = true;
+
+                        // a class from another subtype would match nothing, and its box wouldn't show it
+                        if (filter.Key == Loot.SubtypeKey && value.Length > 0 && rule.Values.TryGetValue(ClassKey, out var weaponClass)
+                            && !string.IsNullOrEmpty(weaponClass) && MarketSearch.SubtypeOf(weaponClass) != value) {
+                            rule.Values.Remove(ClassKey);
+                        }
                     }
                 }
                 else {
@@ -606,11 +648,15 @@ namespace DaraletPlayer.Ui {
                     }
                 }
 
+                // the ranges loot rolls it in, at the rule's tiers (the server's, @playerui rollranges)
+                var range = rollRanges?.Describe(filter, rule.MinTier, rule.MaxTier);
+                var rangeLine = range == null ? "" : "\n" + range;
+
                 if (roll) {
-                    Widgets.Tip($"The lowest roll quality for this stat, 0 to 100: where it landed in its range ({string.Join(" or ", Loot.RollStatsFor(filter))} in appraisal's Roll Quality).");
+                    Widgets.Tip($"The lowest roll quality for this stat, 0 to 100: where it landed in its range ({string.Join(" or ", Loot.RollStatsFor(filter))} in appraisal's Roll Quality).{rangeLine}");
                 }
                 else {
-                    Widgets.Tip(filter.Category == null ? filter.Tip.Replace("price, in pyreals", "vendor value") : filter.Tip);
+                    Widgets.Tip((filter.Category == null ? filter.Tip.Replace("price, in pyreals", "vendor value") : filter.Tip) + rangeLine);
                 }
             }
 
@@ -957,21 +1003,16 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>The item's every stat, as the server described it (ItemLines).</summary>
-        private static void ShowTooltip(CorpseItemInfo item, bool iconHovered) {
+        private void ShowTooltip(CorpseItemInfo item, bool iconHovered) {
             if (!ImGui.IsItemHovered() && !iconHovered) {
                 return;
             }
 
-            ItemTooltip.Show(ItemUse.With(ItemLines.Build(item), item.Guid), iconHovered: true);
+            ItemTooltip.Show(ItemUse.With(ItemLines.Build(item), item.Guid), iconHovered: true, Loot.Decide(looter.ActiveList, item).Rule);
         }
 
         private static Vector4 OutcomeColor(LootOutcome outcome) {
-            switch (outcome) {
-                case LootOutcome.Keep: return Colors.Good;
-                case LootOutcome.Salvage: return Colors.Warning;
-                case LootOutcome.Notify: return Colors.Info;
-                default: return Colors.Muted;
-            }
+            return ItemTooltip.OutcomeColor(outcome);
         }
 
         public void Dispose() {

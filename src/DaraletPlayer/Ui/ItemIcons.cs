@@ -97,6 +97,20 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
+        /// Only an item's own icon, with its outline, no tile behind it and no overlay: what follows the mouse in a drag, as
+        /// the game's does. Returns false when there's nothing to draw.
+        /// </summary>
+        public bool DrawIconOnly(ImDrawListPtr drawList, IconLayers layers, Vector2 at, float size) {
+            if (disposed || layers == null || layers.IsEmpty) {
+                return false;
+            }
+
+            var icon = Texture(layers.Icon, layers.OutlineColor);
+            AddImage(drawList, icon, at, at + new Vector2(size, size));
+            return icon != null;
+        }
+
+        /// <summary>
         /// A loot rule's mark over an icon size pixels square at a spot on the screen: its highlight as a frame round the
         /// edge, its symbol in the top left corner (the bottom right is a stack's count). Nothing for a rule without one.
         /// </summary>
@@ -233,6 +247,77 @@ namespace DaraletPlayer.Ui {
             var texture = Texture(id, null);
             AddImage(drawList, texture, at, at + new Vector2(size, size));
             return texture != null;
+        }
+
+        // the game's UI pictures built into the plugin (Resources\ui), by file name
+        public const string ArtMainPack = "main-pack";
+        public const string ArtSelected = "selected";
+        public const string ArtEmptySlot = "empty-slot";
+        public const string ArtPackBackground = "pack-background";
+        /// <summary>The red crossed-out circle over a slot a held item can't go in.</summary>
+        public const string ArtDropInvalid = "drop-invalid";
+        /// <summary>The ring over a slot an item is held over, at the picture's own size, 17 by 16.</summary>
+        public const string ArtDropRing = "drop-ring";
+        public static readonly Vector2 DropRingSize = new Vector2(17, 16);
+        public const string ArtReticle = "reticle";
+        public const string ArtReticleInvalid = "reticle-invalid";
+
+        /// <summary>Each picture once it's made, or null for one that couldn't be, so it isn't tried every frame.</summary>
+        private readonly Dictionary<string, ManagedTexture> art = new Dictionary<string, ManagedTexture>();
+
+        /// <summary>
+        /// One of the game's UI pictures the plugin carries (ArtMainPack...), size pixels square. Made the first time it's
+        /// drawn, once the game's graphics device exists. Returns false if it couldn't be.
+        /// </summary>
+        public bool DrawArt(ImDrawListPtr drawList, string name, Vector2 at, float size) {
+            return DrawArt(drawList, name, at, new Vector2(size, size));
+        }
+
+        /// <summary>The same, size pixels across and down, for a picture that isn't square.</summary>
+        public bool DrawArt(ImDrawListPtr drawList, string name, Vector2 at, Vector2 size) {
+            if (disposed) {
+                return false;
+            }
+
+            if (!art.TryGetValue(name, out var texture)) {
+                texture = LoadArt(name);
+                art[name] = texture;
+            }
+
+            AddImage(drawList, texture, at, at + size);
+            return texture != null;
+        }
+
+        /// <summary>One of those pictures before a line of text, the way Draw puts an item's icon there.</summary>
+        public void DrawArtInline(string name) {
+            if (!Shown || disposed) {
+                return;
+            }
+
+            var size = ImGui.GetFrameHeight();
+            var top = ImGui.GetCursorPosY();
+            DrawArt(ImGui.GetWindowDrawList(), name, ImGui.GetCursorScreenPos(), size);
+            ImGui.Dummy(new Vector2(size, size));
+            ImGui.SameLine();
+            ImGui.SetCursorPosY(top + (size - ImGui.GetTextLineHeight()) / 2);
+        }
+
+        private static ManagedTexture LoadArt(string name) {
+            try {
+                using (var stream = typeof(ItemIcons).Assembly.GetManifestResourceStream($"DaraletPlayer.Resources.ui.{name}.png")) {
+                    if (stream == null) {
+                        return null;
+                    }
+
+                    using (var bitmap = new Bitmap(stream)) {
+                        return new ManagedTexture(bitmap);
+                    }
+                }
+            }
+            catch (Exception ex) {
+                PluginCore.Log(ex);
+                return null;
+            }
         }
 
         private static void AddImage(ImDrawListPtr drawList, ManagedTexture texture, Vector2 at, Vector2 corner) {
@@ -423,6 +508,12 @@ namespace DaraletPlayer.Ui {
             }
 
             recolored.Clear();
+
+            foreach (var texture in art.Values) {
+                texture?.Dispose();
+            }
+
+            art.Clear();
 
             // the loader keeps every texture it made, and frees them all
             loader?.Dispose();

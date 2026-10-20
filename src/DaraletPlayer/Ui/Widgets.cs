@@ -185,6 +185,49 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
+        /// A combo box of tick boxes over (value, label) choices, the ticked values kept comma-separated in the options' order,
+        /// showing "Any" with none ticked. Returns true when the ticks changed.
+        /// </summary>
+        public static bool MultiChoice(string id, (string Value, string Label)[] options, ref string value) {
+            var ticked = (value ?? "").Split(',').Select(v => v.Trim()).Where(v => v.Length > 0).ToList();
+            var labels = options.Where(o => ticked.Contains(o.Value)).Select(o => o.Label).ToList();
+            var changed = false;
+
+            if (ImGui.BeginCombo(id, labels.Count == 0 ? "Any" : string.Join(", ", labels))) {
+                foreach (var option in options) {
+                    var on = ticked.Contains(option.Value);
+
+                    if (ImGui.Checkbox($"{option.Label}##{option.Value}", ref on)) {
+                        ticked.RemoveAll(v => v == option.Value);
+
+                        if (on) {
+                            ticked.Add(option.Value);
+                        }
+
+                        changed = true;
+                    }
+                }
+
+                if (ticked.Count > 0) {
+                    ImGui.Separator();
+
+                    if (ImGui.Selectable("Clear", false, ImGuiSelectableFlags.DontClosePopups)) {
+                        ticked.Clear();
+                        changed = true;
+                    }
+                }
+
+                ImGui.EndCombo();
+            }
+
+            if (changed) {
+                value = string.Join(",", options.Where(o => ticked.Contains(o.Value)).Select(o => o.Value));
+            }
+
+            return changed;
+        }
+
+        /// <summary>
         /// A vital as a filled bar with "current / max" on it. A height of 0 is the normal line height.
         /// </summary>
         /// <summary>

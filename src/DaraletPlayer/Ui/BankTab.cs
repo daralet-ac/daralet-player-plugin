@@ -24,6 +24,10 @@ namespace DaraletPlayer.Ui {
         private readonly FloatingWindow bankWindow;
         private readonly BankBrowser windowBrowser;
 
+        /// <summary>The packs you carry in a window of their own, which can be laid out like the game's (Retail).</summary>
+        private readonly FloatingWindow carriedWindow;
+        private readonly BankBrowser carriedWindowBrowser;
+
         /// <summary>The /bank buttons, one bar shared by the Carried and Bank views and the Bank window.</summary>
         private readonly BankCommandBar commands;
 
@@ -44,8 +48,13 @@ namespace DaraletPlayer.Ui {
             // Bank window on the Inventory tab is what turns it on and off: the window itself is always allowed
             bankWindow.Visible = true;
 
+            carriedWindowBrowser = new BankBrowser(feed, icons, settings, carried: true, host: "carried-window", retailAllowed: true);
+            carriedWindow = new FloatingWindow("carried", "Inventory", settings, new Vector2(360, 140), RenderCarriedWindow,
+                visibleByDefault: false, defaultSize: new Vector2(420, 560));
+
             CoreManager.Current.ContainerOpened += Core_ContainerOpened;
             CoreManager.Current.RenderFrame += Core_RenderFrame;
+            InventoryChanges.Start();
         }
 
         /// <summary>Bank window is on, and the server can do it.</summary>
@@ -66,6 +75,7 @@ namespace DaraletPlayer.Ui {
             }
 
             if (Widgets.TabItem("Carried", "Your main pack and the packs you carry, anywhere. Drag items between packs; right-click one to put it in your open bank. Deposit and the other /bank commands are at the top.")) {
+                carriedWindow.RenderControls("Inventory window", "Your packs in a window of their own, to keep on screen while you play. Drag its corner to size it. Retail, on its top line, lays it out like the game's inventory.");
                 commands.Render(bankView: false);
                 carriedBrowser.Render();
                 ImGui.EndTabItem();
@@ -119,7 +129,14 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         private void Core_RenderFrame(object sender, EventArgs e) {
             try {
-                if (disposed || feed.Status != FeedStatus.Ready || !feed.Supports(PlayerFeed.KindBankWindow)) {
+                if (disposed) {
+                    return;
+                }
+
+                // an item dragged out into the world: given or dropped once the game has said what was under it
+                WorldDrop.Step();
+
+                if (feed.Status != FeedStatus.Ready || !feed.Supports(PlayerFeed.KindBankWindow)) {
                     return;
                 }
 
@@ -176,6 +193,47 @@ namespace DaraletPlayer.Ui {
             windowBrowser.Render(bank);
         }
 
+        private void RenderCarriedWindow() {
+            if (ImGui.Checkbox("Retail", ref settings.Data.CarriedRetail)) {
+                settings.Changed();
+            }
+            Widgets.Tip("Lays the window out like the game's inventory: what you're wearing at the top, the chosen pack's items as icons below it, and your packs down the right, icons only (hover one for its name). Off, it's the Carried tab's view, with the /bank buttons.");
+
+            // the grid says how far off six columns it is; only a grid that's showing can (Retail, or Grid in the plain view)
+            var widthShort = carriedWindowBrowser.GridWidthShort;
+            ImGui.SameLine();
+            ImGui.BeginDisabled(widthShort == null);
+
+            if (ImGui.SmallButton("Reset width##carried-window-width") && widthShort != null) {
+                carriedWindow.SetWidth(ImGui.GetWindowWidth() + widthShort.Value);
+            }
+
+            ImGui.EndDisabled();
+            Widgets.Tip($"Makes the window just wide enough for {BankBrowser.RetailColumns} columns of items, as the game's pack has, with no gap before the scrollbar. Its height stays. Needs the items as a grid: Retail, or Grid.");
+
+            // the game's inventory has no /bank buttons; the plain view keeps them, and has Loot marks over its items
+            if (!settings.Data.CarriedRetail) {
+                commands.Render(bankView: false);
+            }
+            else {
+                ImGui.SameLine();
+
+                if (ImGui.Checkbox("Loot marks", ref settings.Data.BankLootMarks)) {
+                    settings.Changed();
+                }
+                Widgets.Tip("Marks the items your active loot profile's rules would mark, with each rule's highlight and icon (set in the Loot tab). The server describes every item to check them (@playerui describe), so full packs take a little while to fill in.");
+
+                ImGui.SameLine();
+
+                if (ImGui.SmallButton("Sort##carried-window-sort")) {
+                    feed.SendCommand(BankCommands.SortCarried);
+                }
+                Widgets.Tip($"Sorts the packs you carry: files items into your named and inscribed packs, combines stacks and orders the rest by kind. Sends {BankCommands.SortCarried}. No bank needed.");
+            }
+
+            carriedWindowBrowser.Render();
+        }
+
         private void RenderStatus(BankInfo bank) {
             if (bank?.Open == true && bank.Loaded) {
                 Widgets.Text($"{bank.Coins:N0} pyreals");
@@ -204,7 +262,9 @@ namespace DaraletPlayer.Ui {
             disposed = true;
             CoreManager.Current.ContainerOpened -= Core_ContainerOpened;
             CoreManager.Current.RenderFrame -= Core_RenderFrame;
+            InventoryChanges.Stop();
             bankWindow.Dispose();
+            carriedWindow.Dispose();
         }
     }
 }

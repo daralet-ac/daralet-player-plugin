@@ -47,15 +47,21 @@ namespace DaraletPlayer.Ui {
 
         /// <param name="host">The window it's drawn in ("main" for the Daralet window's tabs, "bank-window"): the views in one
         /// window share whether it's been sized for the paperdoll.</param>
-        public BankBrowser(PlayerFeed feed, ItemIcons icons, Settings settings, bool carried, string host) {
+        /// <param name="retailAllowed">Follows the Retail setting (the Carried window's): the game's inventory layout.</param>
+        public BankBrowser(PlayerFeed feed, ItemIcons icons, Settings settings, bool carried, string host, bool retailAllowed = false) {
             this.feed = feed;
             this.icons = icons;
             this.settings = settings;
             this.carried = carried;
             this.host = host;
+            this.retailAllowed = retailAllowed;
         }
 
         private readonly string host;
+        private readonly bool retailAllowed;
+
+        /// <summary>Laid out like the game's inventory (RenderRetail).</summary>
+        private bool Retail => retailAllowed && carried && settings.Data.CarriedRetail;
 
         /// <summary>
         /// Whether each window was last sized for the paperdoll, by host: it grows or shrinks once when Worn changes, however
@@ -74,6 +80,12 @@ namespace DaraletPlayer.Ui {
             public int PackNumber;
             public string Inscription;
             public IconLayers Icon;
+            /// <summary>How many items it holds and has room for (0: not known), for the fill bar under its icon in Retail.</summary>
+            public int Count;
+            public int Capacity;
+            /// <summary>For a pack you can move (not the main pack or the bank's own slots): what it's in, and its slot there.</summary>
+            public int Parent;
+            public int Slot;
         }
 
         private class Item {
@@ -100,9 +112,22 @@ namespace DaraletPlayer.Ui {
         /// <param name="bank">The open bank, for the bank's view; the packs you carry don't need it.</param>
         public void Render(BankInfo bank = null) {
             Snapshot(bank);
+            GameDrag.Update();
+
+            // something dragged in from the ground: its icon follows the mouse over this window, where the game's own isn't drawn
+            if (GameDrag.Dragging) {
+                var thing = GameDraggedGroundItem();
+                GameDrag.DrawIcon(icons, thing == null ? null : ItemIcons.Of(thing), GridIconSize);
+            }
+            CheckWorldDrop();
 
             // a tool waiting for a target: what it is, and the target cursor
             ItemUser.Render();
+
+            if (Retail) {
+                RenderRetail();
+                return;
+            }
 
             // the paperdoll slides out: turning Worn on or off makes the window that much wider or narrower, so the packs and
             // items keep their room (squeezing them hid the very checkbox that turns it off)
@@ -136,7 +161,7 @@ namespace DaraletPlayer.Ui {
             ImGui.EndChild();
 
             // dropped anywhere on the items, an item goes into the pack they're the items of: a worn item comes off into it
-            DropTarget(selected);
+            DropTarget(selected, intoItems: true);
 
             if (wornWidth > 0) {
                 ImGui.SameLine();
@@ -164,6 +189,27 @@ namespace DaraletPlayer.Ui {
             }
             Widgets.Tip("Slides the worn items back in. The Worn checkbox above the packs brings them back.");
 
+            RenderPaperdoll();
+        }
+
+        /// <summary>
+        /// The space between the trinket and sigils' row and the head, when the paperdoll is laid out as the game's panel: the
+        /// empty row between them and its two gaps.
+        /// </summary>
+        private const float SigilGapNormal = GridIconSize + 2 * WornGap;
+
+        /// <summary>How tall the paperdoll is with the space under the sigils' row at a size.</summary>
+        private static float PaperdollHeight(float sigilGap) {
+            // the sigils' row, the space, then the rows from the head down (row 2 to the last)
+            var rest = EquipSlots.Rows - 2;
+            return GridIconSize + sigilGap + rest * GridIconSize + (rest - 1) * WornGap;
+        }
+
+        /// <summary>
+        /// The paperdoll's squares, from where the cursor is. sigilGap is the space under the trinket and sigils' row: the
+        /// Retail layout closes it up to match the pack column beside it.
+        /// </summary>
+        private void RenderPaperdoll(float sigilGap = SigilGapNormal) {
             var origin = ImGui.GetCursorScreenPos();
             var start = ImGui.GetCursorPos();
             var drawList = ImGui.GetWindowDrawList();
@@ -171,7 +217,9 @@ namespace DaraletPlayer.Ui {
             var wornBy = worn.Select(i => (unchecked((uint)i.Id), i.Worn)).ToList();
 
             foreach (var slot in EquipSlots.All) {
-                var offset = new Vector2(slot.Column * (cell + WornGap), slot.Row * (cell + WornGap));
+                // row 1 is empty: the rows from the head down start below the space under the sigils
+                var y = slot.Row == 0 ? 0 : cell + sigilGap + (slot.Row - 2) * (cell + WornGap);
+                var offset = new Vector2(slot.Column * (cell + WornGap), y);
                 ImGui.SetCursorPos(start + offset);
                 ImGui.InvisibleButton($"worn-{slot.Name}", new Vector2(cell, cell));
 
@@ -185,6 +233,10 @@ namespace DaraletPlayer.Ui {
                 if (item != null) {
                     icons.DrawAt(drawList, Icon(item), at, cell);
                     ItemIcons.DrawMark(drawList, item.Mark, at, cell);
+
+                    if (item.Id == CoreManager.Current.Actions.CurrentSelection) {
+                        DrawSelected(drawList, at, cell);
+                    }
                 }
                 else {
                     // the game's own picture of the empty slot
@@ -192,7 +244,7 @@ namespace DaraletPlayer.Ui {
                 }
 
                 drawList.AddRect(at, corner, ImGui.GetColorU32(ImGui.IsItemHovered() ? ImGuiCol.ButtonHovered : ImGuiCol.Border));
-                EquipTarget();
+                EquipTarget(slot.Mask);
 
                 if (item == null) {
                     Widgets.Tip(slot.Name + ": nothing worn.");
@@ -206,8 +258,381 @@ namespace DaraletPlayer.Ui {
             }
 
             // past the last row, so the child's scroll height covers the paperdoll
-            ImGui.SetCursorPos(start + new Vector2(0, EquipSlots.Rows * (cell + WornGap)));
+            ImGui.SetCursorPos(start + new Vector2(0, PaperdollHeight(sigilGap) + WornGap));
             ImGui.Dummy(Vector2.Zero);
+        }
+
+        /// <summary>
+        /// The game's inventory layout: what you're wearing at the top left, the packs beside it on the right, icons only
+        /// (hover one for its name), the two as tall as each other so their bottoms line up, and the chosen pack's items as a
+        /// grid across the whole width below.
+        /// </summary>
+        private void RenderRetail() {
+            var style = ImGui.GetStyle();
+            var cell = GridIconSize;
+            // the packs and the burden bar beside them, with the same padding either side: no room kept for a scrollbar (the
+            // column scrolls with the wheel if it's ever taller than its row)
+            var packsWidth = cell + BurdenBarGap + BurdenBarWidth + style.WindowPadding.X * 2;
+            var dollWidth = EquipSlots.Columns * cell + (EquipSlots.Columns - 1) * WornGap;
+
+            // the row is as tall as the pack column (its height from last frame, as it's only known once drawn): the
+            // paperdoll closes up the space under its sigils to fit, down to an ordinary gap, so the two bottoms line up
+            var sigilGap = Math.Min(SigilGapNormal, Math.Max(WornGap, packsHeight - PaperdollHeight(0)));
+            var topHeight = Math.Max(PaperdollHeight(sigilGap), packsHeight) + style.WindowPadding.Y * 2;
+
+            if (ImGui.BeginChild("retail-worn", new Vector2(-packsWidth - style.ItemSpacing.X, topHeight), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)) {
+                // centred, as the game's equipment panel is
+                ImGui.SetCursorPosX(Math.Max(ImGui.GetCursorPosX(), (ImGui.GetWindowWidth() - dollWidth) / 2));
+                RenderPaperdoll((float)Math.Floor(sigilGap));
+            }
+            ImGui.EndChild();
+
+            ImGui.SameLine();
+
+            if (ImGui.BeginChild("retail-packs", new Vector2(packsWidth, topHeight), true, ImGuiWindowFlags.NoScrollbar)) {
+                // the packs close together, as the game's column has them
+                ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(ImGui.GetStyle().ItemSpacing.X, 1));
+                var start = ImGui.GetCursorPosY();
+                RenderPackIcons();
+                packsHeight = ImGui.GetCursorPosY() - start - ImGui.GetStyle().ItemSpacing.Y;
+                ImGui.PopStyleVar();
+            }
+            ImGui.EndChild();
+
+            // a thin edge round the items, so the grid sits close to the scrollbar (the padding is read as the child begins)
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(3, 3));
+            var itemsShown = ImGui.BeginChild("retail-items", Vector2.Zero, true);
+            ImGui.PopStyleVar();
+
+            if (itemsShown) {
+                RenderRetailItems();
+            }
+            ImGui.EndChild();
+
+            // dropped anywhere on the items, an item goes into the pack they're the items of: a worn item comes off into it
+            DropTarget(selected, intoItems: true);
+        }
+
+        /// <summary>How tall the Retail pack column drew last frame: the main pack and 7 side slots, until it's drawn.</summary>
+        private float packsHeight = 8 * (GridIconSize + 1);
+
+        // a pack's fill bar, down the right of its icon: how wide, how far in from the edges, and its colour
+        private const float PackFillWidth = 3;
+        private const float PackFillInset = 2;
+        private static readonly Vector4 PackFillColour = new Vector4(0.75f, 0.75f, 0.72f, 1f);
+
+        /// <summary>The game's own green, for the pack whose items are showing.</summary>
+        private static readonly Vector4 ChosenPackGreen = new Vector4(0.25f, 0.95f, 0.2f, 1f);
+
+        /// <summary>
+        /// The game's selection frame over a square: the selected item, or the pack whose items are showing. A plain green
+        /// frame if the picture couldn't be made.
+        /// </summary>
+        private void DrawSelected(ImDrawListPtr drawList, Vector2 at, float size) {
+            if (!icons.DrawArt(drawList, ItemIcons.ArtSelected, at, size)) {
+                drawList.AddRect(at, at + new Vector2(size, size), ImGui.GetColorU32(ChosenPackGreen), 0, ImDrawFlags.None, 2);
+            }
+        }
+
+        /// <summary>The light brown of the chosen pack's arrow.</summary>
+        private static readonly Vector4 ChosenPackArrow = new Vector4(0.82f, 0.66f, 0.45f, 1f);
+
+        /// <summary>
+        /// The chosen pack as the game's inventory marks it: the selection frame round its square, and a light brown arrow
+        /// on its left edge, pointing in (drawn: the game's own arrow picture hasn't been found yet).
+        /// </summary>
+        private void DrawChosenPack(ImDrawListPtr drawList, Vector2 at, float size) {
+            DrawSelected(drawList, at, size);
+
+            var arrow = Math.Max(8f, size * 2 / 5);
+            var middle = at.Y + size / 2;
+            var left = at.X + 1;
+            var top = new Vector2(left, middle - arrow);
+            var tip = new Vector2(left + arrow, middle);
+            var bottom = new Vector2(left, middle + arrow);
+
+            // with a black edge a pixel wide, so it stands out against any icon
+            drawList.AddTriangleFilled(top, tip, bottom, ImGui.GetColorU32(ChosenPackArrow));
+            drawList.AddTriangle(top, tip, bottom, ImGui.GetColorU32(new Vector4(0, 0, 0, 1)), 1);
+        }
+
+        /// <summary>The chosen pack's items, as icons: always the grid here, as the game shows them.</summary>
+        private void RenderRetailItems() {
+            var holder = holders.FirstOrDefault(h => h.Id == selected);
+
+            // the pack's name isn't on the right, so it's here, small
+            if (holder != null) {
+                Widgets.TextDisabled(holder.Capacity > 0 ? $"{holder.Label}  {holder.Count}/{holder.Capacity}" : holder.Label);
+                Widgets.Tip(string.IsNullOrEmpty(holder.Detail) ? "The pack whose items these are. Pick another on the right." : holder.Detail);
+            }
+
+            var items = contents.TryGetValue(selected, out var list) ? list : new List<Item>();
+            var slots = holder == null ? 0 : Slots(holder, items.Count);
+
+            if (items.Count == 0 && slots == 0) {
+                Widgets.TextDisabled("Empty.");
+                return;
+            }
+
+            RenderGrid(items, slots);
+        }
+
+        /// <summary>
+        /// The packs down the right, the main pack first: each its icon only, framed when chosen, with a bar under it for how
+        /// full it is. Click one to show its items, or drop an item on it to put it there.
+        /// </summary>
+        private void RenderPackIcons() {
+            var cell = GridIconSize;
+            var drawList = ImGui.GetWindowDrawList();
+            var me = CoreManager.Current.CharacterFilter.Id;
+            var burden = CoreManager.Current.CharacterFilter.Burden;
+            var columnTop = ImGui.GetCursorScreenPos();
+
+            foreach (var holder in holders) {
+                if (ImGui.InvisibleButton($"pack-{holder.Id}", new Vector2(cell, cell))) {
+                    selected = holder.Id;
+                    search = "";
+                }
+
+                var at = ImGui.GetItemRectMin();
+                var corner = ImGui.GetItemRectMax();
+
+                // the game's green behind each pack, and the pack's own icon on it without its usual tile, as the game's
+                // column draws them
+                if (!icons.DrawArt(drawList, ItemIcons.ArtPackBackground, at, cell)) {
+                    drawList.AddRectFilled(at, corner, ImGui.GetColorU32(ImGuiCol.FrameBg));
+                }
+
+                // the main pack has no icon of its own: the game's picture of it
+                var drawn = holder.Id == me ? icons.DrawArt(drawList, ItemIcons.ArtMainPack, at, cell) : holder.Icon != null && icons.DrawIconOnly(drawList, holder.Icon, at, cell);
+
+                if (!drawn) {
+                    // a word, so the square isn't blank
+                    var word = holder.Id == me ? "Main" : holder.Label.Length > 3 ? holder.Label.Substring(0, 3) : holder.Label;
+                    drawList.AddText(at + new Vector2(2, (cell - ImGui.GetTextLineHeight()) / 2), ImGui.GetColorU32(ImGuiCol.Text), word);
+                }
+
+                var chosen = holder.Id == selected;
+                var hovered = ImGui.IsItemHovered();
+
+                if (chosen) {
+                    DrawChosenPack(drawList, at, cell);
+                }
+                else if (hovered) {
+                    drawList.AddRect(at, corner, ImGui.GetColorU32(ImGuiCol.ButtonHovered), 0, ImDrawFlags.None, 2);
+                }
+
+                var full = holder.Capacity > 0 ? $"  {holder.Count}/{holder.Capacity}" : "";
+                var move = holder.Parent != 0 ? "\nDrag it onto another pack to put it in that one's place." : "";
+                Widgets.Tip(holder.Label + full + (string.IsNullOrEmpty(holder.Detail) ? "" : "\n" + holder.Detail) + move);
+                DragSource(holder);
+                DropTarget(holder.Id);
+
+                // from the ground: a pack takes this pack's place (after the others, on the main pack); anything else goes in it, first
+                GameDropTarget((me, holder.Id == me ? holders.Count(h => h.Parent == me) : holder.Slot), (holder.Id, 0));
+
+                // how full it is, as the game's pack column shows it: a thin bar down the icon's right side, inside its
+                // frame, filling from the bottom
+                if (holder.Capacity > 0) {
+                    var fill = Math.Min(1f, holder.Count / (float)holder.Capacity);
+                    var fillTop = new Vector2(corner.X - PackFillInset - PackFillWidth, at.Y + PackFillInset);
+                    var fillBottom = new Vector2(corner.X - PackFillInset, corner.Y - PackFillInset);
+                    var fillLevel = fillBottom.Y - (fillBottom.Y - fillTop.Y) * fill;
+
+                    drawList.AddRectFilled(fillTop, fillBottom, ImGui.GetColorU32(new Vector4(0, 0, 0, 0.6f)));
+                    drawList.AddRectFilled(new Vector2(fillTop.X, fillLevel), fillBottom, ImGui.GetColorU32(fill >= 1 ? Colors.Warning : PackFillColour));
+                }
+            }
+
+            RenderEmptyPackSlots(cell, drawList);
+
+            // the burden bar down the right of the column, filling from the bottom as the game's does: full at 300%, the most
+            // you can carry, and yellow past 100%, where you slow down
+            var barLeft = columnTop.X + cell + BurdenBarGap;
+            var barBottom = ImGui.GetCursorScreenPos().Y - ImGui.GetStyle().ItemSpacing.Y;
+            var barTop = columnTop.Y;
+            var share = Math.Min(1f, Math.Max(0f, burden / MaxBurden));
+
+            drawList.AddRectFilled(new Vector2(barLeft, barTop), new Vector2(barLeft + BurdenBarWidth, barBottom), ImGui.GetColorU32(ImGuiCol.FrameBg));
+            drawList.AddRectFilled(new Vector2(barLeft, barBottom - (barBottom - barTop) * share), new Vector2(barLeft + BurdenBarWidth, barBottom),
+                ImGui.GetColorU32(burden > 100 ? Colors.Warning : BurdenGreen));
+
+            // faint lines at 100% and 200%: dark across the fill, light across the empty part, so they show on either
+            foreach (var mark in new[] { 100f, 200f }) {
+                var y = (float)Math.Round(barBottom - (barBottom - barTop) * (mark / MaxBurden));
+                var colour = burden >= mark ? new Vector4(0, 0, 0, 0.7f) : new Vector4(1, 1, 1, 0.55f);
+                drawList.AddLine(new Vector2(barLeft, y), new Vector2(barLeft + BurdenBarWidth, y), ImGui.GetColorU32(colour), 2);
+            }
+
+            drawList.AddRect(new Vector2(barLeft, barTop), new Vector2(barLeft + BurdenBarWidth, barBottom), ImGui.GetColorU32(new Vector4(0, 0, 0, 1)));
+
+            // a pixel's slack either side, so the thin bar is easy to hover
+            if (ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(new Vector2(barLeft - 1, barTop), new Vector2(barLeft + BurdenBarWidth + 1, barBottom))) {
+                BurdenTooltip(burden);
+            }
+        }
+
+        /// <summary>What the burden bar stands for: how much you carry, how much more before you slow down, and the limits.</summary>
+        private static void BurdenTooltip(int burden) {
+            var units = CoreManager.Current.CharacterFilter.BurdenUnits;
+
+            ImGui.BeginTooltip();
+            Widgets.TextColored(burden > 100 ? Colors.Warning : Colors.Info, $"Burden: {burden}%");
+
+            if (burden > 0 && units > 0) {
+                // the percent is a share of what you carry before slowing down, so that's units over the share
+                var unslowed = (int)Math.Round(units * 100.0 / burden);
+                Widgets.Text($"Carrying {units:N0} of {unslowed:N0} burden units.");
+                Widgets.TextDisabled(units < unslowed ? $"{unslowed - units:N0} more before you slow down." : $"{units - unslowed:N0} over: you move slower.");
+            }
+
+            Widgets.TextDisabled("Past 100% you move slower; at 300% you can't move.");
+            ImGui.EndTooltip();
+        }
+
+        /// <summary>The most burden you can carry, as a percent: the burden bar is full here.</summary>
+        private const float MaxBurden = 300;
+        private const float BurdenBarWidth = 6;
+        private const float BurdenBarGap = 3;
+        private static readonly Vector4 BurdenGreen = new Vector4(0.25f, 0.8f, 0.2f, 1f);
+
+        /// <summary>
+        /// The side pack slots you have left, as the game's column shows them: dark empty squares under your packs. Drop a
+        /// pack on one to put it there.
+        /// </summary>
+        private void RenderEmptyPackSlots(float cell, ImDrawListPtr drawList) {
+            var me = CoreManager.Current.CharacterFilter.Id;
+
+            // a character has 7 side pack slots, which the client isn't always told
+            var slots = CoreManager.Current.WorldFilter[me]?.Values(LongValueKey.PackSlots, 0) ?? 0;
+            var packs = holders.Count(h => h.Parent == me);
+
+            for (var i = packs; i < (slots > 0 ? slots : 7); i++) {
+                ImGui.InvisibleButton($"empty-pack-slot-{i}", new Vector2(cell, cell));
+                var at = ImGui.GetItemRectMin();
+                var corner = ImGui.GetItemRectMax();
+
+                DrawEmptySlot(drawList, at, cell);
+
+                if (ImGui.IsItemHovered()) {
+                    drawList.AddRect(at, corner, ImGui.GetColorU32(ImGuiCol.ButtonHovered));
+                }
+                Widgets.Tip("An empty pack slot. Drop a pack here to carry it in this place.");
+                EmptyPackSlotTarget(i);
+                GameDropTarget((me, i), null);
+            }
+        }
+
+        /// <summary>
+        /// How many squares a pack's grid has: its items and the room it has left, so the empty ones show. The room left is
+        /// from its own count, which for the bank's own slots counts the packs in them too; 0 when its capacity isn't known.
+        /// </summary>
+        private static int Slots(Holder holder, int shown) {
+            return holder.Capacity > 0 ? shown + Math.Max(0, holder.Capacity - holder.Count) : 0;
+        }
+
+        /// <summary>The game's empty slot picture, or a dark square with an edge if it couldn't be made.</summary>
+        private void DrawEmptySlot(ImDrawListPtr drawList, Vector2 at, float size) {
+            if (!icons.DrawArt(drawList, ItemIcons.ArtEmptySlot, at, size)) {
+                drawList.AddRectFilled(at, at + new Vector2(size, size), ImGui.GetColorU32(new Vector4(0.06f, 0.06f, 0.07f, 1f)));
+                drawList.AddRect(at, at + new Vector2(size, size), ImGui.GetColorU32(ImGuiCol.Border));
+            }
+        }
+
+        /// <summary>
+        /// A drag from the game over the spot drawn just before this (GameDrag): something on the ground, picked up when it's
+        /// let go here (the server walks you to it and checks you can). packTo is where a pack goes (a container and a
+        /// slot in it), itemTo where anything else goes; null where that kind can't go, which shows red. Everything let go
+        /// is logged ([drag-in] lines in log.txt).
+        /// </summary>
+        private void GameDropTarget((int Container, int Slot)? packTo, (int Container, int Slot)? itemTo) {
+            if (!GameDrag.OverLastItem() && !GameDrag.ReleasedOverLastItem()) {
+                return;
+            }
+
+            var thing = GameDraggedGroundItem();
+            var to = thing == null ? null : thing.ObjectClass == ObjectClass.Container ? packTo : itemTo;
+
+            if (GameDrag.OverLastItem()) {
+                DrawDropMark(ImGui.GetItemRectMin(), ImGui.GetItemRectMax(), to != null);
+                LogDropMark("game drag", to != null);
+                return;
+            }
+
+            var id = CoreManager.Current.Actions.CurrentSelection;
+            var item = id == 0 ? null : CoreManager.Current.WorldFilter[id];
+            PluginCore.LogFile($"[drag-in] let go: selection 0x{id:X8} {item?.Name ?? "(none)"}, {item?.ObjectClass.ToString() ?? "-"}, container 0x{item?.Values(LongValueKey.Container, 0) ?? 0:X8}");
+
+            if (to == null) {
+                PluginCore.LogFile("[drag-in] can't go there: left alone");
+                return;
+            }
+
+            PluginCore.LogFile($"[drag-in] picking it up into 0x{to.Value.Container:X8}, slot {to.Value.Slot}");
+            CoreManager.Current.Actions.MoveItem(id, to.Value.Container, to.Value.Slot, false);
+            snapshotAt = DateTime.MinValue;
+        }
+
+        /// <summary>
+        /// What the game is dragging (its selection) if it's something lying on the ground: not in anything, not worn, and
+        /// not a creature, player or fixture. Null otherwise.
+        /// </summary>
+        private static WorldObject GameDraggedGroundItem() {
+            var id = CoreManager.Current.Actions.CurrentSelection;
+            var item = id == 0 || id == CoreManager.Current.CharacterFilter.Id ? null : CoreManager.Current.WorldFilter[id];
+
+            if (item == null || item.Values(LongValueKey.Container, 0) != 0 || item.Values(LongValueKey.Wielder, 0) != 0) {
+                return null;
+            }
+
+            switch (item.ObjectClass) {
+                case ObjectClass.Monster:
+                case ObjectClass.Player:
+                case ObjectClass.Npc:
+                case ObjectClass.Vendor:
+                case ObjectClass.Door:
+                case ObjectClass.Portal:
+                case ObjectClass.Lifestone:
+                case ObjectClass.Corpse:
+                case ObjectClass.Housing:
+                    return null;
+                default:
+                    return item;
+            }
+        }
+
+        private string lastDropMark;
+
+        /// <summary>A drop spot's verdict, logged when it changes ([drop] lines), to see why one shows what it does.</summary>
+        private void LogDropMark(string what, bool allowed) {
+            var held = dragged == 0 ? null : CoreManager.Current.WorldFilter[dragged];
+            var line = $"[drop] {what}: {(allowed ? "can go" : "can't go")} (held 0x{dragged:X8} {held?.Name ?? "-"}, {held?.ObjectClass.ToString() ?? "-"}, equips 0x{held?.Values(LongValueKey.EquipableSlots, 0) ?? 0:X8})";
+
+            if (line != lastDropMark) {
+                lastDropMark = line;
+                PluginCore.LogFile(line);
+            }
+        }
+
+        /// <summary>A pack dropped on an empty slot goes into your main pack's packs at that place.</summary>
+        private unsafe void EmptyPackSlotTarget(int slot) {
+            if (!ImGui.BeginDragDropTarget()) {
+                return;
+            }
+
+            // only a pack goes in a pack slot
+            if (Accepted(IsPack(dragged), "empty pack slot") && dragged != 0) {
+                var pack = holders.FirstOrDefault(h => h.Id == dragged && h.Parent != 0);
+
+                if (pack != null) {
+                    CoreManager.Current.Actions.MoveItem(pack.Id, CoreManager.Current.CharacterFilter.Id, slot, false);
+                    snapshotAt = DateTime.MinValue;
+                }
+
+                dragged = 0;
+            }
+
+            ImGui.EndDragDropTarget();
         }
 
         /// <summary>The bank's view, showing the packs you carry too.</summary>
@@ -247,14 +672,21 @@ namespace DaraletPlayer.Ui {
                     Widgets.TextDisabled(holder.InBank ? "Bank" : "You carry");
                 }
 
-                icons.Draw(holder.Icon);
+                if (holder.Id == CoreManager.Current.CharacterFilter.Id) {
+                    // the main pack isn't an item, so it has no icon of its own: the game's picture of it
+                    icons.DrawArtInline(ItemIcons.ArtMainPack);
+                }
+                else {
+                    icons.Draw(holder.Icon);
+                }
 
                 if (ImGui.Selectable($"{holder.Label}##holder-{holder.Id}", holder.Id == selected)) {
                     selected = holder.Id;
                     search = "";
                 }
 
-                Widgets.Tip(holder.Detail);
+                Widgets.Tip(string.IsNullOrEmpty(holder.Detail) ? (holder.Parent != 0 ? "Drag it onto another pack to put it in that one's place." : "") : holder.Detail);
+                DragSource(holder);
                 DropTarget(holder.Id);
             }
         }
@@ -280,13 +712,16 @@ namespace DaraletPlayer.Ui {
                 ? contents.Values.SelectMany(list => list).Where(i => Matches(i, search)).OrderBy(i => i.Name).ToList()
                 : contents.TryGetValue(selected, out var list) ? list : new List<Item>();
 
-            if (items.Count == 0) {
+            // the grid shows an empty pack as its empty slots
+            var slots = searching || holder == null ? 0 : Slots(holder, items.Count);
+
+            if (items.Count == 0 && !(settings.Data.BankGrid && slots > 0)) {
                 Widgets.TextDisabled(searching ? "Nothing by that name." : "Empty.");
                 return;
             }
 
             if (settings.Data.BankGrid) {
-                RenderGrid(items);
+                RenderGrid(items, slots);
             }
             else {
                 RenderList(items, searching);
@@ -324,20 +759,31 @@ namespace DaraletPlayer.Ui {
         /// The items as icons side by side, as many to a row as fit. Each works like a line of the list: hover it for its
         /// details, drag it onto a pack, or right-click it. A stack shows its size in the corner.
         /// </summary>
-        private void RenderGrid(List<Item> items) {
+        private void RenderGrid(List<Item> items, int slots = 0) {
             if (ImGui.BeginChild("bank-items-grid", Vector2.Zero, false)) {
-                // the game's own icon size: portal.dat icons are 32x32, drawn pixel for pixel
+                // the game's own icon size: portal.dat icons are 32x32, drawn pixel for pixel, edge to edge as the game's
+                // pack has them
                 var cell = GridIconSize;
-                var spacing = ImGui.GetStyle().ItemSpacing.X;
-                var columns = Math.Max(1, (int)((ImGui.GetContentRegionAvail().X + spacing) / (cell + spacing)));
+                var columns = Math.Max(1, (int)(ImGui.GetContentRegionAvail().X / cell));
+
+                // how much wider the window has to be for exactly RetailColumns columns (Reset width). The width here is
+                // without the scrollbar if there is one; at that many columns there may be more rows, and a scrollbar where
+                // there's none now (which made the first click one column short), or none where there's one now
+                var rowsThen = (Math.Max(items.Count, slots) + RetailColumns - 1) / RetailColumns;
+                var scrollsNow = ImGui.GetScrollMaxY() > 0;
+                var scrollsThen = rowsThen * cell > ImGui.GetWindowHeight();
+                var scrollbar = ImGui.GetStyle().ScrollbarSize;
+                gridWidthShort = RetailColumns * cell - ImGui.GetContentRegionAvail().X + (scrollsThen ? scrollbar : 0) - (scrollsNow ? scrollbar : 0);
+                gridDrawnFrame = ImGui.GetFrameCount();
                 var drawList = ImGui.GetWindowDrawList();
+                var selection = CoreManager.Current.Actions.CurrentSelection;
+                // each square placed where it goes rather than the style's spacing zeroed, which the right-click menus
+                // opened in here would have taken too
+                var start = ImGui.GetCursorPos();
 
                 for (var i = 0; i < items.Count; i++) {
                     var item = items[i];
-
-                    if (i % columns != 0) {
-                        ImGui.SameLine();
-                    }
+                    ImGui.SetCursorPos(start + new Vector2(i % columns * cell, i / columns * cell));
 
                     // not a Selectable: that widens its highlight over half the gap round it, so it sat off the icon
                     ImGui.InvisibleButton($"grid-item-{item.Id}", new Vector2(cell, cell));
@@ -357,17 +803,37 @@ namespace DaraletPlayer.Ui {
                         ItemIcons.StackCount(drawList, item.Stack, at, cell);
                     }
 
-                    // a frame round the icon under the mouse; its tile is solid, so a fill behind it wouldn't show
-                    if (ImGui.IsItemHovered()) {
+                    // the game's selection frame round the selected item; a frame round the one under the mouse (its tile is
+                    // solid, so a fill behind it wouldn't show)
+                    if (item.Id == selection) {
+                        DrawSelected(drawList, at, cell);
+                    }
+                    else if (ImGui.IsItemHovered()) {
                         drawList.AddRect(at, corner, ImGui.GetColorU32(ImGuiCol.ButtonHovered), 0, ImDrawFlags.None, 2);
                     }
 
                     DragSource(item);
                     UseClicks(item);
                     ItemTarget(item);
+                    GameDropTarget(null, (item.Container, item.Slot));
                     ShowTooltip(item, iconHovered: false);
                     ItemMenu(item);
                 }
+
+                // the pack's room left, as the game's empty slots: drop an item on one to put it after the pack's last item
+                var squares = Math.Max(items.Count, slots);
+
+                for (var i = items.Count; i < squares; i++) {
+                    ImGui.SetCursorPos(start + new Vector2(i % columns * cell, i / columns * cell));
+                    ImGui.InvisibleButton($"grid-empty-{i}", new Vector2(cell, cell));
+                    DrawEmptySlot(drawList, ImGui.GetItemRectMin(), cell);
+                    DropTarget(selected, intoItems: true, atEnd: true);
+                    GameDropTarget(null, (selected, items.Count));
+                }
+
+                // past the last row, so the child's scroll height covers the grid
+                ImGui.SetCursorPos(start + new Vector2(0, (squares + columns - 1) / columns * cell));
+                ImGui.Dummy(Vector2.Zero);
             }
             ImGui.EndChild();
         }
@@ -397,10 +863,12 @@ namespace DaraletPlayer.Ui {
                 ImGui.TableNextColumn();
 
                 var iconHovered = icons.Draw(Icon(item), item.Mark);
-                ImGui.Selectable(item.Stack > 1 ? $"{item.Name} ({item.Stack:N0})##item-{item.Id}" : $"{item.Name}##item-{item.Id}");
+                ImGui.Selectable(item.Stack > 1 ? $"{item.Name} ({item.Stack:N0})##item-{item.Id}" : $"{item.Name}##item-{item.Id}",
+                    item.Id == CoreManager.Current.Actions.CurrentSelection);
                 DragSource(item);
                 UseClicks(item);
                 ItemTarget(item);
+                GameDropTarget(null, (item.Container, item.Slot));
                 ShowTooltip(item, iconHovered);
                 ItemMenu(item);
 
@@ -641,30 +1109,79 @@ namespace DaraletPlayer.Ui {
             ImGui.Spacing();
         }
 
+        /// <summary>The last frame this browser's drag source was held: ImGui stops asking for it the frame it's let go.</summary>
+        private int draggingFrame = -1;
+
+        /// <summary>How many columns of items Reset width makes room for: the game's pack is six squares wide.</summary>
+        public const int RetailColumns = 6;
+
+        private float gridWidthShort;
+        private int gridDrawnFrame = -1;
+
+        /// <summary>
+        /// How much wider the window would have to be for the item grid to show exactly RetailColumns columns (narrower if
+        /// it's negative), or null when no grid was drawn last frame.
+        /// </summary>
+        public float? GridWidthShort => gridDrawnFrame >= ImGui.GetFrameCount() - 1 ? gridWidthShort : (float?)null;
+
+        /// <summary>
+        /// An item from here let go outside every window (the plugin's and UtilityBelt's): into the game world, where it's
+        /// given to what it was let go over, or dropped (WorldDrop). Not from the bank: the game takes nothing out of a bank
+        /// that way.
+        /// </summary>
+        private void CheckWorldDrop() {
+            if (dragged == 0 || draggingFrame < ImGui.GetFrameCount() - 1 || !ImGui.IsMouseReleased(ImGuiMouseButton.Left)) {
+                return;
+            }
+
+            // let go over a window: its drop targets (drawn after this) take it this same frame, or, where it can't go, nothing
+            // happens. The drag's source is still ImGui's active item this frame, which would make any window count as not
+            // hovered (and a release over a red slot as one into the world) without AllowWhenBlockedByActiveItem.
+            if (ImGui.IsWindowHovered(ImGuiHoveredFlags.AnyWindow | ImGuiHoveredFlags.AllowWhenBlockedByActiveItem)) {
+                return;
+            }
+
+            var id = dragged;
+            dragged = 0;
+
+            var inBank = holders.Any(h => h.InBank && (h.Id == id || (contents.TryGetValue(h.Id, out var items) && items.Any(i => i.Id == id))));
+
+            if (!inBank) {
+                WorldDrop.Start(id, ImGui.GetMousePos());
+            }
+        }
+
         private void DragSource(Item item) {
+            DragSource(item.Id, Icon(item), item.Name);
+        }
+
+        /// <summary>A pack, dragged onto another to take its place in the list (one you can move: not the main pack).</summary>
+        private void DragSource(Holder holder) {
+            if (holder.Parent != 0) {
+                DragSource(holder.Id, holder.Icon, holder.Label);
+            }
+        }
+
+        private void DragSource(int id, IconLayers icon, string name) {
             // no preview tooltip: a tooltip is a faded box beside the mouse, and the game's own drag is just the icon
             if (!ImGui.BeginDragDropSource(ImGuiDragDropFlags.SourceNoPreviewTooltip)) {
                 return;
             }
 
             // the payload itself carries nothing: which item is being dragged is kept here
-            dragged = item.Id;
+            dragged = id;
+            draggingFrame = ImGui.GetFrameCount();
             ImGui.SetDragDropPayload(DragType, IntPtr.Zero, 0);
 
-            // what follows the mouse: the item's icon, the grid's size, centred on the mouse, drawn over every window at full
-            // strength, with its stack in the corner
+            // what follows the mouse: only the item's own icon, as the game's drag has it (no tile behind it, no overlay, no
+            // stack count), the grid's size, centred on the mouse, drawn over every window at full strength
             var size = GridIconSize;
             var at = ImGui.GetMousePos() - new Vector2(size / 2, size / 2);
             var drawList = ImGui.GetForegroundDrawList();
 
-            if (icons.DrawAt(drawList, Icon(item), at, size)) {
-                if (item.Stack > 1) {
-                    ItemIcons.StackCount(drawList, item.Stack, at, size);
-                }
-            }
-            else {
+            if (icon == null || !icons.DrawIconOnly(drawList, icon, at, size)) {
                 // no icon (yet): its name, so something follows the mouse
-                drawList.AddText(at, ImGui.GetColorU32(ImGuiCol.Text), item.Name);
+                drawList.AddText(at, ImGui.GetColorU32(ImGuiCol.Text), name);
             }
 
             ImGui.EndDragDropSource();
@@ -679,7 +1196,10 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            if (Accepted() && dragged != 0) {
+            // a pack can only go in your main pack (or the bank's own slots), never inside another pack
+            var allowed = !IsPack(dragged) || !holders.Any(h => h.Id == target.Container && h.Parent != 0);
+
+            if (Accepted(allowed, "item") && dragged != 0) {
                 if (dragged != target.Id) {
                     MoveTo(dragged, target);
                 }
@@ -694,12 +1214,16 @@ namespace DaraletPlayer.Ui {
         /// A paperdoll square as a place to drop an item: it's worn, with the game's own use (as double-clicking it in the
         /// game does), which puts it where it goes and takes off whatever was there. The server checks it can be worn.
         /// </summary>
-        private unsafe void EquipTarget() {
+        private unsafe void EquipTarget(uint slotMask) {
             if (!ImGui.BeginDragDropTarget()) {
                 return;
             }
 
-            if (Accepted() && dragged != 0) {
+            // only something that goes in this place: its equip locations (the game's EquipMask) include the square's
+            var held = dragged == 0 ? null : CoreManager.Current.WorldFilter[dragged];
+            var allowed = held != null && (unchecked((uint)held.Values(LongValueKey.EquipableSlots, 0)) & slotMask) != 0;
+
+            if (Accepted(allowed, $"paperdoll square 0x{slotMask:X8}") && dragged != 0) {
                 var item = CoreManager.Current.WorldFilter[dragged];
 
                 // one already worn is left where it is; the rest go on as a double-click puts them on, replacing what's there
@@ -719,30 +1243,122 @@ namespace DaraletPlayer.Ui {
         /// is drawn a few pixels outside the item, so a slot along the edge of the items lost the sides the edge cut off;
         /// this one is drawn just inside it.
         /// </summary>
-        private static unsafe bool Accepted() {
+        private unsafe bool Accepted(bool allowed = true, string what = "drop spot") {
             var payload = ImGui.AcceptDragDropPayload(DragType, ImGuiDragDropFlags.AcceptBeforeDelivery | ImGuiDragDropFlags.AcceptNoDrawDefaultRect);
 
             if (payload.NativePtr == null) {
                 return false;
             }
 
-            ImGui.GetWindowDrawList().AddRect(ImGui.GetItemRectMin() + Vector2.One, ImGui.GetItemRectMax() - Vector2.One,
-                ImGui.GetColorU32(ImGuiCol.DragDropTarget), 0, ImDrawFlags.None, 2);
+            DrawDropMark(ImGui.GetItemRectMin(), ImGui.GetItemRectMax(), allowed);
+            LogDropMark(what, allowed);
 
-            return payload.IsDelivery();
+            // let go where it can't go, nothing happens, as in the game
+            return payload.IsDelivery() && allowed;
         }
 
-        private unsafe void DropTarget(int containerId) {
+        /// <summary>
+        /// The spot an item is held over. Over a square (a slot, a pack, a paperdoll place): the game's green ring across it
+        /// where the item can go, or its red crossed-out circle where it can't. Over a line of a list, or if the picture
+        /// couldn't be made, a frame just inside it, red where it can't go.
+        /// </summary>
+        private void DrawDropMark(Vector2 min, Vector2 max, bool allowed) {
+            var drawList = ImGui.GetWindowDrawList();
+            var width = max.X - min.X;
+            var square = Math.Abs(width - (max.Y - min.Y)) < 2;
+
+            if (square) {
+                // centred, each picture in its own proportions: the ring a little inside the square, the red across it
+                var art = allowed ? ItemIcons.ArtDropRing : ItemIcons.ArtDropInvalid;
+                var shape = allowed ? ItemIcons.DropRingSize : new Vector2(1, 1);
+                var across = (float)Math.Round(width * (allowed ? DropRingScale : 1));
+                var size = new Vector2(across, (float)Math.Round(across * shape.Y / shape.X));
+                var at = (min + max) / 2 - size / 2;
+
+                var spot = new Vector2((float)Math.Round(at.X), (float)Math.Round(at.Y));
+                var drawn = icons.DrawArt(drawList, art, spot, size);
+
+                // the ring twice: its soft edge builds up to the brightness the game's has
+                if (drawn && allowed) {
+                    icons.DrawArt(drawList, art, spot, size);
+                }
+
+                if (drawn) {
+                    return;
+                }
+            }
+
+            var colour = allowed ? ImGui.GetColorU32(ImGuiCol.DragDropTarget) : ImGui.GetColorU32(Colors.Danger);
+            drawList.AddRect(min + Vector2.One, max - Vector2.One, colour, 0, ImDrawFlags.None, 2);
+        }
+
+        /// <summary>How much of a slot's width the green ring spans.</summary>
+        private const float DropRingScale = 0.9f;
+
+        /// <summary>Whether the thing is a pack (a container): packs go in a character's or bank's pack slots, not in packs.</summary>
+        private static bool IsPack(int id) {
+            return id != 0 && CoreManager.Current.WorldFilter[id]?.ObjectClass == ObjectClass.Container;
+        }
+
+        /// <param name="intoItems">Dropped on the pack's items rather than on the pack itself: a pack can't go there.</param>
+        /// <param name="atEnd">Dropped on one of the pack's empty slots: the item goes after the pack's last item, even one
+        /// already in this pack (which a drop on the pack itself leaves alone).</param>
+        private unsafe void DropTarget(int containerId, bool intoItems = false, bool atEnd = false) {
             if (!ImGui.BeginDragDropTarget()) {
                 return;
             }
 
-            if (Accepted() && dragged != 0) {
-                Move(dragged, containerId);
+            var into = holders.FirstOrDefault(h => h.Id == containerId);
+            var isPack = IsPack(dragged);
+
+            // a pack can go on a pack (to take its place), the main pack or the bank's own slots, but not among a pack's
+            // items; anything else, wherever there's room (or it's already there)
+            var allowed = isPack
+                ? !(intoItems && into?.Parent != 0)
+                : into == null || into.Capacity <= 0 || into.Count < into.Capacity || CoreManager.Current.WorldFilter[dragged]?.Container == containerId;
+
+            if (Accepted(allowed, intoItems ? $"items of 0x{containerId:X8}" : $"pack 0x{containerId:X8}") && dragged != 0) {
+                var pack = holders.FirstOrDefault(h => h.Id == dragged && h.Parent != 0);
+                var target = holders.FirstOrDefault(h => h.Id == containerId);
+
+                if (pack != null && target != null && target.Parent != 0) {
+                    // a pack dropped on another pack takes its place: packs can't go inside packs, so this is how they're
+                    // put in order (or moved between your packs and the bank's at a place), as dragging them in the game does
+                    if (pack.Id != target.Id) {
+                        CoreManager.Current.Actions.MoveItem(pack.Id, target.Parent, target.Slot, false);
+                        snapshotAt = DateTime.MinValue;
+                    }
+                }
+                else if (atEnd && pack == null) {
+                    MoveToEnd(dragged, containerId);
+                }
+                else if (pack == null || pack.Id != containerId) {
+                    Move(dragged, containerId);
+                }
+
                 dragged = 0;
             }
 
             ImGui.EndDragDropTarget();
+        }
+
+        /// <summary>
+        /// Puts an item after a pack's last item, as dropping it on the game's empty slots past them does: the last place
+        /// for one already in the pack, the next one after them for one coming in. Not merged into a stack, so it lands there.
+        /// </summary>
+        private void MoveToEnd(int itemId, int containerId) {
+            var item = CoreManager.Current.WorldFilter[itemId];
+
+            if (item == null) {
+                return;
+            }
+
+            var count = contents.TryGetValue(containerId, out var items) ? items.Count : 0;
+            var here = item.Values(LongValueKey.Container, 0) == containerId && item.Values(LongValueKey.EquippedSlots, 0) == 0;
+            var slot = here ? Math.Max(0, count - 1) : count;
+
+            CoreManager.Current.Actions.MoveItem(itemId, containerId, slot, false);
+            snapshotAt = DateTime.MinValue;
         }
 
         private bool InBank(Item item) => holders.Any(h => h.InBank && h.Id == item.Container);
@@ -828,7 +1444,8 @@ namespace DaraletPlayer.Ui {
             feed.Describe(guid);
 
             if (feed.Described.TryGetValue(guid, out var described)) {
-                ItemTooltip.Show(ItemUse.With(ItemLines.Build(described), guid), iconHovered);
+                var rule = Loot.Decide(settings.Data.Loot.ActiveFor(CoreManager.Current.CharacterFilter.Name), described).Rule;
+                ItemTooltip.Show(ItemUse.With(ItemLines.Build(described), guid), iconHovered, rule);
                 return;
             }
 
@@ -860,8 +1477,12 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            // stack: true merges a stackable item into a matching stack in the pack, as dropping it in the game does
-            CoreManager.Current.Actions.MoveItem(itemId, containerId, 0, true);
+            // first in the pack, as dropping on a pack in the game puts it. Merging (stack: true) only when the pack has a stack
+            // of the same thing to join: asked to merge, the move ignores the slot and puts the item last
+            var stacks = item != null && item.Values(LongValueKey.StackMax, 0) > 1;
+            var match = stacks && contents.TryGetValue(containerId, out var inPack) && inPack.Any(i => i.Id != itemId && i.Name == item.Name);
+
+            CoreManager.Current.Actions.MoveItem(itemId, containerId, 0, match);
             snapshotAt = DateTime.MinValue;
         }
 
@@ -887,15 +1508,20 @@ namespace DaraletPlayer.Ui {
             return words.All(w => item.Name.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
+        /// <summary>The InventoryChanges.Version the last snapshot read at.</summary>
+        private int snapshotVersion = -1;
+
         /// <summary>
-        /// Reads the bank's, or your packs', items from Decal, every half second.
+        /// Reads the bank's, or your packs', items from Decal: every half second, and straight away whenever Decal has heard
+        /// an object change since (InventoryChanges), so a move shows the moment the server answers it.
         /// </summary>
         private void Snapshot(BankInfo bank) {
-            if (DateTime.UtcNow - snapshotAt < SnapshotInterval) {
+            if (DateTime.UtcNow - snapshotAt < SnapshotInterval && snapshotVersion == InventoryChanges.Version) {
                 return;
             }
 
             snapshotAt = DateTime.UtcNow;
+            snapshotVersion = InventoryChanges.Version;
             holders.Clear();
             contents.Clear();
 
@@ -906,7 +1532,7 @@ namespace DaraletPlayer.Ui {
             var all = world.GetAll().Cast<WorldObject>().ToList();
             var byContainer = all.ToLookup(o => o.Values(LongValueKey.Container, 0));
 
-            if (settings.Data.BankShowWorn) {
+            if (settings.Data.BankShowWorn || Retail) {
                 SnapshotWorn(all);
             }
 
@@ -953,7 +1579,7 @@ namespace DaraletPlayer.Ui {
         private void SnapshotBank(BankInfo bank, WorldFilter world, ILookup<int, WorldObject> byContainer) {
             var bankId = unchecked((int)bank.Guid);
 
-            holders.Add(new Holder { Id = bankId, Label = $"Bank  {bank.Used}/{bank.Capacity}", Detail = "Your bank's own slots.", InBank = true });
+            holders.Add(new Holder { Id = bankId, Label = $"Bank  {bank.Used}/{bank.Capacity}", Detail = "Your bank's own slots.", InBank = true, Count = bank.Used, Capacity = bank.Capacity });
             contents[bankId] = Items(byContainer[bankId], skipPacks: true);
 
             foreach (var pack in bank.Packs ?? new List<BankPackInfo>()) {
@@ -966,6 +1592,10 @@ namespace DaraletPlayer.Ui {
                     PackNumber = pack.Number,
                     Inscription = pack.Inscription,
                     Icon = ItemIcons.Of(world[id]),
+                    Count = pack.Used,
+                    Capacity = pack.Capacity,
+                    Parent = bankId,
+                    Slot = world[id]?.Values(LongValueKey.Slot, 0) ?? 0,
                 });
                 contents[id] = Items(byContainer[id], skipPacks: false);
             }
@@ -975,13 +1605,25 @@ namespace DaraletPlayer.Ui {
         private void SnapshotCarried(ILookup<int, WorldObject> byContainer) {
             var me = CoreManager.Current.CharacterFilter.Id;
 
-            holders.Add(new Holder { Id = me, Label = "Main pack", Detail = "The pack you carry yourself." });
             contents[me] = Items(byContainer[me].Where(i => i.Values(LongValueKey.EquippedSlots, 0) == 0), skipPacks: true);
+
+            // a character's main pack holds 102, which the client isn't always told
+            var mainSlots = CoreManager.Current.WorldFilter[me]?.Values(LongValueKey.ItemSlots, 0) ?? 0;
+            holders.Add(new Holder { Id = me, Label = "Main pack", Detail = "The pack you carry yourself.", Count = contents[me].Count, Capacity = mainSlots > 0 ? mainSlots : 102 });
 
             foreach (var pack in byContainer[me].Where(i => i.ObjectClass == ObjectClass.Container).OrderBy(i => i.Values(LongValueKey.Slot, 0))) {
                 var inscription = pack.Values(StringValueKey.Inscription, "");
-                holders.Add(new Holder { Id = pack.Id, Label = pack.Name + Tags(inscription), Detail = inscription, Icon = ItemIcons.Of(pack) });
                 contents[pack.Id] = Items(byContainer[pack.Id], skipPacks: false);
+                holders.Add(new Holder {
+                    Id = pack.Id,
+                    Label = pack.Name + Tags(inscription),
+                    Detail = inscription,
+                    Icon = ItemIcons.Of(pack),
+                    Count = contents[pack.Id].Count,
+                    Capacity = pack.Values(LongValueKey.ItemSlots, 0),
+                    Parent = me,
+                    Slot = pack.Values(LongValueKey.Slot, 0),
+                });
             }
         }
 

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using System.Runtime.Serialization;
 
 namespace DaraletPlayer.Feed {
@@ -101,6 +103,56 @@ namespace DaraletPlayer.Feed {
     [DataContract]
     public class CharacterInfo {
         [DataMember(Name = "sections")] public List<StatsSectionInfo> Sections;
+    }
+
+    /// <summary>
+    /// The ranges loot rolls the filter stats in, at each tier (@playerui rollranges, PlayerUiRollRanges in daralet-ACE,
+    /// from LootGenerationFactory.GetLootFilterRanges), for the loot rules' tooltips.
+    /// </summary>
+    [DataContract]
+    public class RollRangesInfo {
+        [DataMember(Name = "ranges")] public List<RollRangeInfo> Ranges;
+
+        /// <summary>
+        /// "Loot rolls it in: T5 9-18%, T6 ..." for a filter, at the tiers given as the Search tab has them (0-7, "" for no
+        /// limit), or null when the server has no range for it (a stat that depends on the item, such as armor level).
+        /// </summary>
+        public string Describe(MarketFilter filter, string minTier, string maxTier) {
+            var param = filter?.Param ?? "";
+
+            if (Ranges == null || filter.Category == null || !(param.StartsWith("min", StringComparison.Ordinal) || param.StartsWith("max", StringComparison.Ordinal))) {
+                return null;
+            }
+
+            var stat = param.Substring(3);
+            var low = int.TryParse(minTier, out var min) ? min + 1 : 1;
+            var high = int.TryParse(maxTier, out var max) ? max + 1 : 8;
+            var unit = filter.Kind == FilterKind.Percent || filter.Kind == FilterKind.PercentOfOne ? "%" : "";
+
+            var parts = Ranges
+                .Where(r => r.Category == filter.Category && r.Stat == stat && r.Tier >= low && r.Tier <= high)
+                .OrderBy(r => r.Tier)
+                .Select(r => $"T{r.Tier - 1} {Number(r.Min)}-{Number(r.Max)}{unit}")
+                .ToList();
+
+            return parts.Count == 0 ? null : "Loot rolls it in: " + string.Join(", ", parts) + ".";
+        }
+
+        private static string Number(double value) {
+            return value.ToString("0.#", CultureInfo.InvariantCulture);
+        }
+    }
+
+    [DataContract]
+    public class RollRangeInfo {
+        [DataMember(Name = "category")] public string Category;
+        /// <summary>The filter's Market API parameter without "min" or "max" (AttackMod).</summary>
+        [DataMember(Name = "stat")] public string Stat;
+        /// <summary>1 to 8, as the market counts them: T0 on the Search tab is 1.</summary>
+        [DataMember(Name = "tier")] public int Tier;
+        /// <summary>In the units the filter is typed in: +15% is 15.</summary>
+        [DataMember(Name = "min")] public double Min;
+        [DataMember(Name = "max")] public double Max;
     }
 
     /// <summary>

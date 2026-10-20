@@ -55,7 +55,9 @@ namespace DaraletPlayer.Ui {
             // the map on its own, to keep on screen beside the rest of the plugin: its own view, so panning one leaves the other
             windowMap.DestinationChosen += SetDestination;
             windowMap.Panned += WindowMap_Panned;
-            mapWindow = new FloatingWindow("map", "Map", settings, new Vector2(40, 80), RenderMapWindow, visibleByDefault: false, defaultSize: new Vector2(420, 440));
+            // the map itself starts square (404 x 404), as the map is: the height adds ImGui's default title bar (19), the
+            // button row (17) and the padding above and below (16), the width only the padding at the sides
+            mapWindow = new FloatingWindow("map", "Map", settings, new Vector2(40, 80), RenderMapWindow, visibleByDefault: false, defaultSize: new Vector2(420, 456));
         }
 
         private readonly MapView windowMap = new MapView();

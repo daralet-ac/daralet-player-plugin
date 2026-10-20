@@ -16,6 +16,8 @@ namespace DaraletPlayer.Feed {
         PercentOfOne,
         /// <summary>One of Options, by its value.</summary>
         Choice,
+        /// <summary>Any number of Options, their values comma-separated; an item matches with any one of them.</summary>
+        Multi,
     }
 
     /// <summary>
@@ -29,6 +31,15 @@ namespace DaraletPlayer.Feed {
         public FilterKind Kind;
         public (string Value, string Label)[] Options;
         public string Tip;
+        /// <summary>Only the loot rules have it: the Market API has no such parameter, so the search leaves it out.</summary>
+        public bool LootOnly;
+        /// <summary>The weapon subtypes it's shown for (MarketSearch.WeaponSubtypes), or null for every one.</summary>
+        public string[] Subtypes;
+
+        /// <summary>Whether it's for this weapon subtype ("" for any, which has every filter).</summary>
+        public bool ForSubtype(string subtype) {
+            return string.IsNullOrEmpty(subtype) || Subtypes == null || Subtypes.Contains(subtype);
+        }
 
         /// <summary>A key unique among the filters, since several categories share a parameter (minSpellcraft...).</summary>
         public string Key => (Category ?? "any") + ":" + Param;
@@ -57,6 +68,44 @@ namespace DaraletPlayer.Feed {
         public static readonly (string Value, string Label)[] SortKeys = {
             ("", "Newest"), ("name", "Name"), ("price", "Price"), ("tier", "Tier"), ("expires", "Expires"), ("dps", "DPS"),
             ("armorLevel", "Armor level"), ("ward", "Ward level"), ("spellcraft", "Spellcraft"), ("procChance", "Proc chance"),
+        };
+
+        public const string Melee = "Melee";
+        public const string Missile = "Missile";
+        public const string Caster = "Caster";
+
+        /// <summary>
+        /// The loot rules' weapon subtypes, each with its own damage stat: melee and thrown weapons their damage, missile
+        /// launchers their damage modifier, casters their elemental damage.
+        /// </summary>
+        public static readonly (string Value, string Label)[] WeaponSubtypes = {
+            ("", "Any"), (Melee, "Melee / Thrown"), (Missile, "Missile"), (Caster, "Caster"),
+        };
+
+        /// <summary>The subtype of a weapon class as the Market API names them, or null for none (not a weapon).</summary>
+        public static string SubtypeOf(string weaponClass) {
+            switch (weaponClass) {
+                case "Martial":
+                case "Thrown":
+                case "Dagger":
+                case "Staff":
+                case "Unarmed":
+                    return Melee;
+                case "Missile":
+                    return Missile;
+                case "WarMagic":
+                case "LifeMagic":
+                case "Caster":
+                    return Caster;
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>Damage types as the Market API names them in a listing's damageType ("Slashing/Piercing").</summary>
+        public static readonly (string Value, string Label)[] DamageTypes = {
+            ("Slashing", "Slashing"), ("Piercing", "Piercing"), ("Bludgeoning", "Bludgeoning"), ("Cold", "Cold"), ("Fire", "Fire"),
+            ("Acid", "Acid"), ("Electric", "Lightning"), ("Nether", "Nether"),
         };
 
         private static (string, string)[] Choices(params string[] valueLabelPairs) {
@@ -93,25 +142,48 @@ namespace DaraletPlayer.Feed {
         public static readonly MarketFilter[] Filters = BuildFilters().ToArray();
 
         private static IEnumerable<MarketFilter> BuildFilters() {
-            MarketFilter F(string category, string label, string param, FilterKind kind, string tip, (string, string)[] options = null) {
-                return new MarketFilter { Category = category, Label = label, Param = param, Kind = kind, Tip = tip, Options = options };
+            MarketFilter F(string category, string label, string param, FilterKind kind, string tip, (string, string)[] options = null,
+                string[] subtypes = null, bool lootOnly = false) {
+                return new MarketFilter {
+                    Category = category, Label = label, Param = param, Kind = kind, Tip = tip, Options = options, Subtypes = subtypes, LootOnly = lootOnly,
+                };
             }
+
+            var melee = new[] { Melee };
+            var missile = new[] { Missile };
+            var caster = new[] { Caster };
+            var notCaster = new[] { Melee, Missile };
 
             yield return F(null, "Min price", "minPrice", FilterKind.Number, "The lowest price, in pyreals.");
             yield return F(null, "Max price", "maxPrice", FilterKind.Number, "The highest price, in pyreals.");
+            yield return F(null, "Min burden", "minBurden", FilterKind.Number, "The lowest burden: a stack's, for a stack.", lootOnly: true);
+            yield return F(null, "Max burden", "maxBurden", FilterKind.Number, "The highest burden: a stack's, for a stack.", lootOnly: true);
+            yield return F(null, "Min value/burden", "minValuePerBurden", FilterKind.Number,
+                "The lowest vendor value for each unit of burden (value 5000 at burden 50 is 100): what's worth carrying. Burden 0 counts as 1.", lootOnly: true);
 
+            yield return F("Weapon", "Subtype", "weaponSubtype", FilterKind.Choice,
+                "Melee and thrown weapons, missile launchers or casters. Each has its own damage stat, and only the filters for it show.",
+                WeaponSubtypes, lootOnly: true);
             yield return F("Weapon", "Class", "weaponClass", FilterKind.Choice, "The kind of weapon.",
                 Choices("Martial", "Martial", "Missile", "Missile", "Thrown", "Thrown", "Dagger", "Dagger", "Staff", "Staff",
                     "Unarmed", "Unarmed", "WarMagic", "War Magic", "LifeMagic", "Life Magic"));
+            yield return F("Weapon", "Damage element", "damageType", FilterKind.Multi,
+                "The kinds of damage it does. Tick any number: a weapon doing any one of them matches.", DamageTypes, lootOnly: true);
             yield return F("Weapon", "Min DPS", "minDps", FilterKind.Number, "Damage per second, the way the website works it out.");
-            yield return F("Weapon", "Min base damage", "minBaseDamage", FilterKind.Number, "The weapon's maximum damage.");
-            yield return F("Weapon", "Min speed", "minSpeed", FilterKind.Number, "Attacks per second.");
-            yield return F("Weapon", "Min variance %", "minDamageVariance", FilterKind.Percent, "Damage variance, as a percentage.");
-            yield return F("Weapon", "Min attack mod %", "minAttackMod", FilterKind.PercentOfOne, "Attack bonus, as a percentage (15 is +15%).");
+            yield return F("Weapon", "Min base damage", "minBaseDamage", FilterKind.Number, "The weapon's maximum damage.", subtypes: melee);
+            yield return F("Weapon", "Min damage mod %", "minDamageMod", FilterKind.PercentOfOne,
+                "A missile launcher's damage modifier, as a percentage (15 is +15%).", subtypes: missile, lootOnly: true);
+            yield return F("Weapon", "Min elemental damage %", "minElementalDamageMod", FilterKind.PercentOfOne,
+                "A caster's elemental damage bonus, as a percentage (15 is +15%).", subtypes: caster, lootOnly: true);
+            yield return F("Weapon", "Min restoration %", "minRestorationMod", FilterKind.PercentOfOne,
+                "A caster's bonus to healing spells (restoration), as a percentage (15 is +15%).", subtypes: caster, lootOnly: true);
+            yield return F("Weapon", "Min speed", "minSpeed", FilterKind.Number, "Attacks per second.", subtypes: notCaster);
+            yield return F("Weapon", "Min variance %", "minDamageVariance", FilterKind.Percent, "Damage variance, as a percentage.", subtypes: melee);
+            yield return F("Weapon", "Min attack mod %", "minAttackMod", FilterKind.PercentOfOne, "Attack bonus, as a percentage (15 is +15%).", subtypes: notCaster);
             yield return F("Weapon", "Min melee def %", "minPhysDefMod", FilterKind.PercentOfOne, "Melee defense bonus, as a percentage.");
             yield return F("Weapon", "Min magic def %", "minMagicDefMod", FilterKind.PercentOfOne, "Magic defense bonus, as a percentage.");
-            yield return F("Weapon", "Min war magic %", "minWarMagicMod", FilterKind.Percent, "A caster's war magic bonus, as a percentage.");
-            yield return F("Weapon", "Min life magic %", "minLifeMagicMod", FilterKind.Percent, "A caster's life magic bonus, as a percentage.");
+            yield return F("Weapon", "Min war magic %", "minWarMagicMod", FilterKind.Percent, "A caster's war magic bonus, as a percentage.", subtypes: caster);
+            yield return F("Weapon", "Min life magic %", "minLifeMagicMod", FilterKind.Percent, "A caster's life magic bonus, as a percentage.", subtypes: caster);
             yield return F("Weapon", "Min spellcraft", "minSpellcraft", FilterKind.Number, "The item's spellcraft.");
             yield return F("Weapon", "Max difficulty", "maxDifficulty", FilterKind.Number, "The arcane lore needed to use it.");
             yield return F("Weapon", "Spell", "spellName", FilterKind.Text, "A spell on the item, by name or part of it.");
@@ -234,7 +306,7 @@ namespace DaraletPlayer.Feed {
             }
 
             foreach (var filter in Filters) {
-                if (filter.Category != null && filter.Category != category) {
+                if (filter.LootOnly || (filter.Category != null && filter.Category != category)) {
                     continue;
                 }
 
@@ -277,6 +349,7 @@ namespace DaraletPlayer.Feed {
             switch (filter.Kind) {
                 case FilterKind.Text:
                 case FilterKind.Choice:
+                case FilterKind.Multi:
                     return text;
                 case FilterKind.Number:
                     return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
