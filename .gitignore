@@ -1,6 +1,8 @@
 # build output
 [Bb]in/
 [Oo]bj/
+# the installer (installer/Daralet.iss)
+out/
 TestResults/
 
 # Visual Studio / Rider

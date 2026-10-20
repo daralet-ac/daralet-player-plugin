@@ -41,29 +41,43 @@ Type `/dap` to open and close the window. Hover over almost anything for a toolt
    title bar. If it isn't 2.9.8.x, install [Decal 2.9.8.3](https://www.decaldev.com/) over it. Install the Visual C++ 2017
    (x86) runtime it links to as well. Your other plugins keep working.
 2. **Install UtilityBelt** from [utilitybelt.gitlab.io](https://utilitybelt.gitlab.io/) if you don't have it.
-3. **Install UtilityBelt.Service**, even if you already have UtilityBelt: UtilityBelt's installer doesn't include it.
+3. **Close the game and the Decal agent** (right-click its tray icon, **Exit**).
+4. **Download `Daralet-Setup-x.y.z.exe`** from the
+   [latest release](https://github.com/daralet-ac/daralet-player-plugin/releases/latest) (under **Assets**) and run it.
+   It checks your Decal version, installs UtilityBelt.Service if you don't have it (tick the box it shows), puts
+   `Daralet.dll` in `C:\Games\Decal Plugins\Daralet\` and adds it to Decal for you, ticked.
+5. **Start the game** through Decal and log in. Type `/dap` to open the window.
+
+Afterwards the Decal agent should show **Daralet** under **Plugins** and **UtilityBelt.Service** under **Services**, both
+ticked. (UtilityBelt itself shows under **Network Filters**.)
+
+### Installing by hand
+
+If you'd rather not run the installer:
+
+1. Do steps 1 and 2 above.
+2. **Install UtilityBelt.Service**, even if you already have UtilityBelt: UtilityBelt's installer doesn't include it.
    Close the game and the Decal agent, then run
    [UtilityBelt.Service-Installer-2.2.12.exe](https://gitlab.com/utilitybelt/utilitybelt.service/-/releases/v2.2.12/downloads/packages/UtilityBelt.Service-Installer-2.2.12.exe).
-   Afterwards the Decal agent should show **UtilityBelt.Service** under **Services**, ticked. (UtilityBelt itself shows
-   under **Network Filters**.)
-4. **Download `Daralet.dll`** from the
+3. **Download `Daralet.dll`** from the
    [latest release](https://github.com/daralet-ac/daralet-player-plugin/releases/latest) (under **Assets**).
-5. **Put it somewhere it can stay**, for example `C:\Games\Decal Plugins\Daralet\`. Decal loads the file from wherever you
+4. **Put it somewhere it can stay**, for example `C:\Games\Decal Plugins\Daralet\`. Decal loads the file from wherever you
    put it, so don't leave it in your Downloads folder.
-6. **Add it to Decal.** In the Decal agent, click **Add**, then **Browse**, and pick `Daralet.dll`.
-7. **Make sure Daralet is ticked** under **Plugins** in the Decal agent.
-8. **Start the game** through Decal and log in. Type `/dap` to open the window.
+5. **Add it to Decal.** In the Decal agent, click **Add**, then **Browse**, and pick `Daralet.dll`.
+6. **Make sure Daralet is ticked** under **Plugins** in the Decal agent, then start the game.
 
 ## Updating
 
-Download the new `Daralet.dll` from the
-[latest release](https://github.com/daralet-ac/daralet-player-plugin/releases/latest). Close the game, replace the old
-`Daralet.dll` with the new one (same name, same folder), then start the game again. You don't need to add it to Decal
-again, and your settings are kept.
+Close the game and the Decal agent, and run the new `Daralet-Setup-x.y.z.exe` from the
+[latest release](https://github.com/daralet-ac/daralet-player-plugin/releases/latest). It replaces the old version
+wherever it is, including a `Daralet.dll` you added to Decal by hand. Your settings are kept.
 
-**Coming from v0.1.0?** That version's file was called `DaraletPlayer.dll`. Put `Daralet.dll` in the same folder, then
-in the Decal agent click **Add**, **Browse**, and pick `Daralet.dll`: it replaces the old entry, since Decal knows them
-as the same plugin. Then delete `DaraletPlayer.dll`. Your settings are kept.
+By hand instead: download the new `Daralet.dll`, close the game, replace the old `Daralet.dll` with the new one (same
+name, same folder), then start the game again. You don't need to add it to Decal again.
+
+**Coming from v0.1.0?** That version's file was called `DaraletPlayer.dll`. The installer takes care of it. By hand: put
+`Daralet.dll` in the same folder, then in the Decal agent click **Add**, **Browse**, and pick `Daralet.dll`: it replaces
+the old entry, since Decal knows them as the same plugin. Then delete `DaraletPlayer.dll`. Your settings are kept.
 
 ## Your settings
 
@@ -95,9 +109,11 @@ on the other end.
 ## Problems
 
 - **"Failed to register plugin" when adding the dll:** Decal is older than 2.9.8. See step 1 of Installing.
-- **Daralet isn't in Decal's list, or isn't ticked:** add it again (step 6) and tick it.
+- **Daralet isn't in Decal's list, or isn't ticked:** run the installer again, or add it by hand (Installing by hand,
+  step 5) and tick it.
 - **"Could not load file or assembly 'UtilityBelt.Service'" in chat or `log.txt`, or no UtilityBelt bar in game:**
-  UtilityBelt.Service isn't installed. See step 3 of Installing. Having UtilityBelt alone isn't enough. (Decal's
+  UtilityBelt.Service isn't installed. Run the installer again and tick the UtilityBelt.Service box, or see Installing
+  by hand, step 2. Having UtilityBelt alone isn't enough. (Decal's
   **Add/Remove Plugins** window saying UtilityBelt is "Not Installed" doesn't matter: it only knows about things
   installed from that window.)
 - **Nothing happens when you type `/dap`:** check that UtilityBelt.Service is under **Services** in the Decal agent, and
@@ -111,8 +127,11 @@ on the other end.
 
 ## Uninstalling
 
-In the Decal agent, select **Daralet** and click **Remove** (or just untick it). Then delete `Daralet.dll`, and
-`Documents\Decal Plugins\Daralet\` if you don't want your settings any more.
+If you used the installer, uninstall **Daralet (Decal plugin)** from Windows' **Installed apps** (Add or remove
+programs). It takes Daralet out of Decal and asks whether to delete your settings and loot profiles too.
+
+If you installed by hand: in the Decal agent, select **Daralet** and click **Remove** (or just untick it). Then delete
+`Daralet.dll`, and `Documents\Decal Plugins\Daralet\` if you don't want your settings any more.
 
 ## For developers
 
@@ -128,6 +147,18 @@ dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj
 
 Both dlls end up in `bin/`. `Daralet.Loader.dll` is for development only: add it as a Decal network filter (with
 Daralet unticked) and it reloads the plugin every time you rebuild. Players only need `Daralet.dll`.
+
+### Releasing a new version
+
+1. Raise `<Version>` in `src/DaraletPlayer/DaraletPlayer.csproj` and merge it into `main`.
+2. Tag that commit `v` and the version (`v0.5.0`) and push the tag.
+3. The **Release** workflow (`.github/workflows/release.yml`) builds and tests the plugin, builds the installer from
+   `installer/Daralet.iss`, and publishes the release with `Daralet-Setup-<version>.exe` and `Daralet.dll`. It stops if
+   the tag and `<Version>` disagree. Run it by hand from the Actions tab to get the installer as a run artifact without
+   releasing anything, to try it first.
+
+To build the installer yourself, install [Inno Setup 6](https://jrsoftware.org/isinfo.php), do a Release build, then run
+`iscc /DAppVersion=0.5.0 installer\Daralet.iss`. It's written to `out\`.
 
 ### Publishing a new map or places
 

@@ -423,6 +423,17 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   creature or player. The **Map window** is the World tab's map in a `FloatingWindow` with its own `MapView` (its own pan,
   zoom and Follow me); the arrow window's **Details** box leaves the arrow alone.
 - **The game's UI pictures** (`Resources/ui`, embedded as `DaraletPlayer.Resources.ui.<name>.png`, drawn by `ItemIcons.DrawArt`): taken from the client by hand, since they aren't item icons: the main pack (`main-pack`), the green behind each pack in the Retail column (`pack-background`, with the pack's icon on it without its usual tile), the ring over the slot an item is held over in a drag (`drop-ring`, 17x16, scaled to the slot's width; a frame over a list line), and the red crossed-out circle (`drop-invalid`, not the reticle's) where it can't go, letting go there doing nothing (`Accepted(allowed)`: a pack only in a pack slot, on a pack, the main pack or the bank's own slots, never among a pack's items; an item not in a full pack; a paperdoll square only for what its `EquipableSlots` include), the empty slot (`empty-slot`: a pack's room left in the grids, which show a pack as its every slot, `BankBrowser.Slots`, and the side pack slots left in the Retail column), the selection frame (`selected`: the selected item, as `Actions.CurrentSelection` says, in the grids, the paperdoll and the Retail pack column, a click in a list selecting it as the game's pack does), and the target reticles (`reticle`, `reticle-invalid`). The Retail chosen pack's arrow is still drawn with shapes: the game's own hasn't been found. The grids have no gap between squares, as the game's pack has none.
+- **The installer** (`installer/Daralet.iss`, Inno Setup 6, built and released by `.github/workflows/release.yml` on a
+  `v*` tag that must match the csproj's `<Version>`): copies `Daralet.dll` and writes Decal's entry itself, the values
+  UtilityBelt's plugin template installer writes (`(Default)` name, `Enabled`, `Object`, `Assembly`, `Path`, and
+  `Surrogate` = `{71A69713-6593-47EC-0002-0000000DECA1}`, Decal's .NET plugin host), as 32-bit `HKLM\SOFTWARE\Decal\...`
+  (WOW6432Node). Its default folder is the `Path` of an entry already there, so it takes over a dll added by hand. It
+  stops while `acclient.exe` or `DenAgent.exe` runs, warns (Yes goes on anyway) when .NET 4.8 or Decal 2.9.8 isn't found
+  (Decal's version from `DenAgent.exe` in the `Agent` key's `AgentPath`), and runs `UtilityBelt.Service.Installer.exe`,
+  taken from the UtilityBelt.Service NuGet package's `content/`, when Decal has no Services entry for its guid
+  (`{8adc5729-db1a-4e28-9475-c4eafae1e6e7}`). Uninstalling removes the entry and offers to delete the data folder. Keep
+  its `AppId`: it's how a new installer upgrades the old install. The build references Managed DirectX from `%WINDIR%`,
+  which runners lack, so the workflow installs the DirectX June 2010 runtime first.
 - **Everything the plugin writes** goes in `Documents\Decal Plugins\Daralet` (`DataFolder`): `settings.json`, `log.txt`,
   `Loot Profiles`, `world-data`. Only files a player drops in by hand (`dereth-map.png`, `locations.xml`) are looked for
   next to the dll (`PluginCore.AssemblyDirectory`).

@@ -1,0 +1,88 @@
+# Builds the plugin and its installer (installer/Daralet.iss) and publishes them as a release. Runs when a v* tag is
+# pushed, which has to match <Version> in src/DaraletPlayer/DaraletPlayer.csproj (v0.4.0 for 0.4.0). Run by hand from
+# the Actions tab (Run workflow) it only builds, and the files are under the run's artifacts, to try before tagging.
+#
+# The release gets Daralet-Setup-<version>.exe and, for anyone installing by hand, Daralet.dll.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MSBUILDDISABLENODEREUSE: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version
+        id: version
+        shell: pwsh
+        run: |
+          $proj = Get-Content src/DaraletPlayer/DaraletPlayer.csproj -Raw
+          if ($proj -notmatch '<Version>([^<]+)</Version>') { throw "No <Version> in DaraletPlayer.csproj" }
+          $version = $Matches[1]
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "The tag is $env:GITHUB_REF_NAME but DaraletPlayer.csproj says ${version}: bump <Version> or tag v$version"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      # The plugin references Managed DirectX from %WINDIR% (see DaraletPlayer.csproj), which runners don't have. It
+      # comes with the DirectX End-User Runtime (June 2010).
+      - name: Install Managed DirectX
+        shell: pwsh
+        run: |
+          $dir = "$env:WINDIR\Microsoft.NET\DirectX for Managed Code\1.0.2902.0"
+          if (-not (Test-Path "$dir\Microsoft.DirectX.Direct3D.dll")) {
+            Invoke-WebRequest https://download.microsoft.com/download/8/4/A/84A35BF1-DAFE-4AE8-82AF-AD2AE20B6B14/directx_Jun2010_redist.exe -OutFile dx.exe
+            Start-Process -Wait .\dx.exe -ArgumentList '/Q', "/T:$env:RUNNER_TEMP\dx"
+            Start-Process -Wait "$env:RUNNER_TEMP\dx\DXSETUP.exe" -ArgumentList '/silent'
+          }
+          # DXSETUP puts it in the GAC; copy it where the project looks if it didn't land there too
+          if (-not (Test-Path "$dir\Microsoft.DirectX.Direct3D.dll")) {
+            $found = Get-ChildItem "$env:WINDIR\assembly" -Recurse -Filter Microsoft.DirectX.Direct3D.dll -ErrorAction SilentlyContinue |
+              Where-Object { $_.VersionInfo.FileVersion -like '*2902*' -or $_.DirectoryName -like '*1.0.2902.0*' } | Select-Object -First 1
+            if (-not $found) { throw "Managed DirectX 1.0.2902.0 didn't install" }
+            New-Item -ItemType Directory -Force $dir | Out-Null
+            Copy-Item $found.FullName $dir
+          }
+
+      - name: Build
+        run: dotnet build DaraletPlayer.sln -c Release -nodeReuse:false
+
+      - name: Test
+        run: dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj -c Release -nodeReuse:false
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          $nuget = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { "$env:USERPROFILE\.nuget\packages" }
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" "/DUBServiceInstaller=$nuget\utilitybelt.service\2.2.12\content\UtilityBelt.Service.Installer.exe" installer\Daralet.iss
+          if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: daralet-${{ steps.version.outputs.version }}
+          path: |
+            out/Daralet-Setup-${{ steps.version.outputs.version }}.exe
+            bin/Daralet.dll
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" "out/Daralet-Setup-${{ steps.version.outputs.version }}.exe" bin/Daralet.dll `
+            --title "Daralet ${{ steps.version.outputs.version }}" --generate-notes --latest
