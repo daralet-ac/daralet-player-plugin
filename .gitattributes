@@ -1,0 +1,3 @@
+# Built into the dll and published as-is by the world data release, which plugins compare by hash (Map/WorldData.cs):
+# git must leave its line endings alone, or a Windows checkout builds a different file and every plugin downloads it.
+src/DaraletPlayer/Resources/locations.xml -text
