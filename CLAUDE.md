@@ -148,8 +148,11 @@ are on the map, which the plugin only asks indoors); `targets <guid> [guid]` (up
 creatures in your landblock or the ones around it: vitals, the spell in effect in each category, attack target and
 threat table, or `"status":"gone"`). Another player as a target gets only `"status":"player"` and their name: the plugin
 shows the health percentage the client already has (game event `0x01C0`), never their spells or exact vitals. The server
-ignores a request of the same kind sooner than 400ms after the last (`PlayerUi.MinInterval`), and the plugin never asks
-sooner than 500ms (`PlayerFeed.MinInterval`); polling goes through `PlayerFeed.Refresh`. `bankwindow` and `lootwindow`
+ignores a request of the same kind sooner than 400ms after the last (hello: 2 seconds), and more than 10 a second of every
+kind together, in bursts of up to 20 (`PlayerUiLimits`, a token bucket per player; each a `/modifylong playerui_...`
+server property, 0 for no limit). The plugin never asks sooner than 500ms (`PlayerFeed.MinInterval`) and sends about 6 a
+second at most, with every window open: keep it inside those limits, or its windows wait 3 seconds for a reply that never
+comes (`PlayerFeed.RequestTimeout`). Polling goes through `PlayerFeed.Refresh`. `bankwindow` and `lootwindow`
 (`on|off`, answering `{"on":...}`) are described below. `rollranges` sends the ranges loot rolls each filter stat in (`{"ranges":[{"category","stat","tier","min","max"}]}`), for
 the loot rules' tooltips. `character` sends your character stats (`{"sections":[{"title",
 "lines"}]}`), for the Character tab. The server can also send a reply unasked (`PlayerUiProtocol.Send`),
@@ -185,7 +188,10 @@ days, from `GetSoldListingsForAccount`) and expired items, and whether a broker 
 (`PlayerUiMarketData.BrokerRange`, found from what the player can see). `@playerui broker list|cancel|claim|expired` hands
 the same words to that broker, so its checks and Yes/No confirmations apply; with no broker near it says so. Working out a
 listing's item name loads the item from the database (`MarketBroker.TryGetListingItemName`), so names are cached by
-listing id. The broker answers in tells ("Market Broker tells you, ..."), which `SendCommand` keeps as replies too.
+listing id. The four queries behind `@playerui market` run off the world thread (`PlayerUiMarketData.RequestMarket`, the
+reply sent from the world thread once they're in), and their rows are kept per account for 4 seconds (`RowsFor`), or until
+a listing or payout of the account's changes (`MarketListingEvents.AccountChanged`, raised by `DbPlayerMarketRepository`'s
+writes). The broker answers in tells ("Market Broker tells you, ..."), which `SendCommand` keeps as replies too.
 
 **The arena:** `@playerui arena` (`Arena/ArenaManager.PlayerUi.cs`, a partial like the admin one) sends your state in one
 word (off, idle, queued, watching, defeated, accepting, starting, fighting) and in words (`ArenaManager.Status`), your
