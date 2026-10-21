@@ -163,6 +163,13 @@ Daralet unticked) and it reloads the plugin every time you rebuild. Players only
 To build the installer yourself, install [Inno Setup 6](https://jrsoftware.org/isinfo.php), do a Release build, then run
 `iscc /DAppVersion=0.5.0 installer\Daralet.iss`. It's written to `out\`.
 
+### License
+
+Daralet is free software under the [GNU General Public License, version 3](LICENSE) or later: you can use, change and
+share it, and if you share a changed version you share its source too, under the same license. [NOTICE](NOTICE) adds a
+permission to combine it with Decal, UtilityBelt.Service and the game client, and lists the files in here that aren't
+ours (Decal's dlls, the game's pictures, the map drawn from its dat files, GoArrow's places), which keep their own terms.
+
 ### Publishing a new map or places
 
 Both Daralet plugins download the map image and `locations.xml` from this repository's

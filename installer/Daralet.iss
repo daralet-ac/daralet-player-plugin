@@ -62,6 +62,10 @@ Name: "ubservice"; Description: "Install UtilityBelt.Service 2.2.12 (Daralet nee
 
 [Files]
 Source: "{#BinDir}\Daralet.dll"; DestDir: "{app}"; Flags: ignoreversion
+; the GPL goes with the program; MIT asks for its notice to go with UtilityBelt.Service's installer, which this includes
+Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+Source: "..\NOTICE"; DestDir: "{app}"; DestName: "NOTICE.txt"; Flags: ignoreversion
+Source: "UtilityBelt.Service-LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#UBServiceInstaller}"; DestDir: "{tmp}"; Flags: deleteafterinstall; Tasks: ubservice
 
 [InstallDelete]

@@ -460,6 +460,10 @@ checks (greying out market buttons away from a broker, say) are only there to be
 
 ## Conventions
 
+- **License:** GPL-3.0 or later (`LICENSE`), with `NOTICE` adding a section 7 permission to combine it with Decal,
+  UtilityBelt.Service, Managed DirectX and the client, and listing what isn't ours. Code copied in from elsewhere needs a
+  GPL-compatible license (MIT, BSD, Apache 2.0, (A)GPL; daralet-ACE is AGPL-3.0, like ACE); anything else not written
+  here goes on NOTICE's list. The installer installs `LICENSE`, `NOTICE` and UtilityBelt.Service's MIT notice.
 - Braces on every `if`, even one-line bodies.
 - Code comments explain why, in plain words; tooltips (`Widgets.Tip`) on every control say what it does and which command it
   sends.

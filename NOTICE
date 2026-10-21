@@ -1,0 +1,35 @@
+Daralet, a Decal plugin for players on the Daralet server
+Copyright (C) 2026 The Daralet developers
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
+License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program, in the file LICENSE. If not,
+see <https://www.gnu.org/licenses/>.
+
+The source code is at <https://github.com/daralet-ac/daralet-player-plugin>.
+
+
+Additional permission under GNU GPL version 3 section 7
+
+If you modify this program, or any covered work, by linking or combining it with Decal (including Decal.Adapter and
+Decal.Interop.Core), UtilityBelt.Service, Managed DirectX or the Asheron's Call client (or a modified version of any of
+them), containing parts covered by the terms of their own licenses, the licensors of this program grant you additional
+permission to convey the resulting work.
+
+
+Not covered by this license
+
+These are in this repository, or built into or shipped with the plugin, but aren't the Daralet developers' work. They
+keep their own owners' terms:
+
+- deps/Decal.Adapter.dll and deps/Decal.Interop.Core.dll: from Decal 2.9.8.3.
+- src/DaraletPlayer/Resources/ui/*.png: pictures taken from the Asheron's Call client.
+- src/DaraletPlayer/Resources/dereth-map.png and dereth-map.PSD: drawn from the game's dat files.
+- src/DaraletPlayer/Resources/locations.xml: GoArrow's locations, in Daralet edition.
+- UtilityBelt.Service.Installer.exe, which the Daralet installer includes: UtilityBelt.Service, under the MIT License
+  (installer/UtilityBelt.Service-LICENSE.txt, installed next to Daralet.dll).
