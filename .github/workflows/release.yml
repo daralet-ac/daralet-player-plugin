@@ -2,7 +2,9 @@
 # pushed, which has to match <Version> in src/DaraletPlayer/DaraletPlayer.csproj (v0.4.0 for 0.4.0). Run by hand from
 # the Actions tab (Run workflow) it only builds, and the files are under the run's artifacts, to try before tagging.
 #
-# The release gets Daralet-Setup-<version>.exe and, for anyone installing by hand, Daralet.dll.
+# The release gets Daralet-Setup-<version>.exe and, for anyone installing by hand, Daralet.dll. A release made on GitHub
+# with a new tag (its tag starts this) keeps its notes and gets the files added; one this makes itself takes its notes
+# from release-notes/<tag>.md, or GitHub's list of merged pull requests without one.
 name: Release
 
 on:
@@ -84,5 +86,14 @@ jobs:
         if: github.ref_type == 'tag'
         shell: pwsh
         run: |
-          gh release create "$env:GITHUB_REF_NAME" "out/Daralet-Setup-${{ steps.version.outputs.version }}.exe" bin/Daralet.dll `
-            --title "Daralet ${{ steps.version.outputs.version }}" --generate-notes --latest
+          $files = "out/Daralet-Setup-${{ steps.version.outputs.version }}.exe", "bin/Daralet.dll"
+          # a release made on GitHub with a new tag starts this workflow too: then only add the files, keeping its notes
+          gh release view "$env:GITHUB_REF_NAME" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "$env:GITHUB_REF_NAME" @files --clobber
+          } else {
+            $notes = "release-notes/$env:GITHUB_REF_NAME.md"
+            $notesArgs = if (Test-Path $notes) { @('--notes-file', $notes) } else { @('--generate-notes') }
+            gh release create "$env:GITHUB_REF_NAME" @files --title "Daralet ${{ steps.version.outputs.version }}" @notesArgs --latest
+          }
+          if ($LASTEXITCODE -ne 0) { throw "publishing the release failed" }
