@@ -153,11 +153,13 @@ end;
 // The game or the Decal agent, by WMI, since Inno can't list processes itself. False if WMI can't say.
 function IsRunning(ExeName: String): Boolean;
 var
-  Wmi, Found: Variant;
+  Locator, Wmi, Found: Variant;
 begin
   Result := False;
   try
-    Wmi := CreateOleObject('WbemScripting.SWbemLocator').ConnectServer('.', 'root\CIMV2');
+    // Inno's Pascal can't call a method on a function's result directly
+    Locator := CreateOleObject('WbemScripting.SWbemLocator');
+    Wmi := Locator.ConnectServer('.', 'root\CIMV2');
     Found := Wmi.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = "' + ExeName + '"');
     Result := Found.Count > 0;
   except
