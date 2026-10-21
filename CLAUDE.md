@@ -434,6 +434,12 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (`{8adc5729-db1a-4e28-9475-c4eafae1e6e7}`). Uninstalling removes the entry and offers to delete the data folder. Keep
   its `AppId`: it's how a new installer upgrades the old install. The build references Managed DirectX from `%WINDIR%`,
   which runners lack, so the workflow installs the DirectX June 2010 runtime first.
+- **New versions** (`Feed/UpdateCheck.cs`): when the plugin starts it asks GitHub's API, once and off the game's thread,
+  for `daralet-ac/daralet-player-plugin`'s latest release (`releases/latest`, which never means a draft or a pre-release,
+  so not `world-data`), and compares its tag with the assembly's version (both made four-part first: `Version` puts 0.5.0
+  before 0.5.0.0). A newer one gets a line in chat once the character is logged in (`PluginCore.AnnounceUpdate`; a line
+  added before login never shows) and an **Update** button on the window's top line that opens the release page. It only
+  tells: the player runs the new installer. Unauthenticated, GitHub allows 60 requests an hour from one address.
 - **Everything the plugin writes** goes in `Documents\Decal Plugins\Daralet` (`DataFolder`): `settings.json`, `log.txt`,
   `Loot Profiles`, `world-data`. Only files a player drops in by hand (`dereth-map.png`, `locations.xml`) are looked for
   next to the dll (`PluginCore.AssemblyDirectory`).

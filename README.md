@@ -68,6 +68,9 @@ If you'd rather not run the installer:
 
 ## Updating
 
+When a new version is out, Daralet says so in chat when you log in, and an **Update** button appears at the top of
+the `/dap` window. Click it for the download page.
+
 Close the game and the Decal agent, and run the new `Daralet-Setup-x.y.z.exe` from the
 [latest release](https://github.com/daralet-ac/daralet-player-plugin/releases/latest). It replaces the old version
 wherever it is, including a `Daralet.dll` you added to Decal by hand. Your settings are kept.

@@ -13,6 +13,7 @@ namespace DaraletPlayer.Ui {
     internal class PlayerHud : IDisposable {
         private readonly PlayerFeed feed;
         private readonly Settings settings;
+        private readonly UpdateCheck updates;
         private readonly ItemIcons icons;
         private readonly Hud hud;
         private readonly FellowshipTab fellowshipTab;
@@ -32,9 +33,10 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         private readonly List<(string Name, string Tip, Action Render)> tabs;
 
-        public PlayerHud(PlayerFeed feed, Settings settings) {
+        public PlayerHud(PlayerFeed feed, Settings settings, UpdateCheck updates) {
             this.feed = feed;
             this.settings = settings;
+            this.updates = updates;
             icons = new ItemIcons(settings);
             ItemUser.Icons = icons;
 
@@ -127,8 +129,35 @@ namespace DaraletPlayer.Ui {
             Widgets.TextDisabled(feed.Hello.Name);
             Widgets.Tip("The character you're on. Type /dap to show or hide this window.");
 
+            RenderUpdate();
             RenderCompactToggle();
             return true;
+        }
+
+        /// <summary>An Update button after the character's name, while a newer release is out.</summary>
+        private void RenderUpdate() {
+            var newer = updates?.Newer;
+
+            if (newer == null) {
+                return;
+            }
+
+            var version = newer.Version.ToString(3);
+            ImGui.SameLine();
+            ImGui.PushStyleColor(ImGuiCol.Text, Colors.Warning);
+            var clicked = ImGui.SmallButton($"Update: {version}");
+            ImGui.PopStyleColor();
+
+            if (clicked) {
+                try {
+                    // the default browser, as any link
+                    System.Diagnostics.Process.Start(newer.Url);
+                }
+                catch (Exception ex) {
+                    PluginCore.Log($"Couldn't open {newer.Url}: {ex.Message}");
+                }
+            }
+            Widgets.Tip($"Daralet {version} is out (you have {updates.Current.ToString(3)}). Opens its download page in your browser: close the game and the Decal agent, then run Daralet-Setup-{version}.exe from there. Your settings are kept.");
         }
 
         /// <summary>The Plugin appraisal and Compact checkboxes, at the right of the top line.</summary>

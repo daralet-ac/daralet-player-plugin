@@ -19,6 +19,8 @@ namespace DaraletPlayer {
         private Settings settings;
         private PlayerFeed feed;
         private PlayerHud hud;
+        private UpdateCheck updates;
+        private bool updateAnnounced;
 
         /// <summary>
         /// The folder the plugin dll is in, where a dereth-map.png or locations.xml put there by hand is looked for. The loader sets
@@ -47,7 +49,9 @@ namespace DaraletPlayer {
                 settings = new Settings(log: Log);
                 Loot.KnowsScrollSpell = KnowsScrollSpell;
                 feed = new PlayerFeed();
-                hud = new PlayerHud(feed, settings);
+                updates = new UpdateCheck(typeof(PluginCore).Assembly.GetName().Version);
+                updates.Start();
+                hud = new PlayerHud(feed, settings, updates);
 
                 CoreManager.Current.CommandLineText += Core_CommandLineText;
                 CoreManager.Current.RenderFrame += Core_RenderFrame;
@@ -68,6 +72,7 @@ namespace DaraletPlayer {
             });
             ShutdownStep(() => hud?.Dispose());
             ShutdownStep(() => feed?.Dispose());
+            ShutdownStep(() => updates?.Dispose());
             ShutdownStep(() => settings?.SaveIfChanged());
             ShutdownStep(() => Loot.KnowsScrollSpell = null);
         }
@@ -99,10 +104,25 @@ namespace DaraletPlayer {
         private void Core_RenderFrame(object sender, EventArgs e) {
             try {
                 settings.SaveIfDue();
+                AnnounceUpdate();
             }
             catch (Exception ex) {
                 Log(ex);
             }
+        }
+
+        /// <summary>
+        /// Says once in chat that a newer version is out, after login: a line added before then never shows.
+        /// </summary>
+        private void AnnounceUpdate() {
+            var newer = updates?.Newer;
+
+            if (updateAnnounced || newer == null || CoreManager.Current.CharacterFilter.LoginStatus != 3) {
+                return;
+            }
+
+            updateAnnounced = true;
+            Log($"Daralet {newer.Version.ToString(3)} is out (you have {updates.Current.ToString(3)}). Click Update at the top of the /dap window for its download page, then close the game and run its installer.");
         }
 
         /// <summary>
