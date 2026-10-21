@@ -36,7 +36,7 @@ namespace DaraletPlayer.Map {
     /// The Dereth map: scroll to zoom, drag to pan, hover for names. Right-click a place, a fellow or any spot for what you
     /// can do there (point the arrow at it). Based on Daralet Admin's map.
     /// </summary>
-    internal partial class MapView : IDisposable {
+    internal partial class MapView {
         public const string ImageResource = "DaraletPlayer.Resources.dereth-map.png";
 
         /// <summary>The file next to the plugin dll that's drawn instead of the built-in map, when it's there.</summary>
@@ -80,6 +80,8 @@ namespace DaraletPlayer.Map {
         private static readonly (uint Color, float Size, bool Square) DefaultStyle = (Col(0.7f, 0.7f, 0.7f, 1f), 2.5f, false);
 
         /// <summary>The map coordinates at the middle of the view.</summary>
+        private readonly MapImage image;
+
         private Vector2 center = Vector2.Zero;
         private float zoom = 1;
 
@@ -102,6 +104,11 @@ namespace DaraletPlayer.Map {
 
         /// <summary>The map was dragged to look somewhere else.</summary>
         public event Action Panned;
+
+        /// <param name="image">The map image, shared with the other maps and loaded by its owner.</param>
+        public MapView(MapImage image) {
+            this.image = image;
+        }
 
         public void Fit() {
             center = Vector2.Zero;
@@ -155,8 +162,7 @@ namespace DaraletPlayer.Map {
             drawList.PushClipRect(origin, origin + size, true);
             drawList.AddRectFilled(origin, origin + size, Col(0.12f, 0.24f, 0.48f, 1f));
 
-            LoadTiles();
-            DrawTiles(drawList);
+            image.Draw(drawList, ToScreen);
             DrawLoadingNote(drawList);
 
             var mouse = ImGui.GetIO().MousePos;
@@ -197,10 +203,10 @@ namespace DaraletPlayer.Map {
             var at = viewOrigin + new Vector2(8, 8);
             var color = ImGui.GetColorU32(ImGuiCol.Text);
 
-            if (loadError != null) {
+            if (image.Failed) {
                 drawList.AddText(at, color, "The map image couldn't be loaded. See log.txt.");
             }
-            else if (tilesMade < TileGrid * TileGrid) {
+            else if (!image.Loaded) {
                 drawList.AddText(at, color, "Loading the map...");
             }
         }
@@ -514,19 +520,6 @@ namespace DaraletPlayer.Map {
 
         private Vector2 ToMap(Vector2 screen, Vector2 mid, float scale) {
             return new Vector2(center.X + (screen.X - mid.X) / scale, center.Y - (screen.Y - mid.Y) / scale);
-        }
-
-        public void Dispose() {
-            for (var row = 0; row < TileGrid; row++) {
-                for (var column = 0; column < TileGrid; column++) {
-                    tiles[row, column]?.Dispose();
-                    tiles[row, column] = null;
-                }
-            }
-
-            while (decodedTiles.TryDequeue(out var tile)) {
-                tile.Bitmap.Dispose();
-            }
         }
     }
 }

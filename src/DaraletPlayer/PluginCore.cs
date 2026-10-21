@@ -7,10 +7,10 @@ using DaraletPlayer.Ui;
 
 namespace DaraletPlayer {
     /// <summary>
-    /// The Daralet plugin, started by Decal or by the hot-reload loader. Only CoreManager.Current is used, never
+    /// The Daralet Toolkit plugin, started by Decal or by the hot-reload loader. Only CoreManager.Current is used, never
     /// PluginBase.Host / Core: a hot-reloaded copy isn't registered with Decal, so those are never set up for it.
     /// </summary>
-    [FriendlyName("Daralet")]
+    [FriendlyName("Daralet Toolkit")]
     public class PluginCore : PluginBase {
         // System.IO.Path is written out in full in here: PluginBase has a Path property of its own
         private static string assemblyDirectory;
@@ -48,6 +48,7 @@ namespace DaraletPlayer {
 
         protected override void Startup() {
             try {
+                DataFolder.MoveOldFolder();
                 settings = new Settings(log: Log);
                 Loot.KnowsScrollSpell = KnowsScrollSpell;
                 feed = new PlayerFeed();
@@ -121,12 +122,12 @@ namespace DaraletPlayer {
             }
 
             updateAnnounced = true;
-            var text = $"Daralet {newer.Version.ToString(3)} is out (you have {updates.Current.ToString(3)}).";
+            var text = $"Daralet Toolkit {newer.Version.ToString(3)} is out (you have {updates.Current.ToString(3)}).";
             LogFile(text);
 
             try {
                 // a link in chat, as UtilityBelt's update notice has: clicking it comes back as Core_ChatNameClicked
-                CoreManager.Current.Actions.AddChatText($"[Daralet] {text} <Tell:IIDString:{ChatLinkId}:openurl|{newer.Url}>Download it</Tell>, then close the game and run its installer. The Update button at the top of the /dap window opens the same page.", 1);
+                CoreManager.Current.Actions.AddChatText($"[Daralet Toolkit] {text} <Tell:IIDString:{ChatLinkId}:openurl|{newer.Url}>Download it</Tell>, then close the game and run its installer. The Update button at the top of the /dap window opens the same page.", 1);
             }
             catch {
             }
@@ -188,7 +189,7 @@ namespace DaraletPlayer {
             LogFile(message);
 
             try {
-                CoreManager.Current.Actions.AddChatText($"[Daralet] {message}", 1);
+                CoreManager.Current.Actions.AddChatText($"[Daralet Toolkit] {message}", 1);
             }
             catch {
             }
@@ -197,7 +198,7 @@ namespace DaraletPlayer {
         /// <summary>A note to the player in chat, in the System colour. Not logged.</summary>
         internal static void Chat(string text) {
             try {
-                CoreManager.Current.Actions.AddChatText($"[Daralet] {text}", 5);
+                CoreManager.Current.Actions.AddChatText($"[Daralet Toolkit] {text}", 5);
             }
             catch {
             }

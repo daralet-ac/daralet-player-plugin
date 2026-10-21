@@ -8,7 +8,7 @@ namespace DaraletPlayer.Tests {
     public class UpdateCheckTests {
         /// <summary>What GitHub's releases/latest sends, cut down to what's read and a little more.</summary>
         private static string Release(string tag) {
-            return "{\"tag_name\":\"" + tag + "\",\"name\":\"Daralet\",\"html_url\":\"https://github.com/daralet-ac/daralet-player-plugin/releases/tag/" + tag + "\",\"prerelease\":false,\"assets\":[]}";
+            return "{\"tag_name\":\"" + tag + "\",\"name\":\"Daralet\",\"html_url\":\"https://github.com/daralet-ac/daralet-toolkit/releases/tag/" + tag + "\",\"prerelease\":false,\"assets\":[]}";
         }
 
         private static UpdateCheck Check(string current, string json) {
@@ -43,7 +43,7 @@ namespace DaraletPlayer.Tests {
 
             Assert.IsNotNull(check.Newer);
             Assert.AreEqual(new Version(0, 6, 0, 0), check.Newer.Version);
-            Assert.AreEqual("https://github.com/daralet-ac/daralet-player-plugin/releases/tag/v0.6.0", check.Newer.Url);
+            Assert.AreEqual("https://github.com/daralet-ac/daralet-toolkit/releases/tag/v0.6.0", check.Newer.Url);
         }
 
         [TestMethod]
@@ -57,12 +57,15 @@ namespace DaraletPlayer.Tests {
 
         [TestMethod]
         public void ChatLinksOnlyOpenThisPluginsReleasePages() {
-            Assert.IsTrue(UpdateCheck.IsReleasePage("https://github.com/daralet-ac/daralet-player-plugin/releases/tag/v0.6.0"));
+            Assert.IsTrue(UpdateCheck.IsReleasePage("https://github.com/daralet-ac/daralet-toolkit/releases/tag/v0.6.0"));
             Assert.IsTrue(UpdateCheck.IsReleasePage(UpdateCheck.LatestPageUrl));
+            // the repo's name before the rename, which GitHub still sends on
+            Assert.IsTrue(UpdateCheck.IsReleasePage("https://github.com/daralet-ac/daralet-player-plugin/releases/tag/v0.6.0"));
             Assert.IsFalse(UpdateCheck.IsReleasePage("https://github.com/daralet-ac/daralet-player-plugin.evil.com/releases/"));
+            Assert.IsFalse(UpdateCheck.IsReleasePage("https://github.com/daralet-ac/daralet-toolkit.evil.com/releases/"));
             Assert.IsFalse(UpdateCheck.IsReleasePage("https://example.com/"));
             Assert.IsFalse(UpdateCheck.IsReleasePage("C:\\Windows\\System32\\calc.exe"));
-            Assert.IsFalse(UpdateCheck.IsReleasePage("https://github.com/daralet-ac/daralet-player-plugin/releases/x\" -args"));
+            Assert.IsFalse(UpdateCheck.IsReleasePage("https://github.com/daralet-ac/daralet-toolkit/releases/x\" -args"));
             Assert.IsFalse(UpdateCheck.IsReleasePage(null));
         }
 

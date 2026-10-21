@@ -6,9 +6,9 @@
     <LangVersion>12</LangVersion>
     <RootNamespace>DaraletPlayer</RootNamespace>
     <!-- the dll players install, named for the plugin (the code keeps the DaraletPlayer namespace) -->
-    <AssemblyName>Daralet</AssemblyName>
-    <Version>0.6.0</Version>
-    <Product>Daralet</Product>
+    <AssemblyName>DaraletToolkit</AssemblyName>
+    <Version>0.7.0</Version>
+    <Product>Daralet Toolkit</Product>
     <OutputPath>..\..\bin\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

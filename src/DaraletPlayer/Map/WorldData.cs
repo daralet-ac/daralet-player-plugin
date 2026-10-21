@@ -46,7 +46,7 @@ namespace DaraletPlayer.Map {
     /// </summary>
     public class WorldData : IDisposable {
         /// <summary>The release both Daralet plugins read. Its tag stays "world-data"; each publish replaces its files.</summary>
-        public const string DefaultBaseUrl = "https://github.com/daralet-ac/daralet-player-plugin/releases/download/world-data/";
+        public const string DefaultBaseUrl = "https://github.com/daralet-ac/daralet-toolkit/releases/download/world-data/";
         public const string ManifestName = "manifest.json";
         public const int Format = 1;
 

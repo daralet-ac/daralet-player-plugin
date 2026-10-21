@@ -145,7 +145,7 @@ namespace DaraletPlayer.Tests {
 
         [TestMethod]
         public void SettingsAreInTheDecalPluginsFolder() {
-            StringAssert.EndsWith(Settings.DefaultPath(), Path.Combine("Decal Plugins", "Daralet", "settings.json"));
+            StringAssert.EndsWith(Settings.DefaultPath(), Path.Combine("Decal Plugins", "Daralet Toolkit", "settings.json"));
         }
 
         [TestMethod]

@@ -8,7 +8,7 @@ using UtilityBelt.Service.Views;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// The Daralet window: a status line, then a tab for each area.
+    /// The Daralet Toolkit window: a status line, then a tab for each area.
     /// </summary>
     internal class PlayerHud : IDisposable {
         private readonly PlayerFeed feed;
@@ -78,7 +78,7 @@ namespace DaraletPlayer.Ui {
                     leaderboardsTab.Render),
             };
 
-            hud = UBService.Huds.CreateHud("Daralet");
+            hud = UBService.Huds.CreateHud("Daralet Toolkit");
             hud.ShowInBar = true;
             hud.OnPreRender += Hud_OnPreRender;
             hud.OnRender += Hud_OnRender;
@@ -176,7 +176,7 @@ namespace DaraletPlayer.Ui {
                     PluginCore.Log($"Couldn't open {newer.Url}: {ex.Message}");
                 }
             }
-            Widgets.Tip($"Daralet {version} is out (you have {updates.Current.ToString(3)}). Opens its download page in "
+            Widgets.Tip($"Daralet Toolkit {version} is out (you have {updates.Current.ToString(3)}). Opens its download page in "
                 + $"your browser: close the game and the Decal agent, then run Daralet-Setup-{version}.exe from there. "
                 + "Your settings are kept.");
         }

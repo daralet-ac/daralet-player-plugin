@@ -5,9 +5,9 @@
     <PlatformTarget>x86</PlatformTarget>
     <LangVersion>12</LangVersion>
     <RootNamespace>DaraletPlayer.Loader</RootNamespace>
-    <AssemblyName>Daralet.Loader</AssemblyName>
+    <AssemblyName>DaraletToolkit.Loader</AssemblyName>
     <Version>0.1.0</Version>
-    <Product>Daralet hot-reload loader</Product>
+    <Product>Daralet Toolkit hot-reload loader</Product>
     <OutputPath>..\..\bin\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>

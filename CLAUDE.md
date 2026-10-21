@@ -1,9 +1,10 @@
 # Working on this plugin
 
-Daralet (the player plugin: `Daralet.dll`, `DaraletPlayer` as its namespace in code, plain "Daralet" wherever players see
-a name) is a Decal plugin for Asheron's Call, for players on the Daralet server (daralet-ACE). Its sibling, Daralet Admin
+Daralet Toolkit (the player plugin: `DaraletToolkit.dll`, `DaraletPlayer` as its namespace in code, plain "Daralet
+Toolkit" wherever players see a name) is a Decal plugin for Asheron's Call, for players on the Daralet server (daralet-ACE). Its sibling, Daralet Admin
 (`../daralet-admin-plugin`), is the staff plugin this one was started from: when something here is unclear, see how it's
-done there. Until v0.1.0 the dll was `DaraletPlayer.dll`; the assembly guid (what Decal knows it by) didn't change. This file is the knowledge that building them took: copy it into any new Daralet Decal plugin and keep it
+done there. Until v0.7.0 it was called Daralet, its dll `Daralet.dll` (`DaraletPlayer.dll` until v0.1.0),
+and its repo `daralet-player-plugin`; the assembly guid (what Decal knows it by) never changed, and the installer deletes the old dlls. This file is the knowledge that building them took: copy it into any new Daralet Decal plugin and keep it
 up to date.
 
 ## The stack
@@ -22,7 +23,7 @@ up to date.
 - MSB3277 is suppressed: UtilityBelt.Service was built against Decal.Adapter 2.9.8.0 and Decal installs 2.9.7.5 (assembly
   version). Only the installed one is ever loaded.
 - Based on UtilityBelt's [HotDecalPluginTemplate](https://gitlab.com/utilitybelt/HotDecalPluginTemplate). The loader
-  (`src/DaraletPlayer.Loader`, built as `Daralet.Loader.dll`) is a Decal network filter that loads `Daralet.dll` from bytes
+  (`src/DaraletPlayer.Loader`, built as `DaraletToolkit.Loader.dll`) is a Decal network filter that loads `DaraletToolkit.dll` from bytes
   and reloads it on every rebuild.
 
 Build and test:
@@ -227,7 +228,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `world-data` pre-release (fixed tag, files replaced with `--clobber`). When the plugin starts, `WorldData` reads the
   manifest from `releases/download/world-data/`, downloads any file whose hash differs from what it has, checks the hash
   and the contents (`Locations.Check`, `WorldData.CheckSquarePng`), and saves it in
-  `Documents\Decal Plugins\Daralet\world-data`. A file that matches the built-in one isn't downloaded. This all runs off
+  `Documents\Decal Plugins\Daralet Toolkit\world-data`. A file that matches the built-in one isn't downloaded. This all runs off
   the game's thread; `WorldData.Version` going up is the World tab's cue to reload the places and the maps
   (`MapView.Reload`), on the game's thread. Lookup order for both files: next to the dll, then downloaded, then built in.
   Daralet Admin has copies of `WorldData.cs` and `Locations.cs` and reads the same release: keep them the same. Raise
@@ -294,7 +295,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `Loot.KnowsScrollSpell` is set by `PluginCore` from Decal (`LongValueKey.AssociatedSpell`,
   `CharacterFilter.IsSpellKnown`), and a scroll whose spell can't be told counts as unlearned. New settings get the
   **Example Loot Profile** (`Feed/ExampleLoot.cs`) after "My loot"; the Example button adds it again, and a test checks its
-  filter keys exist. **To file / From file** save and load profiles as `.json` in `Documents\Decal Plugins\Daralet\Loot
+  filter keys exist. **To file / From file** save and load profiles as `.json` in `Documents\Decal Plugins\Daralet Toolkit\Loot
   Profiles` (`LootFiles`).
 
 - **Combat tab** (`Ui/CombatTab.cs`): the Target tab it used to be (`Ui/TargetTab.cs`, still its own sub tab) and
@@ -470,7 +471,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
 
 - **World tab** (`Ui/WorldTab.cs`, `Map/`): the map (Daralet Admin's `dereth-map.png`), the places in
   `Resources/locations.xml` (a `locations.xml` next to the dll wins, then a downloaded one: see World data), you, your
-  fellows, and a destination arrow window.
+  fellows, and a destination arrow window. The map image is one `MapImage` both maps share, loaded from login
+  (`WorldTab.Core_RenderFrame`) whether or not a map is open: decoded and cut into 16 tiles off the game's thread, one
+  tile a frame made a texture on it, since one 2048-pixel texture stalled the game.
   The file also has 43 `_Unknown` entries (shops, taverns, halls): every type needs a row in `Locations.Types`, which a
   test checks.
 
@@ -514,8 +517,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   creature or player. The **Map window** is the World tab's map in a `FloatingWindow` with its own `MapView` (its own pan,
   zoom and Follow me); the arrow window's **Details** box leaves the arrow alone.
 - **The game's UI pictures** (`Resources/ui`, embedded as `DaraletPlayer.Resources.ui.<name>.png`, drawn by `ItemIcons.DrawArt`): taken from the client by hand, since they aren't item icons: the main pack (`main-pack`), the green behind each pack in the Retail column (`pack-background`, with the pack's icon on it without its usual tile), the ring over the slot an item is held over in a drag (`drop-ring`, 17x16, scaled to the slot's width; a frame over a list line), and the red crossed-out circle (`drop-invalid`, not the reticle's) where it can't go, letting go there doing nothing (`Accepted(allowed)`: a pack only in a pack slot, on a pack, the main pack or the bank's own slots, never among a pack's items; an item not in a full pack; a paperdoll square only for what its `EquipableSlots` include), the empty slot (`empty-slot`: a pack's room left in the grids, which show a pack as its every slot, `InventoryBrowser.Slots`, and the side pack slots left in the Retail column), the selection frame (`selected`: the selected item, as `Actions.CurrentSelection` says, in the grids, the paperdoll and the Retail pack column, a click in a list selecting it as the game's pack does), and the target reticles (`reticle`, `reticle-invalid`). The Retail chosen pack's arrow is still drawn with shapes: the game's own hasn't been found. The grids have no gap between squares, as the game's pack has none.
-- **The installer** (`installer/Daralet.iss`, Inno Setup 6, built and released by `.github/workflows/release.yml` on a
-  `v*` tag that must match the csproj's `<Version>`): copies `Daralet.dll` and writes Decal's entry itself, the values
+- **The installer** (`installer/DaraletToolkit.iss`, Inno Setup 6, built and released by `.github/workflows/release.yml` on a
+  `v*` tag that must match the csproj's `<Version>`): copies `DaraletToolkit.dll` and writes Decal's entry itself, the values
   UtilityBelt's plugin template installer writes (`(Default)` name, `Enabled`, `Object`, `Assembly`, `Path`, and
   `Surrogate` = `{71A69713-6593-47EC-0002-0000000DECA1}`, Decal's .NET plugin host), as 32-bit `HKLM\SOFTWARE\Decal\...`
   (WOW6432Node). Its default folder is the `Path` of an entry already there, so it takes over a dll added by hand. It
@@ -526,7 +529,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   its `AppId`: it's how a new installer upgrades the old install. The build references Managed DirectX from `%WINDIR%`,
   which runners lack, so the workflow installs the DirectX June 2010 runtime first.
 - **New versions** (`Feed/UpdateCheck.cs`): when the plugin starts it asks GitHub's API, once and off the game's thread,
-  for `daralet-ac/daralet-player-plugin`'s latest release (`releases/latest`, which never means a draft or a pre-release,
+  for `daralet-ac/daralet-toolkit`'s latest release (`releases/latest`, which never means a draft or a pre-release,
   so not `world-data`), and compares its tag with the assembly's version (both made four-part first: `Version` puts 0.5.0
   before 0.5.0.0). A newer one gets a line in chat once the character is logged in (`PluginCore.AnnounceUpdate`; a line
   added before login never shows), with a link to the release page, and an **Update** button on the window's top line that
@@ -534,10 +537,15 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   hour from one address. Chat links are UtilityBelt's kind: `<Tell:IIDString:id:openurl|url>text</Tell>` in
   `AddChatText`, whose click comes back as `ChatNameClicked` with that id (`PluginCore.ChatLinkId`, a fixed number).
   Anyone can put a link with that id in a tell, so a click only opens this plugin's release pages
-  (`UpdateCheck.IsReleasePage`). No Decal plugin known (October 2026) downloads and installs its own updates; UtilityBelt's
+  (`UpdateCheck.IsReleasePage`, which takes the repo's old name, `daralet-player-plugin`, too). The repo was renamed
+  with the plugin, after v0.6.0: older plugins still ask the old address, which GitHub redirects (the API too), and
+  their Update link falls back to their own `LatestPageUrl`, since a release page under the new name isn't one of theirs. No Decal plugin known (October 2026) downloads and installs its own updates; UtilityBelt's
   is a notice like this one, and the loader updating the plugin itself was left for later.
-- **Everything the plugin writes** goes in `Documents\Decal Plugins\Daralet` (`DataFolder`): `settings.json`, `log.txt`,
-  `Loot Profiles`, `world-data`. Only files a player drops in by hand (`dereth-map.png`, `locations.xml`) are looked for
+- **Everything the plugin writes** goes in `Documents\Decal Plugins\Daralet Toolkit` (`DataFolder`): `settings.json`,
+  `log.txt`, `Loot Profiles`, `world-data`. It was `Decal Plugins\Daralet` before the rename: `PluginCore.Startup` moves
+  that folder over first thing (`DataFolder.MoveOldFolder`, `FolderMove.Once`, copying instead if a file's held open),
+  unless the new one is already there. Only startup does it, so a test that asks `DataFolder` for a path doesn't move
+  the developer's real folder. Only files a player drops in by hand (`dereth-map.png`, `locations.xml`) are looked for
   next to the dll (`PluginCore.AssemblyDirectory`).
 - **Settings** (`Settings.cs`, what the file holds in `SettingsData.cs`, each window's in `WindowPlacement.cs`) live in
   `settings.json` there, shared by every character:

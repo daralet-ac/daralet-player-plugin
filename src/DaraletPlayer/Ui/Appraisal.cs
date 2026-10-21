@@ -73,7 +73,7 @@ namespace DaraletPlayer.Ui {
             if (!hinted) {
                 hinted = true;
                 PluginCore.Chat("Selected it: press your appraise key for the game's appraisal. "
-                    + "(Plugin appraisal, on the Daralet window's top line, shows it in the plugin instead.)");
+                    + "(Plugin appraisal, on the Daralet Toolkit window's top line, shows it in the plugin instead.)");
             }
         }
 

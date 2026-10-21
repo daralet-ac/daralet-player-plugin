@@ -1,7 +1,7 @@
 # build output
 [Bb]in/
 [Oo]bj/
-# the installer (installer/Daralet.iss)
+# the installer (installer/DaraletToolkit.iss)
 out/
 TestResults/
 

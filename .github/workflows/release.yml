@@ -1,8 +1,8 @@
-# Builds the plugin and its installer (installer/Daralet.iss) and publishes them as a release. Runs when a v* tag is
+# Builds the plugin and its installer (installer/DaraletToolkit.iss) and publishes them as a release. Runs when a v* tag is
 # pushed, which has to match <Version> in src/DaraletPlayer/DaraletPlayer.csproj (v0.4.0 for 0.4.0). Run by hand from
 # the Actions tab (Run workflow) it only builds, and the files are under the run's artifacts, to try before tagging.
 #
-# The release gets Daralet-Setup-<version>.exe and, for anyone installing by hand, Daralet.dll. A release made on GitHub
+# The release gets DaraletToolkit-Setup-<version>.exe and, for anyone installing by hand, DaraletToolkit.dll. A release made on GitHub
 # with a new tag (its tag starts this) keeps its notes and gets the files added; one this makes itself takes its notes
 # from release-notes/<tag>.md, or GitHub's list of merged pull requests without one.
 name: Release
@@ -72,21 +72,21 @@ jobs:
             $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           }
           $nuget = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { "$env:USERPROFILE\.nuget\packages" }
-          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" "/DUBServiceInstaller=$nuget\utilitybelt.service\2.2.12\content\UtilityBelt.Service.Installer.exe" installer\Daralet.iss
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" "/DUBServiceInstaller=$nuget\utilitybelt.service\2.2.12\content\UtilityBelt.Service.Installer.exe" installer\DaraletToolkit.iss
           if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: daralet-${{ steps.version.outputs.version }}
+          name: daralet-toolkit-${{ steps.version.outputs.version }}
           path: |
-            out/Daralet-Setup-${{ steps.version.outputs.version }}.exe
-            bin/Daralet.dll
+            out/DaraletToolkit-Setup-${{ steps.version.outputs.version }}.exe
+            bin/DaraletToolkit.dll
 
       - name: Publish the release
         if: github.ref_type == 'tag'
         shell: pwsh
         run: |
-          $files = "out/Daralet-Setup-${{ steps.version.outputs.version }}.exe", "bin/Daralet.dll"
+          $files = "out/DaraletToolkit-Setup-${{ steps.version.outputs.version }}.exe", "bin/DaraletToolkit.dll"
           # a release made on GitHub with a new tag starts this workflow too: then only add the files, keeping its notes
           gh release view "$env:GITHUB_REF_NAME" *> $null
           if ($LASTEXITCODE -eq 0) {
@@ -94,6 +94,6 @@ jobs:
           } else {
             $notes = "release-notes/$env:GITHUB_REF_NAME.md"
             $notesArgs = if (Test-Path $notes) { @('--notes-file', $notes) } else { @('--generate-notes') }
-            gh release create "$env:GITHUB_REF_NAME" @files --title "Daralet ${{ steps.version.outputs.version }}" @notesArgs --latest
+            gh release create "$env:GITHUB_REF_NAME" @files --title "Daralet Toolkit ${{ steps.version.outputs.version }}" @notesArgs --latest
           }
           if ($LASTEXITCODE -ne 0) { throw "publishing the release failed" }

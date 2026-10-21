@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Runtime.Serialization;
@@ -20,8 +21,14 @@ namespace DaraletPlayer.Feed {
     /// "Latest" on GitHub never means a draft or a pre-release, so the world-data release is never it.
     /// </summary>
     public class UpdateCheck : IDisposable {
-        public const string LatestApiUrl = "https://api.github.com/repos/daralet-ac/daralet-player-plugin/releases/latest";
-        public const string LatestPageUrl = "https://github.com/daralet-ac/daralet-player-plugin/releases/latest";
+        public const string LatestApiUrl = "https://api.github.com/repos/daralet-ac/daralet-toolkit/releases/latest";
+        public const string LatestPageUrl = "https://github.com/daralet-ac/daralet-toolkit/releases/latest";
+
+        // the repo was daralet-player-plugin until the rename to Daralet Toolkit; GitHub sends its old links on
+        private static readonly string[] ReleasePages = {
+            "https://github.com/daralet-ac/daralet-toolkit/releases/",
+            "https://github.com/daralet-ac/daralet-player-plugin/releases/",
+        };
 
         private readonly Func<Task<string>> fetch;
         private readonly HttpClient client;
@@ -48,7 +55,7 @@ namespace DaraletPlayer.Feed {
             if (fetch == null) {
                 client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
                 // GitHub's API refuses requests without a User-Agent
-                client.DefaultRequestHeaders.UserAgent.ParseAdd($"Daralet/{Current.ToString(3)}");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd($"DaraletToolkit/{Current.ToString(3)}");
                 client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
                 fetch = Fetch;
             }
@@ -96,7 +103,7 @@ namespace DaraletPlayer.Feed {
 
             if (latest > Current) {
                 available = new Available { Version = latest, Url = IsReleasePage(release.HtmlUrl) ? release.HtmlUrl : LatestPageUrl };
-                status = $"Daralet {latest.ToString(3)} is out (you have {Current.ToString(3)}).";
+                status = $"Daralet Toolkit {latest.ToString(3)} is out (you have {Current.ToString(3)}).";
             }
             else {
                 status = $"Up to date ({Current.ToString(3)} is the latest).";
@@ -105,7 +112,7 @@ namespace DaraletPlayer.Feed {
 
         /// <summary>Whether a link is one of this plugin's release pages, the only links its chat links may open.</summary>
         public static bool IsReleasePage(string url) {
-            return url != null && url.StartsWith("https://github.com/daralet-ac/daralet-player-plugin/releases/", StringComparison.Ordinal)
+            return url != null && ReleasePages.Any(prefix => url.StartsWith(prefix, StringComparison.Ordinal))
                 && url.IndexOfAny(new[] { ' ', '"', '\'', '<', '>' }) < 0;
         }
 

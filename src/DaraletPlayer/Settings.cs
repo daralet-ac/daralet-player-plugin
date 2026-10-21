@@ -5,7 +5,8 @@ using DaraletPlayer.Feed;
 
 namespace DaraletPlayer {
     /// <summary>
-    /// The plugin's settings, in Documents\Decal Plugins\Daralet\settings.json, shared by every character on this computer.
+    /// The plugin's settings, in Documents\Decal Plugins\Daralet Toolkit\settings.json, shared by every character on this
+    /// computer.
     /// A change is saved two seconds after the last one, so dragging a window doesn't write the file every frame.
     /// </summary>
     public class Settings {

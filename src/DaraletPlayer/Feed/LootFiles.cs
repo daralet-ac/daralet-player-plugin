@@ -6,7 +6,7 @@ using System.Linq;
 namespace DaraletPlayer.Feed {
     /// <summary>
     /// Loot profiles as files, to keep or share: each one's Export text in a .json file named after it, in
-    /// Documents\Decal Plugins\Daralet\Loot Profiles.
+    /// Documents\Decal Plugins\Daralet Toolkit\Loot Profiles.
     /// </summary>
     public static class LootFiles {
         public static string DefaultFolder() {

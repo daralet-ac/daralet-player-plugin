@@ -5,6 +5,7 @@ using System.Linq;
 using System.Numerics;
 using DaraletPlayer.Feed;
 using DaraletPlayer.Map;
+using Decal.Adapter;
 using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
@@ -22,9 +23,12 @@ namespace DaraletPlayer.Ui {
         private readonly SelfPosition self;
         private readonly WorldData worldData;
 
+        /// <summary>The map image both maps draw, loaded at login.</summary>
+        private readonly MapImage mapImage = new MapImage();
+
         /// <summary>The tab's map, and the map window's, each with its own pan and zoom.</summary>
-        private readonly MapView map = new MapView();
-        private readonly MapView windowMap = new MapView();
+        private readonly MapView map;
+        private readonly MapView windowMap;
 
         private readonly FloatingWindow arrowWindow;
         private readonly FloatingWindow mapWindow;
@@ -41,10 +45,12 @@ namespace DaraletPlayer.Ui {
             this.settings = settings;
 
             self = new SelfPosition(feed);
+            map = new MapView(mapImage);
+            windowMap = new MapView(mapImage);
 
             var files = new[] { Locations.FileName, MapView.ImageFileName };
             worldData = new WorldData(DataFolder.For("world-data"), files, BuiltInWorldFile, CheckWorldFile);
-            MapView.DownloadedImage = worldData.PathFor(MapView.ImageFileName);
+            MapImage.DownloadedImage = worldData.PathFor(MapView.ImageFileName);
             LoadLocations();
             worldDataVersion = worldData.Version;
 
@@ -62,6 +68,26 @@ namespace DaraletPlayer.Ui {
             // a square 404 x 404 map, plus the title bar, button row and padding
             mapWindow = new FloatingWindow("map", "Map", settings, new Vector2(40, 80), RenderMapWindow,
                 visibleByDefault: false, defaultSize: new Vector2(420, 456));
+
+            CoreManager.Current.RenderFrame += Core_RenderFrame;
+        }
+
+        /// <summary>
+        /// Every frame from login, whether or not a map is showing: loads the map image a tile a frame, so it's ready before
+        /// the World tab or the Map window is first opened, and picks up a new one World data downloaded.
+        /// </summary>
+        private void Core_RenderFrame(object sender, EventArgs e) {
+            try {
+                if (CoreManager.Current.CharacterFilter.LoginStatus != 3) {
+                    return;
+                }
+
+                ApplyWorldData();
+                mapImage.Step();
+            }
+            catch (Exception ex) {
+                PluginCore.Log(ex);
+            }
         }
 
         private void LoadLocations() {
@@ -99,9 +125,8 @@ namespace DaraletPlayer.Ui {
             }
 
             worldDataVersion = version;
-            MapView.DownloadedImage = worldData.PathFor(MapView.ImageFileName);
-            map.Reload();
-            windowMap.Reload();
+            MapImage.DownloadedImage = worldData.PathFor(MapView.ImageFileName);
+            mapImage.Reload();
 
             LoadLocations();
             highlight = null;
@@ -275,7 +300,7 @@ namespace DaraletPlayer.Ui {
             ImGui.EndDisabled();
             Widgets.Tip($"Downloads the newest map and places (locations.xml) if they've changed. This happens by itself "
                 + $"each time the plugin starts. They're kept in {worldData.Folder}. A dereth-map.png or locations.xml next "
-                + "to Daralet.dll is still used instead.");
+                + "to DaraletToolkit.dll is still used instead.");
 
             ImGui.EndTable();
         }
@@ -453,14 +478,14 @@ namespace DaraletPlayer.Ui {
         }
 
         public void Dispose() {
+            CoreManager.Current.RenderFrame -= Core_RenderFrame;
             map.DestinationChosen -= SetDestination;
             map.Panned -= Map_Panned;
-            map.Dispose();
             arrowWindow.Dispose();
             windowMap.DestinationChosen -= SetDestination;
             windowMap.Panned -= WindowMap_Panned;
             mapWindow.Dispose();
-            windowMap.Dispose();
+            mapImage.Dispose();
             worldData.Dispose();
         }
     }
