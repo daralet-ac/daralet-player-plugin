@@ -95,12 +95,18 @@ namespace DaraletPlayer.Feed {
             }
 
             if (latest > Current) {
-                available = new Available { Version = latest, Url = string.IsNullOrEmpty(release.HtmlUrl) ? LatestPageUrl : release.HtmlUrl };
+                available = new Available { Version = latest, Url = IsReleasePage(release.HtmlUrl) ? release.HtmlUrl : LatestPageUrl };
                 status = $"Daralet {latest.ToString(3)} is out (you have {Current.ToString(3)}).";
             }
             else {
                 status = $"Up to date ({Current.ToString(3)} is the latest).";
             }
+        }
+
+        /// <summary>Whether a link is one of this plugin's release pages, the only links its chat links may open.</summary>
+        public static bool IsReleasePage(string url) {
+            return url != null && url.StartsWith("https://github.com/daralet-ac/daralet-player-plugin/releases/", StringComparison.Ordinal)
+                && url.IndexOfAny(new[] { ' ', '"', '\'', '<', '>' }) < 0;
         }
 
         /// <summary>"v0.5.0" or "0.5.0" (anything after a "-" ignored) as a four-part version, or null.</summary>

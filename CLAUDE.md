@@ -438,8 +438,13 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   for `daralet-ac/daralet-player-plugin`'s latest release (`releases/latest`, which never means a draft or a pre-release,
   so not `world-data`), and compares its tag with the assembly's version (both made four-part first: `Version` puts 0.5.0
   before 0.5.0.0). A newer one gets a line in chat once the character is logged in (`PluginCore.AnnounceUpdate`; a line
-  added before login never shows) and an **Update** button on the window's top line that opens the release page. It only
-  tells: the player runs the new installer. Unauthenticated, GitHub allows 60 requests an hour from one address.
+  added before login never shows), with a link to the release page, and an **Update** button on the window's top line that
+  opens the same page. It only tells: the player runs the new installer. Unauthenticated, GitHub allows 60 requests an
+  hour from one address. Chat links are UtilityBelt's kind: `<Tell:IIDString:id:openurl|url>text</Tell>` in
+  `AddChatText`, whose click comes back as `ChatNameClicked` with that id (`PluginCore.ChatLinkId`, a fixed number).
+  Anyone can put a link with that id in a tell, so a click only opens this plugin's release pages
+  (`UpdateCheck.IsReleasePage`). No Decal plugin known (October 2026) downloads and installs its own updates; UtilityBelt's
+  is a notice like this one, and the loader updating the plugin itself was left for later.
 - **Everything the plugin writes** goes in `Documents\Decal Plugins\Daralet` (`DataFolder`): `settings.json`, `log.txt`,
   `Loot Profiles`, `world-data`. Only files a player drops in by hand (`dereth-map.png`, `locations.xml`) are looked for
   next to the dll (`PluginCore.AssemblyDirectory`).

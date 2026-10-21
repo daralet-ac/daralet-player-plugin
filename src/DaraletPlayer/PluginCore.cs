@@ -16,6 +16,12 @@ namespace DaraletPlayer {
         // System.IO.Path is written out in full in here: PluginBase has a Path property of its own
         private static string assemblyDirectory;
 
+        /// <summary>
+        /// The id in the plugin's own chat links (&lt;Tell:IIDString:id:...&gt;), which Decal hands to ChatNameClicked: any fixed
+        /// number other plugins don't use. UtilityBelt's are a hash of its name.
+        /// </summary>
+        private const int ChatLinkId = 0x44617261;
+
         private Settings settings;
         private PlayerFeed feed;
         private PlayerHud hud;
@@ -55,6 +61,7 @@ namespace DaraletPlayer {
 
                 CoreManager.Current.CommandLineText += Core_CommandLineText;
                 CoreManager.Current.RenderFrame += Core_RenderFrame;
+                CoreManager.Current.ChatNameClicked += Core_ChatNameClicked;
             }
             catch (Exception ex) {
                 Log(ex);
@@ -69,6 +76,7 @@ namespace DaraletPlayer {
             ShutdownStep(() => {
                 CoreManager.Current.CommandLineText -= Core_CommandLineText;
                 CoreManager.Current.RenderFrame -= Core_RenderFrame;
+                CoreManager.Current.ChatNameClicked -= Core_ChatNameClicked;
             });
             ShutdownStep(() => hud?.Dispose());
             ShutdownStep(() => feed?.Dispose());
@@ -122,7 +130,37 @@ namespace DaraletPlayer {
             }
 
             updateAnnounced = true;
-            Log($"Daralet {newer.Version.ToString(3)} is out (you have {updates.Current.ToString(3)}). Click Update at the top of the /dap window for its download page, then close the game and run its installer.");
+            var text = $"Daralet {newer.Version.ToString(3)} is out (you have {updates.Current.ToString(3)}).";
+            LogFile(text);
+
+            try {
+                // a link in chat, as UtilityBelt's update notice has: clicking it comes back as Core_ChatNameClicked
+                CoreManager.Current.Actions.AddChatText($"[Daralet] {text} <Tell:IIDString:{ChatLinkId}:openurl|{newer.Url}>Download it</Tell>, then close the game and run its installer. The Update button at the top of the /dap window opens the same page.", 1);
+            }
+            catch {
+            }
+        }
+
+        /// <summary>
+        /// A click on one of the plugin's chat links. Only release pages of this plugin are opened: anyone can put a link
+        /// with this id in a tell.
+        /// </summary>
+        private void Core_ChatNameClicked(object sender, ChatClickInterceptEventArgs e) {
+            try {
+                if (e.Id != ChatLinkId) {
+                    return;
+                }
+
+                e.Eat = true;
+                var parts = (e.Text ?? "").Split(new[] { '|' }, 2);
+
+                if (parts.Length == 2 && parts[0] == "openurl" && UpdateCheck.IsReleasePage(parts[1])) {
+                    System.Diagnostics.Process.Start(parts[1]);
+                }
+            }
+            catch (Exception ex) {
+                Log(ex);
+            }
         }
 
         /// <summary>

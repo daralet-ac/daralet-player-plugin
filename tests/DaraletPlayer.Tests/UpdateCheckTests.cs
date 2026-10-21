@@ -56,6 +56,17 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
+        public void ChatLinksOnlyOpenThisPluginsReleasePages() {
+            Assert.IsTrue(UpdateCheck.IsReleasePage("https://github.com/daralet-ac/daralet-player-plugin/releases/tag/v0.6.0"));
+            Assert.IsTrue(UpdateCheck.IsReleasePage(UpdateCheck.LatestPageUrl));
+            Assert.IsFalse(UpdateCheck.IsReleasePage("https://github.com/daralet-ac/daralet-player-plugin.evil.com/releases/"));
+            Assert.IsFalse(UpdateCheck.IsReleasePage("https://example.com/"));
+            Assert.IsFalse(UpdateCheck.IsReleasePage("C:\\Windows\\System32\\calc.exe"));
+            Assert.IsFalse(UpdateCheck.IsReleasePage("https://github.com/daralet-ac/daralet-player-plugin/releases/x\" -args"));
+            Assert.IsFalse(UpdateCheck.IsReleasePage(null));
+        }
+
+        [TestMethod]
         public void NoReleaseOrNoVersionOffersNothing() {
             var none = Check("0.5.0.0", null);
             none.Check().Wait();
