@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using DaraletPlayer.Feed;
 using ImGuiNET;
+using static DaraletPlayer.Ui.Form;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
@@ -71,7 +72,7 @@ namespace DaraletPlayer.Ui {
                 if (ImGui.Checkbox("##shown", ref visible)) {
                     window.Window.Visible = visible;
                 }
-                Widgets.Tip("Shown on screen. A hidden bar's hotkeys do nothing.");
+                Widgets.Tip("Enabled: shown on screen. A hidden bar's hotkeys do nothing.");
 
                 ImGui.SameLine();
                 ImGui.BeginGroup();
@@ -179,7 +180,7 @@ namespace DaraletPlayer.Ui {
 
             var visible = window.Window.Visible;
 
-            if (ImGui.Checkbox("Shown", ref visible)) {
+            if (ImGui.Checkbox("Enabled", ref visible)) {
                 window.Window.Visible = visible;
             }
             Widgets.Tip("Shows the bar on screen. A hidden bar's hotkeys do nothing.");

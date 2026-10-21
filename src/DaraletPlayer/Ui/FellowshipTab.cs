@@ -82,12 +82,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            window.RenderControls("Show the fellowship window",
-                "A small window with each member's health, stamina and mana that stays on screen while you play. "
-                + "Click a name in it to select that member.");
-            RenderWindowOptions();
-
-            ImGui.Separator();
+            RenderSettings();
+            ImGui.Spacing();
 
             var fellowship = feed.Fellowship;
 
@@ -106,21 +102,31 @@ namespace DaraletPlayer.Ui {
             RenderTable(fellowship);
         }
 
-        private void RenderWindowOptions() {
+        private void RenderSettings() {
+            if (!Form.SettingsHeader("fellowship-settings", "The fellowship window: whether it's on screen, its size and "
+                + "background, and which vitals it shows.")) {
+                return;
+            }
+
+            Form.Section("Fellowship window");
+            window.RenderControls("A small window with each member's health, stamina and mana that stays on screen while "
+                + "you play. Click a name in it to select that member.");
+
+            Form.Section("Vitals shown");
             var data = settings.Data;
+            var first = true;
 
-            if (ImGui.Checkbox("Stamina##fellowship", ref data.FellowshipShowStamina)) {
+            if (Form.FlowCheck(ref first, "Stamina##fellowship", ref data.FellowshipShowStamina,
+                "Shows each member's stamina in the fellowship window.")) {
                 settings.Changed();
             }
-            Widgets.Tip("Shows each member's stamina in the fellowship window.");
 
-            ImGui.SameLine();
-
-            if (ImGui.Checkbox("Mana##fellowship", ref data.FellowshipShowMana)) {
+            if (Form.FlowCheck(ref first, "Mana##fellowship", ref data.FellowshipShowMana,
+                "Shows each member's mana in the fellowship window.")) {
                 settings.Changed();
             }
-            Widgets.Tip("Shows each member's mana in the fellowship window. "
-                + "Right-click a member, here or in the window, to choose their health, stamina and mana bars for them alone.");
+
+            Widgets.TextDisabled("Right-click a member, here or in the window, to pick their bars for them alone.");
         }
 
         private static string Describe(FellowshipInfo fellowship) {

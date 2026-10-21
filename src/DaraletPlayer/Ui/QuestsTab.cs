@@ -226,7 +226,7 @@ namespace DaraletPlayer.Ui {
                 feed.SendCommand($"@playerui {PlayerFeed.KindAbandon} {quest.Id}");
                 abandoning = 0;
             }
-            Widgets.Tip($"Sends @playerui {PlayerFeed.KindAbandon} {quest.Id}.");
+            Widgets.Tip("Drops the quest, as the Contracts panel's Abandon does.");
             ImGui.SameLine();
 
             if (ImGui.Button("No")) {

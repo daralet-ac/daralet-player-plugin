@@ -66,6 +66,7 @@ namespace DaraletPlayer.Ui {
             RenderLooterControls();
             ImGui.Separator();
             RenderListControls();
+            ImGui.Spacing();
 
             if (!ImGui.BeginTabBar("loot-tabs")) {
                 return;
@@ -95,8 +96,9 @@ namespace DaraletPlayer.Ui {
             ImGui.SameLine();
             RenderModePicker(data);
 
-            ImGui.SameLine();
-            corpseWindow.RenderControls("Corpse window", "Whether the Corpse window opens at all. When on, it opens by itself when you open a corpse or chest it has something to show for (with Loot window on, every one) and goes when that closes. Unticked, it never opens.");
+            if (data.Enabled) {
+                Widgets.TextColored(Colors.Warning, "If VirindiTank's looter is on too, turn one of them off.");
+            }
 
             if (settings.Data.LootWindow && !corpseWindow.Visible) {
                 Widgets.TextColored(Colors.Warning, "Loot window is on but the Corpse window is off: corpses and chests open with no window at all.");
@@ -108,11 +110,24 @@ namespace DaraletPlayer.Ui {
                 Widgets.Tip("Turns the Corpse window on, so it opens with each corpse or chest.");
             }
 
-            RenderLootWindowCheckbox();
+            RenderSettings();
+        }
 
-            if (data.Enabled) {
-                Widgets.TextColored(Colors.Warning, "If VirindiTank's looter is on too, turn one of them off.");
+        private void RenderSettings() {
+            if (!Form.SettingsHeader("loot-settings", "The Corpse window: whether it opens, its size and background, and "
+                + "whether it takes the place of the game's corpse and chest window.")) {
+                return;
             }
+
+            Form.Section("Corpse window");
+            corpseWindow.RenderControls("Whether the Corpse window opens at all. When on, it opens by itself when you open "
+                + "a corpse or chest it has something to show for (with Loot window on, every one) and goes when that "
+                + "closes. Unticked, it never opens.");
+
+            var first = true;
+            Form.Flow(ref first, Form.CheckWidth("Loot window"));
+            RenderLootWindowCheckbox();
+            ImGui.Spacing();
         }
 
         private void RenderModePicker(LootData data) {
@@ -136,7 +151,7 @@ namespace DaraletPlayer.Ui {
         private void RenderLootWindowCheckbox() {
             var supported = feed.Supports(PlayerFeed.KindLootWindow);
             var tip = supported
-                ? "Opening a corpse or a chest shows everything in it in the Corpse window instead of the game's window (the server leaves the game's out: @playerui lootwindow on), with what your rules match marked. Click an item to loot it. Closing the window closes the corpse, and walking away closes both. Works with the looter on or off."
+                ? "Opening a corpse or a chest shows everything in it in the Corpse window instead of the game's window (the server leaves the game's out), with what your rules match marked. Click an item to loot it. Closing the window closes the corpse, and walking away closes both. Works with the looter on or off."
                 : "This server is too old for the plugin's own loot window.";
 
             ImGui.BeginDisabled(!supported);
@@ -156,13 +171,38 @@ namespace DaraletPlayer.Ui {
             ImGui.EndDisabled();
         }
 
+        /// <summary>The loot profile in use, and making, renaming and sharing profiles, as a form.</summary>
         private void RenderListControls() {
             var data = Data;
             var active = looter.ActiveList;
 
-            Widgets.Text("Loot Profile");
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(200);
+            if (Form.BeginForm("loot-profile")) {
+                Form.Label("Loot profile", $"The loot profile {Me} uses: a named set of rules. Each character picks their "
+                    + "own; swapping takes effect on the next corpse.");
+                RenderListPicker(data, active);
+                RenderListButtons(data, active);
+
+                Form.Label("Name", "This loot profile's name.");
+                RenderRename(active);
+
+                Form.Label("Share", "Loot profiles as text or files, to keep or swap with other players.");
+                RenderShareButtons(active);
+
+                // in the table, where From file opened it: a table adds to the ID stack popups are found by
+                RenderProfileFiles();
+                ImGui.EndTable();
+            }
+
+            if (importProblem != null) {
+                Widgets.TextColored(Colors.Warning, importProblem);
+            }
+            else if (listMessage != null && DateTime.UtcNow - listMessageAt < ListMessageFor) {
+                Widgets.TextColored(Colors.Good, listMessage);
+            }
+        }
+
+        private void RenderListPicker(LootData data, LootList active) {
+            ImGui.SetNextItemWidth(Form.ControlWidth);
 
             if (ImGui.BeginCombo("##loot-list", active.Name)) {
                 foreach (var list in data.Lists) {
@@ -176,93 +216,81 @@ namespace DaraletPlayer.Ui {
                 ImGui.EndCombo();
             }
             Widgets.Tip($"The loot profile {Me} uses: a named set of rules. Each character picks their own; swapping takes effect on the next corpse.");
-
-            RenderListButtons(data, active);
-            RenderProfileFiles();
-
-            if (importProblem != null) {
-                Widgets.TextColored(Colors.Warning, importProblem);
-            }
-            else if (listMessage != null && DateTime.UtcNow - listMessageAt < ListMessageFor) {
-                Widgets.TextColored(Colors.Good, listMessage);
-            }
-
-            RenderRename(active);
         }
 
+        /// <summary>New, Example, Copy and Delete, after the picker, wrapping when the window is narrow.</summary>
         private void RenderListButtons(LootData data, LootList active) {
-            var folder = LootFiles.DefaultFolder();
+            var first = false;
 
-            ImGui.SameLine();
-            if (ImGui.SmallButton("New")) {
+            if (Form.FlowSmallButton(ref first, "New", "Makes an empty loot profile and uses it.")) {
                 AddList(new LootList { Name = data.UniqueName("My loot") });
             }
-            Widgets.Tip("Makes an empty loot profile and uses it.");
 
-            ImGui.SameLine();
-            if (ImGui.SmallButton("Example")) {
+            if (Form.FlowSmallButton(ref first, "Example", "Adds the Example Loot Profile and uses it: rules showing off what "
+                + "loot rules can do (roll quality, marks, unlearned scrolls, each outcome), to copy from or change.")) {
                 var example = ExampleLoot.Make();
                 example.Name = data.UniqueName(example.Name);
                 AddList(example);
                 ShowListMessage($"Added \"{example.Name}\", and switched to it. Click its rules to see how each is made.");
             }
-            Widgets.Tip("Adds the Example Loot Profile and uses it: rules showing off what loot rules can do (roll quality, marks, unlearned scrolls, each outcome), to copy from or change.");
 
-            ImGui.SameLine();
-            if (ImGui.SmallButton("Copy")) {
+            if (Form.FlowSmallButton(ref first, "Copy", "Makes a copy of this loot profile and uses it, to change without "
+                + "losing the original.")) {
                 var copy = Loot.Import(Loot.Export(active), out _);
                 copy.Name = data.UniqueName(active.Name);
                 AddList(copy);
             }
-            Widgets.Tip("Makes a copy of this loot profile and uses it, to change without losing the original.");
 
-            ImGui.SameLine();
             ImGui.BeginDisabled(data.Lists.Count < 2);
-            if (ImGui.SmallButton("Delete")) {
+            var delete = Form.FlowSmallButton(ref first, "Delete", "Deletes this loot profile. The last one can't be "
+                + "deleted. Characters that used it go back to the first.");
+            ImGui.EndDisabled();
+
+            if (delete) {
                 data.Lists.Remove(active);
                 settings.Changed();
                 selectedRule = 0;
             }
-            ImGui.EndDisabled();
-            Widgets.Tip("Deletes this loot profile. The last one can't be deleted. Characters that used it go back to the first.");
+        }
 
-            ImGui.SameLine();
-            if (ImGui.SmallButton("Export")) {
+        /// <summary>Export, To file, Import and From file.</summary>
+        private void RenderShareButtons(LootList active) {
+            var folder = LootFiles.DefaultFolder();
+            var first = true;
+
+            if (Form.FlowSmallButton(ref first, "Export", "Copies this loot profile as text, to paste somewhere or give to "
+                + "someone.")) {
                 ImGui.SetClipboardText(Loot.Export(active));
                 importProblem = null;
                 ShowListMessage($"Copied \"{active.Name}\" ({Words.Count(active.Rules.Count, "rule")}) to the clipboard: paste it anywhere to share it.");
             }
-            Widgets.Tip("Copies this loot profile as text, to paste somewhere or give to someone.");
 
-            ImGui.SameLine();
-            if (ImGui.SmallButton("To file")) {
+            if (Form.FlowSmallButton(ref first, "To file", $"Saves this loot profile as a file, named after it, in {folder}, "
+                + "to keep or send to someone. A file of the same name is replaced.")) {
                 SaveToFile(active, folder);
             }
-            Widgets.Tip($"Saves this loot profile as a file, named after it, in {folder}, to keep or send to someone. A file of the same name is replaced.");
 
-            ImGui.SameLine();
-            if (ImGui.SmallButton("Import")) {
+            if (Form.FlowSmallButton(ref first, "Import", "Adds a loot profile from text you've copied (an Export).")) {
                 var imported = Loot.Import(ImGui.GetClipboardText(), out importProblem);
 
                 if (imported != null) {
                     AddImported(imported, "");
                 }
             }
-            Widgets.Tip("Adds a loot profile from text you've copied (an Export).");
 
-            ImGui.SameLine();
-            if (ImGui.SmallButton("From file")) {
+            if (Form.FlowSmallButton(ref first, "From file", $"Adds a loot profile from a file in {folder} (saved with To "
+                + "file, or put there by you).")) {
                 profileFiles = LootFiles.List(folder);
                 ImGui.OpenPopup("loot-profile-files");
             }
-            Widgets.Tip($"Adds a loot profile from a file in {folder} (saved with To file, or put there by you).");
         }
 
         private void RenderRename(LootList active) {
-            ImGui.SetNextItemWidth(200);
+            ImGui.SetNextItemWidth(Form.ControlWidth);
             listName = listName.Length == 0 ? active.Name : listName;
 
             var entered = ImGui.InputText("##loot-list-name", ref listName, 40, ImGuiInputTextFlags.EnterReturnsTrue);
+            Widgets.Tip("Type a new name, then press Enter or Rename.");
 
             if (entered && listName.Trim().Length > 0) {
                 RenameActive(listName.Trim());

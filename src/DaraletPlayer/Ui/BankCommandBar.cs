@@ -204,7 +204,8 @@ namespace DaraletPlayer.Ui {
         /// it shows everything that came back (a search's whole list, say).
         /// </summary>
         private void RenderReply() {
-            if (feed.LastCommand == null) {
+            // the plugin's own requests to the server aren't the player's commands
+            if (feed.LastCommand == null || feed.LastCommand.StartsWith("@playerui", StringComparison.Ordinal)) {
                 return;
             }
 

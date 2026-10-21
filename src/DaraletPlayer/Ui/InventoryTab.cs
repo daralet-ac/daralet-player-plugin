@@ -81,8 +81,10 @@ namespace DaraletPlayer.Ui {
 
             if (banking) {
                 RenderStatus(bank);
-                RenderWindowToggle();
             }
+
+            RenderSettings(banking);
+            ImGui.Spacing();
 
             if (!ImGui.BeginTabBar("bank-tabs")) {
                 return;
@@ -104,8 +106,6 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RenderCarriedTab() {
-            carriedWindow.RenderControls("Inventory window", "Your packs in a window of their own, to keep on screen while "
-                + "you play. Drag its corner to size it. Retail, on its top line, lays it out like the game's inventory.");
             commands.Render(bankView: false);
             carriedBrowser.Render();
         }
@@ -147,13 +147,47 @@ namespace DaraletPlayer.Ui {
             Widgets.TextDisabled($"and {bank.Notes:N0} in {Words.Count(bank.NoteCount, "trade note")}");
         }
 
+        private void RenderSettings(bool banking) {
+            if (!Form.SettingsHeader("inventory-settings", "The Inventory window and the Bank window: whether they're on "
+                + "screen, their size and background, and how the Inventory window is laid out.")) {
+                return;
+            }
+
+            if (banking) {
+                Form.Columns("inventory-settings-grid", RenderCarriedWindowSettings, RenderBankWindowSettings);
+            }
+            else {
+                Form.Columns("inventory-settings-grid", RenderCarriedWindowSettings);
+            }
+
+            ImGui.Spacing();
+        }
+
+        private void RenderCarriedWindowSettings() {
+            Form.Section("Inventory window");
+            carriedWindow.RenderControls("Your packs in a window of their own, to keep on screen while you play. Drag its "
+                + "corner to size it.");
+
+            var first = true;
+
+            if (Form.FlowCheck(ref first, "Retail##inventory-settings", ref settings.Data.CarriedRetail, RetailTip)) {
+                settings.Changed();
+            }
+        }
+
+        private void RenderBankWindowSettings() {
+            Form.Section("Bank window");
+            RenderWindowToggle();
+            bankWindow.RenderControls(null, showToggle: false);
+        }
+
         private void RenderWindowToggle() {
             ImGui.BeginDisabled(!feed.Supports(PlayerFeed.KindBankWindow));
 
             var tip = feed.Supports(PlayerFeed.KindBankWindow)
-                ? "Opening a bank opens this plugin's bank window instead of the game's (the server leaves the game's out: "
-                    + "@playerui bankwindow on). Closing the window closes the bank, and walking away closes both. "
-                    + "Right-click the window to lock or resize its text."
+                ? "Opening a bank opens this plugin's bank window instead of the game's (the server leaves the game's "
+                    + "out). Closing the window closes the bank, and walking away closes both. "
+                    + "Its size and background are below."
                 : "This server is too old for the plugin's own bank window.";
             var confirmOn = Windows.ConfirmOn("bank", "bank window");
 
@@ -209,13 +243,15 @@ namespace DaraletPlayer.Ui {
 
         // ---- the Inventory window ----
 
+        private const string RetailTip = "Lays the Inventory window out like the game's inventory: what you're wearing at "
+            + "the top, the chosen pack's items as icons below it, and your packs down the right, icons only (hover one for "
+            + "its name). Off, it's the Carried tab's view, with the /bank buttons.";
+
         private void RenderCarriedWindow() {
             if (ImGui.Checkbox("Retail", ref settings.Data.CarriedRetail)) {
                 settings.Changed();
             }
-            Widgets.Tip("Lays the window out like the game's inventory: what you're wearing at the top, the chosen pack's "
-                + "items as icons below it, and your packs down the right, icons only (hover one for its name). "
-                + "Off, it's the Carried tab's view, with the /bank buttons.");
+            Widgets.Tip(RetailTip);
 
             ImGui.SameLine();
             RenderResetWidth();
@@ -261,7 +297,7 @@ namespace DaraletPlayer.Ui {
                 settings.Changed();
             }
             Widgets.Tip("Marks the items your active loot profile's rules would mark, with each rule's highlight and icon "
-                + "(set in the Loot tab). The server describes every item to check them (@playerui describe), so full "
+                + "(set in the Loot tab). The server describes every item to check them, so full "
                 + "packs take a little while to fill in.");
 
             ImGui.SameLine();

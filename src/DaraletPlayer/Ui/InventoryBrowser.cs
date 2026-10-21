@@ -283,7 +283,7 @@ namespace DaraletPlayer.Ui {
                 settings.Changed();
                 SnapshotSoon();
             }
-            Widgets.Tip("Marks the items your active loot profile's rules would mark, with each rule's highlight and icon (set in the Loot tab). The server describes every item listed to check them (@playerui describe), so a full bank takes a little while to fill in.");
+            Widgets.Tip("Marks the items your active loot profile's rules would mark, with each rule's highlight and icon (set in the Loot tab). The server describes every item listed to check them, so a full bank takes a little while to fill in.");
         }
 
         /// <summary>The items as icons, as many to a row as fit, then the pack's empty slots.</summary>

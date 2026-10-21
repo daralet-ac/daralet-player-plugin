@@ -39,7 +39,7 @@ namespace DaraletPlayer.Ui {
             }
 
             Widgets.TextDisabled("Totals from your gear and your buffs, as the Combat Focus appraisal shows them.");
-            Widgets.Tip("Asked for every two seconds while this tab is open (@playerui character).");
+            Widgets.Tip("Updated every two seconds while this tab is open.");
 
             if (!ImGui.BeginChild("character-stats", System.Numerics.Vector2.Zero, false)) {
                 ImGui.EndChild();

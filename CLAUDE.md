@@ -363,7 +363,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   to 0, F1 to F12). All slot text (hotkeys, counts, cooldown seconds, uses left) is
   `ItemIcons.DrawLabel`: ImGui stretches one small font texture, which blurs and dims bigger text, so each label is drawn
   by GDI+ (Segoe UI bold, white, black outline, cut close round its letters) into a texture at exactly its pixel size,
-  tinted to its colour, and kept (400 at most); ImGui's text if one can't be made. Forms are two-column tables (`BeginForm`, `Label`), and rows of checkboxes and pickers wrap to the
+  tinted to its colour, and kept (400 at most); ImGui's text if one can't be made. Forms are two-column tables (`Form.BeginForm`, `Form.Label`), and rows of checkboxes and pickers wrap to the
   width (`Flow`) rather than running off the side.
 
 - **Character tab** (`Ui/CharacterTab.cs`): everything the Combat Focus appraisal shows under Character Stats (gear mods,
@@ -559,6 +559,14 @@ checks (greying out market buttons away from a broker, say) are only there to be
   Fields go at the top of the class, and lines stay under about 125 characters: long tooltips are joined with `+`.
 - Small shared pieces live in one place: `Widgets` (text, tips, `Button`, `OutlineIfHovered`, bars), `Colors`,
   `PluginCore.Chat` for a line in chat, `Words.Count` for "3 rules".
+- **Settings pages** are built like the Hotbars page, from `Form` (`Ui/Form.cs`): a `Section` heading per group, forms
+  of labels and lined-up controls (`BeginForm`, `Label`, `ControlWidth`), and rows of checkboxes and buttons that wrap
+  (`Flow`, `FlowCheck`, `FlowSmallButton`). A tab whose content comes first keeps its settings folded under a
+  **Settings** header (`Form.SettingsHeader`, closed to start), with a section per floating window
+  (`FloatingWindow.RenderControls`: Enabled, Only when needed, Locked, Reset position, then Size and Background). A popup
+  opened from inside a form must be drawn inside it too: a table adds to the ID stack.
+  Sections go two abreast with `Form.Columns` (the World, Target and Inventory tabs' Settings) when the tab is wide enough, one under another
+  when not; `Flow` and `ControlWidth` keep to the column they're in.
 - Code comments explain why, in plain words; tooltips (`Widgets.Tip`) on every control say what it does and which command it
   sends.
 - The user commits and pushes with GitHub Desktop: leave changes staged (`git add`), don't commit. New branches with

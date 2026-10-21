@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using DaraletPlayer.Feed;
 using ImGuiNET;
+using static DaraletPlayer.Ui.Form;
 
 namespace DaraletPlayer.Ui {
     /// <summary>The Hotbars page's Keys tab: a key for each of the bar's places, quick sets for a row, and page keys.</summary>

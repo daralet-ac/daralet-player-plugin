@@ -172,48 +172,63 @@ namespace DaraletPlayer.Ui {
             pendingWidth = Math.Max(100, width);
         }
 
-        /// <summary>The controls its tab shows: shown, Only when needed, lock, reset position, size and background.</summary>
-        public void RenderControls(string label, string tip) {
-            var visible = Visible;
+        /// <summary>
+        /// The window's settings, for its tab's Settings, under a <see cref="Form.Section"/> named for it: Enabled, Only when
+        /// needed, Locked and Reset position in a row, then its size and background in a form. A window its tab opens and
+        /// closes itself has no Enabled (showToggle false).
+        /// </summary>
+        public void RenderControls(string tip, bool showToggle = true) {
+            var first = true;
 
-            if (ImGui.Checkbox($"{label}##{id}-visible", ref visible)) {
-                Visible = visible;
+            if (showToggle) {
+                var visible = Visible;
+
+                if (Form.FlowCheck(ref first, $"Enabled##{id}-visible", ref visible, tip)) {
+                    Visible = visible;
+                }
             }
-            Widgets.Tip(tip);
 
             if (inUse != null && !alwaysOnlyInUse) {
-                ImGui.SameLine();
                 var onlyInUse = Placement.OnlyInUse;
 
-                if (ImGui.Checkbox($"Only when needed##{id}-in-use", ref onlyInUse)) {
+                if (Form.FlowCheck(ref first, $"Only when needed##{id}-in-use", ref onlyInUse,
+                    "Shows the window only while it has something to show, and hides it the rest of the time, instead of "
+                    + "leaving it on screen saying there's nothing.")) {
                     Placement.OnlyInUse = onlyInUse;
                     settings.Changed();
                 }
-                Widgets.Tip("Shows the window only while it has something to show, and hides it the rest of the time, instead of leaving it on screen saying there's nothing.");
             }
 
-            ImGui.SameLine();
             var locked = Locked;
 
-            if (ImGui.Checkbox($"Lock##{id}-locked", ref locked)) {
+            if (Form.FlowCheck(ref first, $"Locked##{id}-locked", ref locked, "A locked window has no title bar and can't "
+                + "be dragged. Unlock it to move it. You can also right-click the window to lock or unlock it.")) {
                 Locked = locked;
             }
-            Widgets.Tip("A locked window has no title bar and can't be dragged. Unlock it to move it. You can also right-click the window to lock or unlock it.");
 
-            ImGui.SameLine();
-
-            if (ImGui.SmallButton($"Reset position##{id}-reset")) {
+            if (Form.FlowButton(ref first, $"Reset position##{id}-reset",
+                "Moves the window back to where it starts out, in case it's off screen.")) {
                 ResetPosition();
             }
-            Widgets.Tip("Moves the window back to where it starts out, in case it's off screen.");
 
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(110);
-            ScaleSlider($"Size##{id}-scale");
+            if (!Form.BeginForm($"{id}-window-form")) {
+                return;
+            }
 
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(110);
-            BackgroundSlider($"Background##{id}-background");
+            Form.Label("Size", "How big the window's text and bars are drawn.");
+
+            // leaving room for its Reset button in a narrow column
+            var style = ImGui.GetStyle();
+            var reset = ImGui.CalcTextSize("Reset").X + style.FramePadding.X * 2 + style.ItemSpacing.X;
+            var room = ImGui.GetContentRegionAvail().X - reset;
+            ImGui.SetNextItemWidth(Math.Max(ImGui.GetFontSize() * 4, Math.Min(Form.ControlWidth, room)));
+            ScaleSlider($"##{id}-scale");
+
+            Form.Label("Background", "How solid the window's background is.");
+            ImGui.SetNextItemWidth(Form.ControlWidth);
+            BackgroundSlider($"##{id}-background");
+
+            ImGui.EndTable();
         }
 
         public void ScaleSlider(string label) {

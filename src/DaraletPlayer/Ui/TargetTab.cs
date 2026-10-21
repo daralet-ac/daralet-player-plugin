@@ -47,7 +47,7 @@ namespace DaraletPlayer.Ui {
             }
 
             RenderControls();
-            ImGui.Separator();
+            ImGui.Spacing();
 
             var selected = tracker.Selected;
 
@@ -86,37 +86,55 @@ namespace DaraletPlayer.Ui {
             ImGui.EndDisabled();
             Widgets.Tip("Stops watching the tracked creature.");
 
-            selectedWindow.RenderControls("Target window", "A small window showing whatever you have selected, that stays on screen while you play.");
-            trackedWindow.RenderControls("Tracked target window", "A small window showing the tracked creature, wherever your selection is.");
+            RenderSettings();
+        }
 
+        private void RenderSettings() {
+            if (!Form.SettingsHeader("target-settings", "The target windows: whether they're on screen, their size and "
+                + "background, and what they show.")) {
+                return;
+            }
+
+            Form.Columns("target-settings-grid", RenderTargetWindowSettings, RenderTrackedWindowSettings,
+                RenderShownSettings);
+            ImGui.Spacing();
+        }
+
+        private void RenderTargetWindowSettings() {
+            Form.Section("Target window");
+            selectedWindow.RenderControls("A small window showing whatever you have selected, that stays on screen while "
+                + "you play.");
+        }
+
+        private void RenderTrackedWindowSettings() {
+            Form.Section("Tracked target window");
+            trackedWindow.RenderControls("A small window showing the tracked creature, wherever your selection is.");
+        }
+
+        /// <summary>What both target windows show.</summary>
+        private void RenderShownSettings() {
+            Form.Section("In the target windows");
             var data = settings.Data;
+            var first = true;
+            var changed = Form.FlowCheck(ref first, "Debuffs", ref data.TargetShowDebuffs,
+                "Shows the harmful spells on the creature in the target windows, with the time each has left. Yours are "
+                + "brighter.");
+            changed |= Form.FlowCheck(ref first, "Buffs", ref data.TargetShowBuffs,
+                "Shows the beneficial spells on the creature in the target windows.");
+            changed |= Form.FlowCheck(ref first, "Threat", ref data.TargetShowThreat,
+                "Shows the creature's threat table in the target windows: who it wants to attack, and how much. The one "
+                + "it's attacking is the one it picked from those near the top.");
 
-            if (ImGui.Checkbox("Debuffs", ref data.TargetShowDebuffs)) {
+            if (data.TargetShowThreat && Form.BeginForm("target-threat")) {
+                Form.Label("Threat rows", "How many rows of the threat table the target windows show. The tab shows all "
+                    + "of them.");
+                changed |= Form.Slider("##threat-rows", ref data.ThreatRows, 1, 12, "%d");
+                ImGui.EndTable();
+            }
+
+            if (changed) {
                 settings.Changed();
             }
-            Widgets.Tip("Shows the harmful spells on the creature in the target windows, with the time each has left. Yours are brighter.");
-
-            ImGui.SameLine();
-
-            if (ImGui.Checkbox("Buffs", ref data.TargetShowBuffs)) {
-                settings.Changed();
-            }
-            Widgets.Tip("Shows the beneficial spells on the creature in the target windows.");
-
-            ImGui.SameLine();
-
-            if (ImGui.Checkbox("Threat", ref data.TargetShowThreat)) {
-                settings.Changed();
-            }
-            Widgets.Tip("Shows the creature's threat table in the target windows: who it wants to attack, and how much. The one it's attacking is the one it picked from those near the top.");
-
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(90);
-
-            if (ImGui.SliderInt("rows##threat-rows", ref data.ThreatRows, 1, 12)) {
-                settings.Changed();
-            }
-            Widgets.Tip("How many rows of the threat table the target windows show. The tab shows all of them.");
         }
 
         /// <summary>Everything about one creature, for the tab: vitals, spells in tables, and the whole threat table.</summary>

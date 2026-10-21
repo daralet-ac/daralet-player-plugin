@@ -48,7 +48,7 @@ namespace DaraletPlayer.Ui {
             LoadLocations();
             worldDataVersion = worldData.Version;
 
-            // once each time the plugin starts; the Show... menu checks again on demand
+            // once each time the plugin starts; the tab's Settings check again on demand
             worldData.Start();
 
             map.DestinationChosen += SetDestination;
@@ -123,6 +123,7 @@ namespace DaraletPlayer.Ui {
             RenderToolbar(hasSelf, x, y);
             RenderDestinationLine();
             RenderSearchResults();
+            RenderSettings();
 
             map.Render(ImGui.GetContentRegionAvail(), Scene(hasSelf, x, y));
         }
@@ -211,16 +212,6 @@ namespace DaraletPlayer.Ui {
             }
             Widgets.Tip("Which kinds of places are on the map, and whether names and fellows are.");
 
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(110);
-            var textPercent = (int)Math.Round(settings.Data.MapTextScale * 100);
-
-            if (ImGui.SliderInt("Text##map-text", ref textPercent, 50, 250, "%d%%")) {
-                settings.Data.MapTextScale = textPercent / 100f;
-                settings.Changed();
-            }
-            Widgets.Tip("How big the names on the map are drawn: towns, places and your fellows. Ctrl+click to type a size. (The Size slider below is the Arrow window's.)");
-
             RenderFilters();
         }
 
@@ -230,6 +221,7 @@ namespace DaraletPlayer.Ui {
             }
 
             var data = settings.Data;
+            Widgets.TextDisabled("Places");
 
             foreach (var (type, label, _) in Locations.Types) {
                 var shown = IsShown(type);
@@ -244,6 +236,7 @@ namespace DaraletPlayer.Ui {
             }
 
             ImGui.Separator();
+            Widgets.TextDisabled("Also on the map");
 
             if (ImGui.Checkbox("Fellowship members", ref data.MapShowFellows)) {
                 settings.Changed();
@@ -255,22 +248,36 @@ namespace DaraletPlayer.Ui {
             }
             Widgets.Tip("Writes town names on the map, and every place's name once you zoom in.");
 
-            ImGui.Separator();
-            RenderWorldDataStatus();
-
             ImGui.EndPopup();
         }
 
         private void RenderWorldDataStatus() {
-            Widgets.TextDisabled($"Places: {locations.Count}, from {locationsSource}");
-            Widgets.TextDisabled(worldData.Status);
+            Form.Section("Map data");
+
+            if (!Form.BeginForm("map-data")) {
+                return;
+            }
+
+            Form.Label("Places", "Where the places on the map come from.");
+            ImGui.PushStyleColor(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
+            Widgets.TextWrapped($"{locations.Count}, from {locationsSource}");
+            ImGui.PopStyleColor();
+
+            Form.Label("Updates", "The map and places update without a new plugin.");
+            ImGui.PushStyleColor(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
+            Widgets.TextWrapped(worldData.Status);
+            ImGui.PopStyleColor();
 
             ImGui.BeginDisabled(worldData.Busy);
             if (ImGui.Button("Check for map updates")) {
                 worldData.Start();
             }
             ImGui.EndDisabled();
-            Widgets.Tip($"Downloads the newest map and places (locations.xml) if they've changed. This happens by itself each time the plugin starts. They're kept in {worldData.Folder}. A dereth-map.png or locations.xml next to Daralet.dll is still used instead.");
+            Widgets.Tip($"Downloads the newest map and places (locations.xml) if they've changed. This happens by itself "
+                + $"each time the plugin starts. They're kept in {worldData.Folder}. A dereth-map.png or locations.xml next "
+                + "to Daralet.dll is still used instead.");
+
+            ImGui.EndTable();
         }
 
         private void RenderDestinationLine() {
@@ -290,15 +297,56 @@ namespace DaraletPlayer.Ui {
                 Widgets.Tip("Stops pointing the arrow anywhere.");
             }
 
-            arrowWindow.RenderControls("Arrow window", "A small window with an arrow pointing to your destination from the way you're facing, and how far it is.");
-            ImGui.SameLine();
+        }
 
-            if (ImGui.Checkbox("Details##arrow-details", ref settings.Data.ArrowShowDetails)) {
+        private void RenderSettings() {
+            if (!Form.SettingsHeader("world-settings", "The names' size, the map window and the arrow window, and checking for "
+                + "new map data.")) {
+                return;
+            }
+
+            Form.Columns("world-settings-grid", RenderMapSettings, RenderWorldDataStatus, RenderMapWindowSettings,
+                RenderArrowSettings);
+            ImGui.Spacing();
+        }
+
+        private void RenderMapSettings() {
+            Form.Section("Map");
+
+            if (!Form.BeginForm("map-form")) {
+                return;
+            }
+
+            Form.Label("Text size", "How big the names on the map are drawn: towns, places and your fellows, here and in "
+                + "the map window.");
+            var textPercent = (int)Math.Round(settings.Data.MapTextScale * 100);
+
+            if (Form.Slider("##map-text", ref textPercent, 50, 250, "%d%%")) {
+                settings.Data.MapTextScale = textPercent / 100f;
                 settings.Changed();
             }
-            Widgets.Tip("Shows the destination's name, distance and direction beside the arrow. Untick for the arrow alone; with the window's Background at 0% and Lock on, only the arrow is left on screen.");
 
-            mapWindow.RenderControls("Map window", "The map in a window of its own, to keep on screen alongside the rest of the plugin. Drag its corner to size it. What it shows is set here (Show..., Text).");
+            ImGui.EndTable();
+        }
+
+        private void RenderMapWindowSettings() {
+            Form.Section("Map window");
+            mapWindow.RenderControls("The map in a window of its own, to keep on screen alongside the rest of the plugin. "
+                + "Drag its corner to size it. What it shows is set here (Show..., Text size).");
+        }
+
+        private void RenderArrowSettings() {
+            Form.Section("Arrow window");
+            arrowWindow.RenderControls("A small window with an arrow pointing to your destination from the way you're "
+                + "facing, and how far it is.");
+
+            var first = true;
+
+            if (Form.FlowCheck(ref first, "Details##arrow-details", ref settings.Data.ArrowShowDetails,
+                "Shows the destination's name, distance and direction beside the arrow. Untick for the arrow alone; with "
+                + "the window's Background at 0% and Locked on, only the arrow is left on screen.")) {
+                settings.Changed();
+            }
         }
 
         private void RenderSearchResults() {

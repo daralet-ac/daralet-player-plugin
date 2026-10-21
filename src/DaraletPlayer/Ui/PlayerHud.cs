@@ -141,7 +141,7 @@ namespace DaraletPlayer.Ui {
                     return false;
                 case FeedStatus.Unsupported:
                     Widgets.TextColored(Colors.Warning,
-                        "This server doesn't have @playerui. This plugin only works on the Daralet server.");
+                        "This server doesn't support this plugin. It only works on the Daralet server.");
                     return false;
             }
 

@@ -85,20 +85,29 @@ namespace DaraletPlayer.Ui {
 
         private void RenderRuleEditor(List<LootRule> rules, int index) {
             var rule = rules[index];
+            var changed = false;
 
-            ImGui.SetNextItemWidth(200);
-            var changed = ImGui.InputText("Name##rule-name", ref rule.Name, 60);
+            if (!Form.BeginForm("rule-form")) {
+                return;
+            }
+
+            Form.Label("Name", "What the rule is called in the list, and in item tooltips.");
+            ImGui.SetNextItemWidth(Form.ControlWidth);
+            changed |= ImGui.InputText("##rule-name", ref rule.Name, 60);
 
             if (RenderRuleButtons(rules, index)) {
+                ImGui.EndTable();
                 settings.Changed();
                 return;
             }
 
+            Form.Label("Outcome", "What happens to an item this rule matches.");
             changed |= RenderOutcomeChoices(rule);
             changed |= RenderMarkChoices(rule);
             changed |= RenderRuleBasics(rule);
+            ImGui.EndTable();
 
-            ImGui.Separator();
+            Form.Section("Filters");
 
             // the same for everyone and fixed, so once is enough; until a reply, ask every 30 seconds
             if (feed.RollRanges == null) {
@@ -115,17 +124,15 @@ namespace DaraletPlayer.Ui {
         /// <summary>Up, Down, Copy and Delete. True when the list changed, so the editor stops for this frame.</summary>
         private bool RenderRuleButtons(List<LootRule> rules, int index) {
             // the list is changed after EndDisabled, so the disabled stack stays balanced
-            ImGui.SameLine();
+            var first = false;
             ImGui.BeginDisabled(index == 0);
-            var up = ImGui.SmallButton("Up");
+            var up = Form.FlowSmallButton(ref first, "Up", "Moves the rule up. The first rule that matches an item decides.");
             ImGui.EndDisabled();
-            Widgets.Tip("Moves the rule up. The first rule that matches an item decides.");
 
-            ImGui.SameLine();
             ImGui.BeginDisabled(index == rules.Count - 1);
-            var down = ImGui.SmallButton("Down");
+            var down = Form.FlowSmallButton(ref first, "Down", "Moves the rule down. The first rule that matches an item "
+                + "decides.");
             ImGui.EndDisabled();
-            Widgets.Tip("Moves the rule down. The first rule that matches an item decides.");
 
             if (up || down) {
                 var other = up ? index - 1 : index + 1;
@@ -134,29 +141,27 @@ namespace DaraletPlayer.Ui {
                 return true;
             }
 
-            ImGui.SameLine();
-            if (ImGui.SmallButton("Copy##rule-copy")) {
+            if (Form.FlowSmallButton(ref first, "Copy##rule-copy", "Adds a copy of this rule just below it.")) {
                 rules.Insert(index + 1, rules[index].Copy());
                 selectedRule = index + 1;
                 return true;
             }
-            Widgets.Tip("Adds a copy of this rule just below it.");
 
-            ImGui.SameLine();
-            if (ImGui.SmallButton("Delete##rule-delete")) {
+            if (Form.FlowSmallButton(ref first, "Delete##rule-delete", "Deletes this rule.")) {
                 rules.RemoveAt(index);
                 selectedRule = Math.Max(0, index - 1);
                 return true;
             }
-            Widgets.Tip("Deletes this rule.");
 
             return false;
         }
 
         private static bool RenderOutcomeChoices(LootRule rule) {
             var changed = false;
+            var first = true;
 
             foreach (var (outcome, label, tip) in Outcomes) {
+                Form.Flow(ref first, Form.CheckWidth(label));
                 ImGui.PushStyleColor(ImGuiCol.Text, OutcomeColor(outcome));
 
                 if (ImGui.RadioButton(label, rule.Outcome == outcome)) {
@@ -166,27 +171,26 @@ namespace DaraletPlayer.Ui {
 
                 ImGui.PopStyleColor();
                 Widgets.Tip(tip);
-                ImGui.SameLine();
             }
 
-            ImGui.NewLine();
             return changed;
         }
 
-        /// <summary>How the rule marks what it decides (LootMarks), with a sample.</summary>
+        /// <summary>How the rule marks what it decides (LootMarks), with a sample: two rows of the rule's form.</summary>
         private static bool RenderMarkChoices(LootRule rule) {
-            ImGui.SetNextItemWidth(110);
-            var changed = Widgets.Choice("Highlight##rule-highlight", LootMarks.HighlightChoices, ref rule.Highlight);
-            Widgets.Tip("A coloured frame round the icon of what this rule decides: in the Corpse window, the Test tab, and the Inventory tab with Loot marks on.");
+            Form.Label("Highlight", "A coloured frame round the icon of what this rule decides: in the Corpse window, the "
+                + "Test tab, and the Inventory tab with Loot marks on.");
+            ImGui.SetNextItemWidth(Form.ControlWidth);
+            var changed = Widgets.Choice("##rule-highlight", LootMarks.HighlightChoices, ref rule.Highlight);
 
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(130);
-            changed |= Widgets.Choice("Icon##rule-icon", LootMarks.Icons, ref rule.Icon);
-            Widgets.Tip("A symbol in the top left corner of the icon of what this rule decides, in the highlight's colour (gold without one).");
+            Form.Label("Icon", "A symbol in the top left corner of the icon of what this rule decides, in the highlight's "
+                + "colour (gold without one).");
+            ImGui.SetNextItemWidth(Form.ControlWidth);
+            changed |= Widgets.Choice("##rule-icon", LootMarks.Icons, ref rule.Icon);
 
             if (LootMarks.Marks(rule)) {
                 ImGui.SameLine();
-                var size = ImGui.GetFrameHeight() * 1.5f;
+                var size = ImGui.GetFrameHeight();
                 DrawMarkSample(rule, ImGui.GetCursorScreenPos(), size);
                 ImGui.Dummy(new Vector2(size, size));
                 Widgets.Tip("How the mark looks on an item's icon.");
@@ -195,13 +199,14 @@ namespace DaraletPlayer.Ui {
             return changed;
         }
 
-        /// <summary>Category, tiers, name words and Salvageable only.</summary>
+        /// <summary>Category, tiers, name words and Salvageable only: rows of the rule's form.</summary>
         private static bool RenderRuleBasics(LootRule rule) {
-            ImGui.SetNextItemWidth(140);
-            var changed = Widgets.Choice("Category##rule-category", MarketSearch.Categories, ref rule.Category);
-            Widgets.Tip("The kind of item, as the market sorts them. Each kind has its own filters below.");
+            Form.Label("Category", "The kind of item, as the market sorts them. Each kind has its own filters below.");
+            ImGui.SetNextItemWidth(Form.ControlWidth);
+            var changed = Widgets.Choice("##rule-category", MarketSearch.Categories, ref rule.Category);
 
-            ImGui.SameLine();
+            Form.Label("Tiers", rule.Category == "Salvage" ? "Salvage has no tier." : "The loot tiers it takes, lowest to "
+                + "highest.");
             ImGui.BeginDisabled(rule.Category == "Salvage");
             ImGui.SetNextItemWidth(100);
             changed |= Widgets.Choice("##rule-min-tier", MarketSearch.Tiers, ref rule.MinTier);
@@ -214,13 +219,13 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("The highest loot tier.");
             ImGui.EndDisabled();
 
-            ImGui.SetNextItemWidth(200);
-            changed |= ImGui.InputTextWithHint("##rule-name-has", "name has these words", ref rule.NameContains, 60);
-            Widgets.Tip("Words the item's name has to have, all of them.");
+            Form.Label("Name has", "Words the item's name has to have, all of them.");
+            ImGui.SetNextItemWidth(Form.ControlWidth);
+            changed |= ImGui.InputTextWithHint("##rule-name-has", "any name", ref rule.NameContains, 60);
 
-            ImGui.SameLine();
-            changed |= ImGui.Checkbox("Salvageable only", ref rule.SalvageableOnly);
-            Widgets.Tip("Only items salvaging could turn into salvage (not retained, not unstable, with a material).");
+            Form.Label("Only", "Narrows the rule further.");
+            changed |= Form.Check("Salvageable only", ref rule.SalvageableOnly,
+                "Only items salvaging could turn into salvage (not retained, not unstable, with a material).");
 
             return changed;
         }

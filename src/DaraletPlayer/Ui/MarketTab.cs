@@ -104,7 +104,7 @@ namespace DaraletPlayer.Ui {
                 Broker("claim");
             }
             ImGui.EndDisabled();
-            Widgets.Tip("Collects the pyreals from everything you've sold, after fees, from the Market Broker. Sends @playerui broker claim, which tells the broker \"claim payouts\". Needs you near a Market Broker.");
+            Widgets.Tip("Collects the pyreals from everything you've sold, after fees, from the Market Broker. It tells the broker \"claim payouts\". Needs you near a Market Broker.");
 
             ImGui.SameLine();
             var expiredCount = market.Expired?.Count ?? 0;
@@ -114,7 +114,7 @@ namespace DaraletPlayer.Ui {
                 Broker("expired");
             }
             ImGui.EndDisabled();
-            Widgets.Tip("Takes back the items whose listings ran out unsold. Sends @playerui broker expired, which tells the broker \"claim expired\". Needs you near a Market Broker.");
+            Widgets.Tip("Takes back the items whose listings ran out unsold. It tells the broker \"claim expired\". Needs you near a Market Broker.");
         }
 
         /// <summary>One of your items and a price: the same as giving the broker the item and telling it the price.</summary>
@@ -154,7 +154,7 @@ namespace DaraletPlayer.Ui {
 
             var payout = price - (long)Math.Floor(price * market.PayoutFee);
             var fee = price > 0 ? $" Selling it for {price:N0} would pay you {payout:N0} after the fee." : "";
-            Widgets.Tip($"Lists it with the Market Broker, which asks you to confirm. Sends @playerui broker list <item> <price>, the same as giving the broker the item and telling it the price.{fee} Needs you near a Market Broker.");
+            Widgets.Tip($"Lists it with the Market Broker, which asks you to confirm. The same as giving the broker the item and telling it the price.{fee} Needs you near a Market Broker.");
         }
 
         private void RenderListings(List<MyListingInfo> listings, bool near, double since) {
@@ -192,7 +192,7 @@ namespace DaraletPlayer.Ui {
                     Broker($"cancel {listing.Id}");
                 }
                 ImGui.EndDisabled();
-                Widgets.Tip($"Takes it off the market and gives the item back, for the cancellation fee; the broker asks you to confirm. Sends @playerui broker cancel {listing.Id}. Needs you near a Market Broker.");
+                Widgets.Tip($"Takes it off the market and gives the item back, for the cancellation fee; the broker asks you to confirm. Needs you near a Market Broker.");
             }
 
             ImGui.EndTable();

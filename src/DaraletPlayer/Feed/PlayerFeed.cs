@@ -332,7 +332,7 @@ namespace DaraletPlayer.Feed {
                     if (!pieceLogged) {
                         pieceLogged = true;
                         var start = text.Length > 200 ? text.Substring(0, 200) : text;
-                        PluginCore.LogFile("A piece of a @playerui reply reached chat on its own line (hidden): " + start);
+                        PluginCore.LogFile("A piece of a server reply to the plugin reached chat on its own line (hidden): " + start);
                     }
 
                     return;
