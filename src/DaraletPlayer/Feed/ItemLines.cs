@@ -4,45 +4,6 @@ using System.Globalization;
 using System.Linq;
 
 namespace DaraletPlayer.Feed {
-    /// <summary>How a line of an item tooltip is drawn.</summary>
-    public enum ItemLineStyle {
-        /// <summary>The item's name.</summary>
-        Title,
-        /// <summary>What kind of item it is, and other quiet facts.</summary>
-        Detail,
-        /// <summary>A section's name: Weapon, Armor, Spells...</summary>
-        Heading,
-        Text,
-        /// <summary>Something good about it (a bonus).</summary>
-        Good,
-        /// <summary>Something that holds it back (a penalty).</summary>
-        Bad,
-        /// <summary>Spells, coloured by cantrip level: Minor, Major, Epic, Legendary.</summary>
-        MinorSpell,
-        MajorSpell,
-        EpicSpell,
-        LegendarySpell,
-    }
-
-    public class ItemLine {
-        public string Text;
-        public ItemLineStyle Style;
-
-        /// <summary>The stat this line shows, by its name in appraisal's Roll Quality section, if it's one that rolls.</summary>
-        public string RollStat;
-
-        /// <summary>Where the stat rolled in its range, 0 to 1, drawn at the right of the line; null when unknown.</summary>
-        public double? Quality;
-
-        public ItemLine(string text, ItemLineStyle style, string rollStat = null) {
-            Text = text;
-            Style = style;
-            RollStat = rollStat;
-        }
-
-        public override string ToString() => $"{Style}: {Text}";
-    }
-
     /// <summary>
     /// An item's tooltip as lines: every stat its description (the Market API's, MarketListing) has, in sections. The tooltips
     /// in the bank, the Loot tab, the Corpse window and market search all draw these, so the layout is changed in one place.
@@ -192,39 +153,39 @@ namespace DaraletPlayer.Feed {
 
             // a bow's damage modifier is on its damage line, where its damage would be
             if (HasDamageRange(l)) {
-                Bonus(section, "Damage bonus", l.DamageMod, multiplier: true, "Damage Modifier");
+                BonusMultiplier(section, "Damage bonus", l.DamageMod, "Damage Modifier");
             }
 
-            Bonus(section, "Elemental damage", l.ElementalDamageMod, multiplier: true, "Elemental Damage Bonus");
+            BonusMultiplier(section, "Elemental damage", l.ElementalDamageMod, "Elemental Damage Bonus");
             if (l.ElementalDamageBonus > 0) {
                 section.Add(new ItemLine($"Elemental damage bonus: +{l.ElementalDamageBonus}", ItemLineStyle.Text));
             }
-            Bonus(section, "Healing spells", l.RestorationMod, multiplier: true, "Restoration Healing Bonus");
-            Bonus(section, "Attack", l.WeaponOffense, multiplier: true, "Bonus to Attack Skill");
-            Bonus(section, "Melee defense", l.WeaponPhysicalDefense, multiplier: true, "Bonus to Physical Defense");
-            Bonus(section, "Magic defense", l.WeaponMagicalDefense, multiplier: true, "Bonus to Magic Defense");
-            Bonus(section, "War magic", l.WeaponWarMagicMod, multiplier: false, "Bonus to War Magic Skill");
-            Bonus(section, "Life magic", l.WeaponLifeMagicMod, multiplier: false, "Bonus to Life Magic Skill");
+            BonusMultiplier(section, "Healing spells", l.RestorationMod, "Restoration Healing Bonus");
+            BonusMultiplier(section, "Attack", l.WeaponOffense, "Bonus to Attack Skill");
+            BonusMultiplier(section, "Melee defense", l.WeaponPhysicalDefense, "Bonus to Physical Defense");
+            BonusMultiplier(section, "Magic defense", l.WeaponMagicalDefense, "Bonus to Magic Defense");
+            BonusFraction(section, "War magic", l.WeaponWarMagicMod, "Bonus to War Magic Skill");
+            BonusFraction(section, "Life magic", l.WeaponLifeMagicMod, "Bonus to Life Magic Skill");
 
-            Bonus(section, "War magic", l.ArmorWarMagicMod, multiplier: false, "Bonus to War Magic Skill");
-            Bonus(section, "Life magic", l.ArmorLifeMagicMod, multiplier: false, "Bonus to Life Magic Skill");
-            Bonus(section, "Mana regen", l.ArmorManaRegenMod, multiplier: false, "Bonus to Mana Regen");
-            Bonus(section, "Mana conversion", l.ArmorManaConversionMod, multiplier: false, "Bonus to Mana Conversion Skill");
-            Bonus(section, "Attack", l.ArmorAttackMod, multiplier: false, "Bonus to Attack Skill");
-            Bonus(section, "Shield", l.ArmorShieldMod, multiplier: false, "Bonus to Shield Skill");
-            Bonus(section, "Dual wield", l.ArmorDualWieldMod, multiplier: false, "Bonus to Dual Wield Skill");
-            Bonus(section, "Thievery", l.ArmorThieveryMod, multiplier: false, "Bonus to Thievery Skill");
-            Bonus(section, "Run", l.ArmorRunMod, multiplier: false, "Bonus to Run Skill");
-            Bonus(section, "Stamina regen", l.ArmorStaminaRegenMod, multiplier: false, "Bonus to Stamina Regen");
-            Bonus(section, "Melee defense", l.ArmorPhysicalDefMod, multiplier: false, "Bonus to Physical Defense");
-            Bonus(section, "Magic defense", l.ArmorMagicDefMod, multiplier: false, "Bonus to Magic Defense");
-            Bonus(section, "Two-handed combat", l.ArmorTwohandedCombatMod, multiplier: false, "Bonus to Two-handed Combat Skill");
-            Bonus(section, "Health regen", l.ArmorHealthRegenMod, multiplier: false, "Bonus to Health Regen");
-            Bonus(section, "Perception", l.ArmorPerceptionMod, multiplier: false, "Bonus to Perception Skill");
-            Bonus(section, "Deception", l.ArmorDeceptionMod, multiplier: false, "Bonus to Deception Skill");
-            Bonus(section, "Max health", l.ArmorHealthMod, multiplier: false, "Bonus to Maximum Health");
-            Bonus(section, "Max mana", l.ArmorManaMod, multiplier: false, "Bonus to Maximum Mana");
-            Bonus(section, "Max stamina", l.ArmorStaminaMod, multiplier: false, "Bonus to Maximum Stamina");
+            BonusFraction(section, "War magic", l.ArmorWarMagicMod, "Bonus to War Magic Skill");
+            BonusFraction(section, "Life magic", l.ArmorLifeMagicMod, "Bonus to Life Magic Skill");
+            BonusFraction(section, "Mana regen", l.ArmorManaRegenMod, "Bonus to Mana Regen");
+            BonusFraction(section, "Mana conversion", l.ArmorManaConversionMod, "Bonus to Mana Conversion Skill");
+            BonusFraction(section, "Attack", l.ArmorAttackMod, "Bonus to Attack Skill");
+            BonusFraction(section, "Shield", l.ArmorShieldMod, "Bonus to Shield Skill");
+            BonusFraction(section, "Dual wield", l.ArmorDualWieldMod, "Bonus to Dual Wield Skill");
+            BonusFraction(section, "Thievery", l.ArmorThieveryMod, "Bonus to Thievery Skill");
+            BonusFraction(section, "Run", l.ArmorRunMod, "Bonus to Run Skill");
+            BonusFraction(section, "Stamina regen", l.ArmorStaminaRegenMod, "Bonus to Stamina Regen");
+            BonusFraction(section, "Melee defense", l.ArmorPhysicalDefMod, "Bonus to Physical Defense");
+            BonusFraction(section, "Magic defense", l.ArmorMagicDefMod, "Bonus to Magic Defense");
+            BonusFraction(section, "Two-handed combat", l.ArmorTwohandedCombatMod, "Bonus to Two-handed Combat Skill");
+            BonusFraction(section, "Health regen", l.ArmorHealthRegenMod, "Bonus to Health Regen");
+            BonusFraction(section, "Perception", l.ArmorPerceptionMod, "Bonus to Perception Skill");
+            BonusFraction(section, "Deception", l.ArmorDeceptionMod, "Bonus to Deception Skill");
+            BonusFraction(section, "Max health", l.ArmorHealthMod, "Bonus to Maximum Health");
+            BonusFraction(section, "Max mana", l.ArmorManaMod, "Bonus to Maximum Mana");
+            BonusFraction(section, "Max stamina", l.ArmorStaminaMod, "Bonus to Maximum Stamina");
 
             Section(lines, "Mods", section);
         }
@@ -283,7 +244,11 @@ namespace DaraletPlayer.Feed {
                 return "";
             }
 
-            return weaponTime > 0 ? $"Speed: {weaponTime} ({N(AttacksPerSecond(weaponTime.Value), "0.00")} atk/s)" : $"Speed: {weaponTime}";
+            if (weaponTime <= 0) {
+                return $"Speed: {weaponTime}";
+            }
+
+            return $"Speed: {weaponTime} ({N(AttacksPerSecond(weaponTime.Value), "0.00")} atk/s)";
         }
 
         /// <summary>
@@ -319,14 +284,29 @@ namespace DaraletPlayer.Feed {
             }
 
             if (l.WardLevel.HasValue) {
-                var slots = l.ArmorSlots > 1 ? $" ({N(l.WardPerSlot ?? (double)l.WardLevel.Value / l.ArmorSlots.Value, "0.#")} a slot over {l.ArmorSlots} slots)" : "";
+                var slots = "";
+
+                if (l.ArmorSlots > 1) {
+                    var perSlot = l.WardPerSlot ?? (double)l.WardLevel.Value / l.ArmorSlots.Value;
+                    slots = $" ({N(perSlot, "0.#")} a slot over {l.ArmorSlots} slots)";
+                }
+
                 section.Add(new ItemLine($"Ward: {l.WardLevel}{slots}", ItemLineStyle.Text, "Ward Level"));
             }
 
             var protections = new (string Name, double? Value)[] {
-                ("Slash", l.ArmorModVsSlash), ("Pierce", l.ArmorModVsPierce), ("Bludgeon", l.ArmorModVsBludgeon), ("Cold", l.ArmorModVsCold),
-                ("Fire", l.ArmorModVsFire), ("Acid", l.ArmorModVsAcid), ("Lightning", l.ArmorModVsElectric), ("Nether", l.ArmorModVsNether),
-            }.Where(p => p.Value.HasValue).Select(p => $"{p.Name} {Protection(l.ArmorLevel, p.Value.Value)}").ToList();
+                ("Slash", l.ArmorModVsSlash),
+                ("Pierce", l.ArmorModVsPierce),
+                ("Bludgeon", l.ArmorModVsBludgeon),
+                ("Cold", l.ArmorModVsCold),
+                ("Fire", l.ArmorModVsFire),
+                ("Acid", l.ArmorModVsAcid),
+                ("Lightning", l.ArmorModVsElectric),
+                ("Nether", l.ArmorModVsNether),
+            }
+                .Where(p => p.Value.HasValue)
+                .Select(p => $"{p.Name} {Protection(l.ArmorLevel, p.Value.Value)}")
+                .ToList();
 
             if (protections.Count > 0) {
                 section.Add(new ItemLine("Protection: " + string.Join(", ", protections), ItemLineStyle.Text));
@@ -377,11 +357,18 @@ namespace DaraletPlayer.Feed {
             Add(section, trigger.Count > 0 ? "Trigger: " + string.Join(", ", trigger) : "", ItemLineStyle.Text);
 
             if (l.SigilCurrentLevel.HasValue) {
-                section.Add(new ItemLine($"Level: {l.SigilCurrentLevel}{(l.SigilMaxLevel.HasValue ? $" of {l.SigilMaxLevel}" : "")}", ItemLineStyle.Text));
+                var max = l.SigilMaxLevel.HasValue ? $" of {l.SigilMaxLevel}" : "";
+                section.Add(new ItemLine($"Level: {l.SigilCurrentLevel}{max}", ItemLineStyle.Text));
             }
 
-            var reserved = new (string Name, double? Value)[] { ("health", l.SigilHealthReserved), ("stamina", l.SigilStaminaReserved), ("mana", l.SigilManaReserved) }
-                .Where(r => r.Value > 0).Select(r => $"{Pct(r.Value.Value, signed: false)} {r.Name}").ToList();
+            var reserved = new (string Name, double? Value)[] {
+                ("health", l.SigilHealthReserved),
+                ("stamina", l.SigilStaminaReserved),
+                ("mana", l.SigilManaReserved),
+            }
+                .Where(r => r.Value > 0)
+                .Select(r => $"{Pct(r.Value.Value, signed: false)} {r.Name}")
+                .ToList();
 
             if (reserved.Count > 0) {
                 section.Add(new ItemLine("Reserves: " + string.Join(", ", reserved), ItemLineStyle.Bad));
@@ -405,16 +392,17 @@ namespace DaraletPlayer.Feed {
             }
 
             if (l.SalvageTargetTypes != null && l.SalvageTargetTypes.Count > 0) {
-                section.Add(new ItemLine("For: " + string.Join(", ", l.SalvageTargetTypes.Select(t => Spaced(t).ToLowerInvariant())), ItemLineStyle.Detail));
+                var targets = l.SalvageTargetTypes.Select(t => Spaced(t).ToLowerInvariant());
+                section.Add(new ItemLine("For: " + string.Join(", ", targets), ItemLineStyle.Detail));
             }
 
             if (l.GemMaterialType != null || l.GemQuality.HasValue) {
                 var gem = $"{Spaced(l.GemMaterialType)}{(l.IsCarvedJewel == true ? " jewel" : " gem")}".Trim();
-                section.Add(new ItemLine(Capital(gem) + (l.GemQuality.HasValue ? $", quality: {l.GemQuality}" : ""), ItemLineStyle.Text));
+                section.Add(new ItemLine(Capital(gem) + Quality(l.GemQuality), ItemLineStyle.Text));
             }
 
             if (l.TrophyType != null || l.TrophyQuality.HasValue) {
-                section.Add(new ItemLine($"{l.TrophyType ?? "Trophy"}{(l.TrophyQuality.HasValue ? $", quality: {l.TrophyQuality}" : "")}", ItemLineStyle.Text));
+                section.Add(new ItemLine((l.TrophyType ?? "Trophy") + Quality(l.TrophyQuality), ItemLineStyle.Text));
             }
 
             if (l.SpellSchool != null) {
@@ -422,6 +410,11 @@ namespace DaraletPlayer.Feed {
             }
 
             Section(lines, "Materials", section);
+        }
+
+        /// <summary>", quality: 7", or nothing.</summary>
+        private static string Quality(int? quality) {
+            return quality.HasValue ? $", quality: {quality}" : "";
         }
 
         /// <summary>What it takes to use the item's magic, and what that costs: just before its spells.</summary>
@@ -575,21 +568,18 @@ namespace DaraletPlayer.Feed {
             lines.Add(new ItemLine(string.Join(", ", values), ItemLineStyle.Text));
         }
 
-        /// <summary>
-        /// A bonus as a percentage: a fraction (0.05 is +5%), or a multiplier on 1 (1.05 is +5%). Nothing for none, or for 0.
-        /// </summary>
-        private static void Bonus(List<ItemLine> lines, string name, double? value, bool multiplier, string rollStat = null) {
-            if (!value.HasValue) {
+        /// <summary>A bonus given as a multiplier on 1, shown as a percentage: 1.05 is +5%.</summary>
+        private static void BonusMultiplier(List<ItemLine> lines, string name, double? multiplier, string rollStat) {
+            BonusFraction(lines, name, multiplier - 1, rollStat);
+        }
+
+        /// <summary>A bonus given as a fraction, shown as a percentage: 0.05 is +5%. Nothing for none, or for 0.</summary>
+        private static void BonusFraction(List<ItemLine> lines, string name, double? fraction, string rollStat) {
+            if (!fraction.HasValue || Math.Abs(fraction.Value) < 0.0005) {
                 return;
             }
 
-            var fraction = multiplier ? value.Value - 1 : value.Value;
-
-            if (Math.Abs(fraction) < 0.0005) {
-                return;
-            }
-
-            lines.Add(new ItemLine($"{name}: {Pct(fraction, signed: true)}", ItemLineStyle.Text, rollStat));
+            lines.Add(new ItemLine($"{name}: {Pct(fraction.Value, signed: true)}", ItemLineStyle.Text, rollStat));
         }
 
         private static void Rating(List<ItemLine> lines, string name, int? value, string rollStat) {

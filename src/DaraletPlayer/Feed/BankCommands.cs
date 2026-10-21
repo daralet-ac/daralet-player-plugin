@@ -15,7 +15,10 @@ namespace DaraletPlayer.Feed {
 
         /// <summary>The kinds within the categories (BankCommand.TypeList), by the category they're part of.</summary>
         public static readonly (string Category, string[] Types)[] Types = {
-            ("Weapons", new[] { "swords", "maces", "axes", "spears", "daggers", "staffs", "unarmed", "two-handed", "bows", "crossbows", "atlatls", "thrown", "casters" }),
+            ("Weapons", new[] {
+                "swords", "maces", "axes", "spears", "daggers", "staffs", "unarmed", "two-handed",
+                "bows", "crossbows", "atlatls", "thrown", "casters",
+            }),
             ("Armor", new[] { "heavy", "light", "cloth", "clothing" }),
             ("Jewelry", new[] { "necklaces", "rings", "bracelets" }),
             ("Salvage", new[] { "blacksmithing", "tailoring", "spellcrafting", "woodworking", "jewelcrafting", "imbue" }),
@@ -41,7 +44,11 @@ namespace DaraletPlayer.Feed {
         /// /bank withdraw, with a count when one's given ("/bank withdraw 200 arrows").
         /// </summary>
         public static string Withdraw(int? count, string what) {
-            return count.HasValue && count.Value > 0 ? $"/bank withdraw {count.Value} {Clean(what)}" : "/bank withdraw " + Clean(what);
+            if (count.HasValue && count.Value > 0) {
+                return $"/bank withdraw {count.Value} {Clean(what)}";
+            }
+
+            return "/bank withdraw " + Clean(what);
         }
 
         /// <summary>/bank sort, of everything or only what's given.</summary>
@@ -153,7 +160,7 @@ namespace DaraletPlayer.Feed {
                 groups.Add(new List<string> { tag });
             }
             else if (groups[group].Contains(tag, StringComparer.OrdinalIgnoreCase)) {
-                groups[group] = groups[group].Where(w => !string.Equals(w, tag, StringComparison.OrdinalIgnoreCase)).ToList();
+                groups[group].RemoveAll(w => string.Equals(w, tag, StringComparison.OrdinalIgnoreCase));
                 groups = groups.Where(g => g.Count > 0).ToList();
             }
             else {

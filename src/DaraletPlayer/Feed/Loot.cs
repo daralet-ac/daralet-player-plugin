@@ -2,233 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Runtime.Serialization;
 
 namespace DaraletPlayer.Feed {
-    // The loot classes set their defaults in SetDefaults, called both when one is made and before one is read: the JSON
-    // reader doesn't run constructors or field initialisers.
-
-    public enum LootOutcome {
-        /// <summary>Loot it.</summary>
-        Keep,
-        /// <summary>Loot it, then salvage it.</summary>
-        Salvage,
-        /// <summary>Say so in chat, but leave it.</summary>
-        Notify,
-        /// <summary>Leave it, and stop later rules matching it.</summary>
-        Ignore,
-    }
-
-    /// <summary>What happens when a corpse is opened.</summary>
-    public enum CorpseMode {
-        AutoLootAutoSalvage,
-        /// <summary>Loots, then the Corpse window asks before salvaging.</summary>
-        AutoLootConfirmSalvage,
-        /// <summary>The Corpse window lists the matches with Loot and Loot and salvage buttons.</summary>
-        ConfirmBoth,
-        /// <summary>Moves nothing; lists the matches in chat.</summary>
-        ChatHighlights,
-        /// <summary>Moves nothing; the Corpse window lists the matches, and clicking one loots it.</summary>
-        HighlightPopup,
-    }
-
     /// <summary>
-    /// A loot rule: a market-style search (the Search tab's filters, keyed by MarketFilter.Key) and what to do with what it
-    /// finds. Every condition that's filled in has to hold.
-    /// </summary>
-    [DataContract]
-    public class LootRule {
-        [DataMember(Name = "name")] public string Name;
-        [DataMember(Name = "enabled")] public bool Enabled;
-        [DataMember(Name = "outcome")] public LootOutcome Outcome;
-        /// <summary>A market category, or "" for any.</summary>
-        [DataMember(Name = "category")] public string Category;
-        /// <summary>Tiers as the Search tab shows them, 0 to 7, or "".</summary>
-        [DataMember(Name = "minTier")] public string MinTier;
-        [DataMember(Name = "maxTier")] public string MaxTier;
-        /// <summary>Words the item's name has to have, all of them.</summary>
-        [DataMember(Name = "nameContains")] public string NameContains;
-        [DataMember(Name = "salvageableOnly")] public bool SalvageableOnly;
-        [DataMember(Name = "carvedJewelOnly")] public bool CarvedJewelOnly;
-        /// <summary>Misc only: scrolls of spells this character hasn't learned (Loot.KnowsScrollSpell).</summary>
-        [DataMember(Name = "unlearnedSpellsOnly")] public bool UnlearnedSpellsOnly;
-        [DataMember(Name = "values")] public Dictionary<string, string> Values;
-        /// <summary>The colour of the frame round what it decides (LootMarks.Highlights), or "".</summary>
-        [DataMember(Name = "highlight")] public string Highlight;
-        /// <summary>The symbol on what it decides (LootMarks.Icons), or "".</summary>
-        [DataMember(Name = "icon")] public string Icon;
-        /// <summary>
-        /// The filters (by MarketFilter.Key) switched to roll quality, each on its own: that filter's box in Values is the
-        /// lowest roll quality, 0 to 100, rather than the stat itself, and the rule's other filters are as they were. Only a
-        /// "min" filter for a stat that rolls can be (Loot.RollStatsFor).
-        /// </summary>
-        [DataMember(Name = "rollFilters")] public List<string> RollFilters;
-
-        public LootRule() {
-            SetDefaults();
-        }
-
-        public LootRule Copy() {
-            return Json.Read<LootRule>(Json.Write(this));
-        }
-
-        [OnDeserializing]
-        private void OnDeserializing(StreamingContext context) {
-            SetDefaults();
-        }
-
-        private void SetDefaults() {
-            Name = "New rule";
-            Enabled = true;
-            Outcome = LootOutcome.Keep;
-            Category = "";
-            MinTier = "";
-            MaxTier = "";
-            NameContains = "";
-            Values = new Dictionary<string, string>();
-            Highlight = "";
-            Icon = "";
-            RollFilters = new List<string>();
-        }
-    }
-
-    /// <summary>A named list of rules, checked in order: the first that matches decides.</summary>
-    [DataContract]
-    public class LootList {
-        [DataMember(Name = "name")] public string Name;
-        [DataMember(Name = "rules")] public List<LootRule> Rules;
-
-        public LootList() {
-            SetDefaults();
-        }
-
-        [OnDeserializing]
-        private void OnDeserializing(StreamingContext context) {
-            SetDefaults();
-        }
-
-        private void SetDefaults() {
-            Name = "My loot";
-            Rules = new List<LootRule>();
-        }
-    }
-
-    /// <summary>
-    /// The loot settings (SettingsData.Loot): the lists, which one each character uses, and what opening a corpse does. The
-    /// looter starts switched off, so it doesn't fight VirindiTank's over the same corpse.
-    /// </summary>
-    [DataContract]
-    public class LootData {
-        [DataMember(Name = "enabled")] public bool Enabled;
-        [DataMember(Name = "mode")] public CorpseMode Mode;
-        [DataMember(Name = "lists")] public List<LootList> Lists;
-        /// <summary>Each character's list, by character name; a character not here uses the first.</summary>
-        [DataMember(Name = "activeList")] public Dictionary<string, string> ActiveList;
-
-        public LootData() {
-            SetDefaults();
-        }
-
-        [OnDeserializing]
-        private void OnDeserializing(StreamingContext context) {
-            SetDefaults();
-        }
-
-        private void SetDefaults() {
-            Mode = CorpseMode.HighlightPopup;
-            Lists = new List<LootList> { new LootList(), ExampleLoot.Make() };
-            ActiveList = new Dictionary<string, string>();
-        }
-
-        /// <summary>The list a character uses: the one they picked, or the first.</summary>
-        public LootList ActiveFor(string character) {
-            if (Lists.Count == 0) {
-                Lists.Add(new LootList());
-            }
-
-            if (character != null && ActiveList.TryGetValue(character, out var name)) {
-                return Lists.FirstOrDefault(l => l.Name == name) ?? Lists[0];
-            }
-
-            return Lists[0];
-        }
-
-        public void SetActive(string character, LootList list) {
-            if (character != null && list != null) {
-                ActiveList[character] = list.Name;
-            }
-        }
-
-        /// <summary>A list name nothing else has yet: the given one, or it with " 2", " 3"... after it.</summary>
-        public string UniqueName(string name) {
-            var baseName = string.IsNullOrWhiteSpace(name) ? "My loot" : name.Trim();
-            var candidate = baseName;
-
-            for (var i = 2; Lists.Any(l => string.Equals(l.Name, candidate, StringComparison.OrdinalIgnoreCase)); i++) {
-                candidate = $"{baseName} {i}";
-            }
-
-            return candidate;
-        }
-    }
-
-    /// <summary>
-    /// An item on a corpse, as @playerui corpse sends it (PlayerUiCorpseItem in daralet-ACE): its own facts, and Item, its
-    /// description in the Market API's terms (null if the server couldn't make one).
-    /// </summary>
-    [DataContract]
-    public class CorpseItemInfo {
-        [DataMember(Name = "guid")] public uint Guid;
-        [DataMember(Name = "name")] public string Name;
-        [DataMember(Name = "stackSize")] public int StackSize;
-        [DataMember(Name = "value")] public int Value;
-        [DataMember(Name = "burden")] public int Burden;
-        /// <summary>Salvaging could turn it into salvage.</summary>
-        [DataMember(Name = "salvageable")] public bool Salvageable;
-        [DataMember(Name = "material")] public string Material;
-        [DataMember(Name = "workmanship")] public double? Workmanship;
-        [DataMember(Name = "item")] public MarketListing Item;
-        /// <summary>
-        /// Where each rolled stat landed in its range, 0 to 1, by its name in appraisal's Roll Quality section ("Bonus to
-        /// Attack Skill"...); null when nothing on it rolled.
-        /// </summary>
-        [DataMember(Name = "rollQuality")] public Dictionary<string, double> RollQuality;
-    }
-
-    [DataContract]
-    public class CorpseInfo {
-        public const string StatusOk = "ok";
-        /// <summary>A container that's neither a corpse nor a chest, such as a house's storage.</summary>
-        public const string StatusNotLootable = "notcorpse";
-        /// <summary>Sent unasked when the open one closes, with Loot window on.</summary>
-        public const string StatusClosed = "closed";
-
-        [DataMember(Name = "guid")] public uint Guid;
-        /// <summary>ok, gone (not near enough), denied (a corpse someone else's to loot, or a chest you haven't got open) or notcorpse.</summary>
-        [DataMember(Name = "status")] public string Status;
-        [DataMember(Name = "name")] public string Name;
-        [DataMember(Name = "items")] public List<CorpseItemInfo> Items;
-    }
-
-    /// <summary>The rule that decided an item, if any.</summary>
-    public class LootDecision {
-        public CorpseItemInfo Item;
-        public LootRule Rule;
-
-        public LootOutcome Outcome => Rule?.Outcome ?? LootOutcome.Ignore;
-        public bool Loots => Outcome == LootOutcome.Keep || Outcome == LootOutcome.Salvage;
-    }
-
-    /// <summary>
-    /// Matching items against rules, and lists as text to share. Each filter compares the same value the Market API's search
-    /// does (MarketRepository.cs in daralet-ACE): ward level and the armor and clothing mods per armor slot, as there; "price"
-    /// is the item's vendor value here.
+    /// Matching items against loot rules, and profiles as text to share. Each filter compares the same value the Market
+    /// API's search does; "price" is the item's vendor value here.
     /// </summary>
     public static class Loot {
-        /// <summary>
-        /// What each numeric filter compares, by its parameter without "min"/"max", and whether it's per armor slot.
-        /// </summary>
-        private static readonly Dictionary<string, (Func<CorpseItemInfo, double?> Get, bool PerSlot)> Numbers =
+        /// <summary>What each numeric filter compares, by its parameter without "min"/"max", and whether it's per armor slot.</summary>
+        private static readonly Dictionary<string, (Func<CorpseItemInfo, double?> Get, bool PerSlot)> NumberFilters =
             new Dictionary<string, (Func<CorpseItemInfo, double?>, bool)>(StringComparer.OrdinalIgnoreCase) {
                 ["Price"] = (i => i.Value, false),
                 ["Burden"] = (i => i.Burden, false),
@@ -288,17 +70,21 @@ namespace DaraletPlayer.Feed {
                 ["ManaReserved"] = (i => i.Item?.SigilManaReserved, false),
                 ["Workmanship"] = (i => i.Item?.SalvageWorkmanship, false),
                 ["Units"] = (i => i.Item?.SalvageUnits, false),
-                ["PricePerUnit"] = (i => i.Item?.SalvageUnits > 0 ? (double)i.Value / i.Item.SalvageUnits.Value : (double?)null, false),
+                ["PricePerUnit"] = (PricePerUnit, false),
                 ["GemQuality"] = (i => i.Item?.GemQuality, false),
                 ["TrophyQuality"] = (i => i.Item?.TrophyQuality, false),
             };
 
+        private static double? PricePerUnit(CorpseItemInfo item) {
+            var units = item.Item?.SalvageUnits;
+            return units > 0 ? (double)item.Value / units.Value : (double?)null;
+        }
+
         /// <summary>
-        /// What each choice or text filter compares, by parameter: the item's values for it, and whether the rule's text only
-        /// has to be in one of them (contains) rather than be one of them (equals). Spaces don't count ("GreenJade" is
-        /// "Green Jade").
+        /// What each choice or text filter compares: the item's values, and whether the rule's text only has to be in one
+        /// (Contains) rather than equal one. Spaces don't count ("GreenJade" is "Green Jade").
         /// </summary>
-        private static readonly Dictionary<string, (Func<MarketListing, IEnumerable<string>> Get, bool Contains)> Words =
+        private static readonly Dictionary<string, (Func<MarketListing, IEnumerable<string>> Get, bool Contains)> WordFilters =
             new Dictionary<string, (Func<MarketListing, IEnumerable<string>>, bool)>(StringComparer.OrdinalIgnoreCase) {
                 ["weaponClass"] = (l => One(l.WeaponClass), false),
                 ["weaponSubtype"] = (l => One(MarketSearch.SubtypeOf(l.WeaponClass)), false),
@@ -319,9 +105,8 @@ namespace DaraletPlayer.Feed {
             };
 
         /// <summary>
-        /// The stat each numeric filter compares, by its name in appraisal's Roll Quality section (the names ItemLines puts on
-        /// its lines), for the ones loot rolls: a filter here can be switched to the stat's roll quality. Several names are
-        /// tried in order: a bow's damage roll is its damage modifier.
+        /// For the numeric filters loot rolls, the stat's name in appraisal's Roll Quality section: these filters can switch
+        /// to roll quality. Names are tried in order (a bow's damage roll is its damage modifier).
         /// </summary>
         private static readonly Dictionary<string, string[]> RollStats = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase) {
             ["BaseDamage"] = new[] { "Damage", "Damage Modifier" },
@@ -362,12 +147,15 @@ namespace DaraletPlayer.Feed {
             ["GearMaxHealth"] = new[] { "Max Health Rating" },
         };
 
-        /// <summary>
-        /// The roll quality names a filter can be switched to, or null: only a "min" filter, for a stat loot rolls.
-        /// </summary>
+        /// <summary>The roll quality names a filter can switch to, or null: only a "min" filter for a stat loot rolls.</summary>
         public static string[] RollStatsFor(MarketFilter filter) {
             var param = filter?.Param ?? "";
-            return param.StartsWith("min", StringComparison.Ordinal) && RollStats.TryGetValue(param.Substring(3), out var names) ? names : null;
+
+            if (!param.StartsWith("min", StringComparison.Ordinal)) {
+                return null;
+            }
+
+            return RollStats.TryGetValue(param.Substring(3), out var names) ? names : null;
         }
 
         /// <summary>Whether the rule has this one filter switched to roll quality (and it's one that can be).</summary>
@@ -376,8 +164,8 @@ namespace DaraletPlayer.Feed {
         }
 
         /// <summary>
-        /// Switches one filter of the rule between its stat and its roll quality. The box is emptied, since a number typed
-        /// for one means something else for the other.
+        /// Switches one filter between its stat and its roll quality, emptying its box: a number typed for one means
+        /// something else for the other.
         /// </summary>
         public static void SetUsesRoll(LootRule rule, MarketFilter filter, bool roll) {
             if (roll == UsesRoll(rule, filter) || (roll && RollStatsFor(filter) == null)) {
@@ -396,14 +184,18 @@ namespace DaraletPlayer.Feed {
             rule.Values?.Remove(filter.Key);
         }
 
-        /// <summary>
-        /// The rule in the list that decides an item: the first enabled one it matches, or none.
-        /// </summary>
+        /// <summary>The rule that decides an item: the first enabled one it matches, or none.</summary>
         public static LootDecision Decide(LootList list, CorpseItemInfo item) {
-            // a Salvage rule only ever takes items with a workmanship: salvaging anything else makes nothing, so the item is
-            // left to the rules after it
-            var rule = list?.Rules?.FirstOrDefault(r => r.Enabled && (r.Outcome != LootOutcome.Salvage || item.Workmanship > 0) && Matches(r, item));
+            var rule = list?.Rules?.FirstOrDefault(r => r.Enabled && CanTake(r, item) && Matches(r, item));
             return new LootDecision { Item = item, Rule = rule };
+        }
+
+        /// <summary>
+        /// A Salvage rule only takes items with a workmanship: salvaging anything else makes nothing, so the item falls to
+        /// the rules after it.
+        /// </summary>
+        private static bool CanTake(LootRule rule, CorpseItemInfo item) {
+            return rule.Outcome != LootOutcome.Salvage || item.Workmanship > 0;
         }
 
         public static bool Matches(LootRule rule, CorpseItemInfo item) {
@@ -422,21 +214,8 @@ namespace DaraletPlayer.Feed {
                 return false;
             }
 
-            // tiers as the Search tab shows them (0-7); the description counts from 1, like the market's
-            if (category != "Salvage" && (int.TryParse(rule.MinTier, out _) || int.TryParse(rule.MaxTier, out _))) {
-                var tier = listing?.ItemTier;
-
-                if (!tier.HasValue) {
-                    return false;
-                }
-
-                if (int.TryParse(rule.MinTier, out var min) && tier.Value < min + 1) {
-                    return false;
-                }
-
-                if (int.TryParse(rule.MaxTier, out var max) && tier.Value > max + 1) {
-                    return false;
-                }
+            if (category != "Salvage" && !TierHolds(rule, listing?.ItemTier)) {
+                return false;
             }
 
             if (category == "Misc" && rule.CarvedJewelOnly && listing?.IsCarvedJewel != true) {
@@ -450,7 +229,7 @@ namespace DaraletPlayer.Feed {
             var subtype = SubtypeOf(rule);
 
             foreach (var filter in MarketSearch.Filters) {
-                // a filter the rule's category or weapon subtype doesn't show doesn't count, though its box may still be filled in
+                // a hidden filter doesn't count, though its box may still be filled in
                 if ((filter.Category != null && filter.Category != category) || !filter.ForSubtype(subtype)) {
                     continue;
                 }
@@ -477,9 +256,29 @@ namespace DaraletPlayer.Feed {
             return true;
         }
 
+        /// <summary>Tiers as the Search tab shows them (0-7); the description counts from 1, like the market's.</summary>
+        private static bool TierHolds(LootRule rule, int? tier) {
+            var hasMin = int.TryParse(rule.MinTier, out var min);
+            var hasMax = int.TryParse(rule.MaxTier, out var max);
+
+            if (!hasMin && !hasMax) {
+                return true;
+            }
+
+            if (!tier.HasValue) {
+                return false;
+            }
+
+            return (!hasMin || tier.Value >= min + 1) && (!hasMax || tier.Value <= max + 1);
+        }
+
         /// <summary>The weapon subtype a Weapon rule picked (MarketSearch.WeaponSubtypes), or "" for any.</summary>
         public static string SubtypeOf(LootRule rule) {
-            return rule.Category == "Weapon" && rule.Values != null && rule.Values.TryGetValue(SubtypeKey, out var subtype) ? subtype ?? "" : "";
+            if (rule.Category != "Weapon" || rule.Values == null) {
+                return "";
+            }
+
+            return rule.Values.TryGetValue(SubtypeKey, out var subtype) ? subtype ?? "" : "";
         }
 
         public static readonly string SubtypeKey = MarketSearch.Filters.Single(f => f.Param == "weaponSubtype").Key;
@@ -488,49 +287,65 @@ namespace DaraletPlayer.Feed {
             var param = filter.Param;
 
             if (param.Equals("coverage", StringComparison.OrdinalIgnoreCase)) {
-                var covers = item.Item?.Coverage ?? new List<string>();
-                return value.Split(',').Select(Squash).Where(w => w.Length > 0).All(w => covers.Any(c => Squash(c) == w));
+                return CoverageHolds(value, item);
             }
 
-            if (Words.TryGetValue(param, out var words)) {
-                if (item.Item == null) {
-                    return false;
-                }
-
-                // a multi-choice is several values, comma-separated, any one of which will do
-                var wanted = filter.Kind == FilterKind.Multi
-                    ? value.Split(',').Select(Squash).Where(w => w.Length > 0).ToList()
-                    : new List<string> { Squash(value) };
-                return words.Get(item.Item).Any(v => wanted.Any(w => words.Contains ? Squash(v).Contains(w) : Squash(v) == w));
+            if (WordFilters.TryGetValue(param, out var words)) {
+                return WordsHold(filter, words, value, item);
             }
 
             var isMin = param.StartsWith("min", StringComparison.Ordinal);
             var isMax = param.StartsWith("max", StringComparison.Ordinal);
 
-            if ((isMin || isMax) && Numbers.TryGetValue(param.Substring(3), out var number)) {
-                var actual = number.Get(item);
-
-                if (!actual.HasValue || !double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var limit)) {
-                    return false;
-                }
-
-                if (number.PerSlot) {
-                    actual = actual.Value / Math.Max(item.Item?.ArmorSlots ?? 1, 1);
-                }
-
-                return isMin ? actual.Value >= limit : actual.Value <= limit;
+            if ((isMin || isMax) && NumberFilters.TryGetValue(param.Substring(3), out var number)) {
+                return NumberHolds(number, isMin, value, item);
             }
 
-            // a filter the loot rules don't know how to check yet leaves the rule alone rather than blocking it
+            // a filter the loot rules can't check yet leaves the rule alone rather than blocking it
             return true;
         }
 
+        /// <summary>Every slot named (comma-separated) is one the item covers.</summary>
+        private static bool CoverageHolds(string value, CorpseItemInfo item) {
+            var covers = item.Item?.Coverage ?? new List<string>();
+            return SplitList(value).All(w => covers.Any(c => Squash(c) == w));
+        }
+
+        private static bool WordsHold(MarketFilter filter, (Func<MarketListing, IEnumerable<string>> Get, bool Contains) words,
+            string value, CorpseItemInfo item) {
+            if (item.Item == null) {
+                return false;
+            }
+
+            // a multi-choice is several values, comma-separated, any one of which will do
+            var wanted = filter.Kind == FilterKind.Multi ? SplitList(value) : new List<string> { Squash(value) };
+
+            return words.Get(item.Item)
+                .Select(Squash)
+                .Any(v => wanted.Any(w => words.Contains ? v.Contains(w) : v == w));
+        }
+
+        private static bool NumberHolds((Func<CorpseItemInfo, double?> Get, bool PerSlot) number, bool isMin, string value,
+            CorpseItemInfo item) {
+            var actual = number.Get(item);
+
+            if (!actual.HasValue || !TryNumber(value, out var limit)) {
+                return false;
+            }
+
+            if (number.PerSlot) {
+                actual = actual.Value / Math.Max(item.Item?.ArmorSlots ?? 1, 1);
+            }
+
+            return isMin ? actual.Value >= limit : actual.Value <= limit;
+        }
+
         /// <summary>
-        /// Whether the stat rolled at least the typed roll quality (a percentage, 0 to 100). An empty box checks nothing; an
-        /// item without that roll (it doesn't have the stat, or the server sent no roll quality) doesn't match.
+        /// Whether the stat rolled at least the typed roll quality (0 to 100). An empty box checks nothing; an item without
+        /// that roll doesn't match.
         /// </summary>
         private static bool RollHolds(string[] names, string raw, CorpseItemInfo item) {
-            if (string.IsNullOrWhiteSpace(raw) || !double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var percent)) {
+            if (string.IsNullOrWhiteSpace(raw) || !TryNumber(raw.Trim(), out var percent)) {
                 return true;
             }
 
@@ -545,16 +360,12 @@ namespace DaraletPlayer.Feed {
         }
 
         /// <summary>
-        /// Whether the character knows the spell on a scroll, by the scroll's guid: true or false, or null when it can't be
-        /// told (the client doesn't know the scroll's spell). The plugin sets it from Decal's spellbook (PluginCore), which
-        /// tests can't load.
+        /// Whether the character knows a scroll's spell, by the scroll's guid, or null when the client can't tell. Set by
+        /// PluginCore from Decal, which tests can't load.
         /// </summary>
         public static Func<uint, bool?> KnowsScrollSpell;
 
-        /// <summary>
-        /// A scroll of a spell the character hasn't learned. One whose spell can't be told counts as unlearned: better looted
-        /// and looked at than left behind.
-        /// </summary>
+        /// <summary>A scroll whose spell can't be told counts as unlearned: better looted than left behind.</summary>
         private static bool IsUnlearnedScroll(CorpseItemInfo item) {
             if (!string.Equals(item.Item?.MiscType, "Scroll", StringComparison.OrdinalIgnoreCase)) {
                 return false;
@@ -572,21 +383,25 @@ namespace DaraletPlayer.Feed {
             return (text ?? "").Replace(" ", "").Trim().ToLowerInvariant();
         }
 
+        /// <summary>A comma-separated list, squashed, blanks left out.</summary>
+        private static List<string> SplitList(string value) {
+            return value.Split(',').Select(Squash).Where(w => w.Length > 0).ToList();
+        }
+
+        private static bool TryNumber(string text, out double value) {
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+        }
+
         private static IEnumerable<string> One(string value) {
             return value == null ? new string[0] : new[] { value };
         }
 
-        /// <summary>
-        /// A list as text to copy and share: its JSON. The rules' filter keys are the Search tab's, so a list made on one
-        /// computer works on another.
-        /// </summary>
+        /// <summary>A profile as JSON to copy and share. Filter keys are the Search tab's, so it works on any computer.</summary>
         public static string Export(LootList list) {
             return Json.Write(list);
         }
 
-        /// <summary>
-        /// A list from shared text, or null (with why) if it isn't one.
-        /// </summary>
+        /// <summary>A profile from shared text, or null (with why) if it isn't one.</summary>
         public static LootList Import(string text, out string problem) {
             problem = null;
 

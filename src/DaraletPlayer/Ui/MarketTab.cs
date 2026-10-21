@@ -9,27 +9,15 @@ using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// The Market tab: your listings, sales and expired items (@playerui market), with the Market Broker's actions (list,
-    /// cancel, claim), which only work near a broker; and a search of the whole market like the website's, from the Market
-    /// API. Every broker action ends in the game's own Yes/No confirmation, as it does when you talk to the broker yourself.
+    /// The Market tab. My market: your listings, sales and expired items, with the Market Broker's actions, which need you
+    /// near a broker and end in the game's own Yes/No. Search is in <c>MarketTab.Search.cs</c>.
     /// </summary>
-    internal class MarketTab : IDisposable {
+    internal partial class MarketTab : IDisposable {
         private static readonly TimeSpan MarketRefresh = TimeSpan.FromSeconds(5);
 
         private readonly PlayerFeed feed;
         private readonly MarketApi api;
         private readonly ItemIcons icons;
-        private readonly ApiRequest<MarketSearchResult> search = new ApiRequest<MarketSearchResult>();
-
-        private string searchText = "";
-        private string category = "";
-        private string minTier = "";
-        private string maxTier = "";
-        private string sortBy = "";
-        private bool sortDescending;
-        private bool carvedJewelOnly;
-        private int page = 1;
-        private readonly Dictionary<string, string> filterValues = new Dictionary<string, string>();
 
         private int listItem;
         private string listItemName;
@@ -129,10 +117,7 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("Takes back the items whose listings ran out unsold. Sends @playerui broker expired, which tells the broker \"claim expired\". Needs you near a Market Broker.");
         }
 
-        /// <summary>
-        /// Picking one of your items and a price, then listing it: the same as giving the broker the item and telling it the
-        /// price, which then asks you to confirm.
-        /// </summary>
+        /// <summary>One of your items and a price: the same as giving the broker the item and telling it the price.</summary>
         private void RenderListItem(MarketInfo market, bool near) {
             Widgets.Text("List an item");
 
@@ -167,7 +152,8 @@ namespace DaraletPlayer.Ui {
             }
             ImGui.EndDisabled();
 
-            var fee = price > 0 ? $" Selling it for {price:N0} would pay you {price - (long)Math.Floor(price * market.PayoutFee):N0} after the fee." : "";
+            var payout = price - (long)Math.Floor(price * market.PayoutFee);
+            var fee = price > 0 ? $" Selling it for {price:N0} would pay you {payout:N0} after the fee." : "";
             Widgets.Tip($"Lists it with the Market Broker, which asks you to confirm. Sends @playerui broker list <item> <price>, the same as giving the broker the item and telling it the price.{fee} Needs you near a Market Broker.");
         }
 
@@ -283,8 +269,11 @@ namespace DaraletPlayer.Ui {
             ImGui.EndTable();
         }
 
+        /// <summary>What the broker said to the last broker command.</summary>
         private void RenderReply() {
-            if (feed.LastCommand == null || !feed.LastCommand.StartsWith("@playerui broker", StringComparison.Ordinal) || feed.LastCommandReply.Count == 0) {
+            var wasBroker = feed.LastCommand?.StartsWith("@playerui broker", StringComparison.Ordinal) == true;
+
+            if (!wasBroker || feed.LastCommandReply.Count == 0) {
                 return;
             }
 
@@ -305,13 +294,11 @@ namespace DaraletPlayer.Ui {
             public IconLayers Icon;
         }
 
-        /// <summary>
-        /// What you carry that could be listed: not worn or wielded, not a pack. The broker decides the rest.
-        /// </summary>
+        /// <summary>What you carry that could be listed: not worn or wielded, not a pack. The broker decides the rest.</summary>
         private static List<SellableItem> Sellable() {
             return CoreManager.Current.WorldFilter.GetInventory().Cast<WorldObject>()
-                .Where(o => o.ObjectClass != ObjectClass.Container && o.ObjectClass != ObjectClass.Foci
-                    && o.Values(LongValueKey.EquippedSlots, 0) == 0 && o.Values(LongValueKey.Wielder, 0) == 0)
+                .Where(o => o.ObjectClass != ObjectClass.Container && o.ObjectClass != ObjectClass.Foci)
+                .Where(o => o.Values(LongValueKey.EquippedSlots, 0) == 0 && o.Values(LongValueKey.Wielder, 0) == 0)
                 .Select(o => new SellableItem { Id = o.Id, Name = o.Name ?? "", Icon = ItemIcons.Of(o) })
                 .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -319,254 +306,6 @@ namespace DaraletPlayer.Ui {
 
         private static long ParsePrice(string text) {
             return long.TryParse((text ?? "").Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var price) ? price : 0;
-        }
-
-        private void RenderSearch() {
-            RenderSearchBar();
-
-            if (ImGui.CollapsingHeader("Filters###market-filters")) {
-                RenderFilters();
-            }
-
-            ImGui.Separator();
-            RenderResults();
-        }
-
-        private void RenderSearchBar() {
-            ImGui.SetNextItemWidth(220);
-            var enter = ImGui.InputTextWithHint("##market-q", "Item name", ref searchText, 100, ImGuiInputTextFlags.EnterReturnsTrue);
-            Widgets.Tip("Part of the item's name. Press Enter or Search.");
-
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(120);
-            if (Widgets.Choice("##market-category", MarketSearch.Categories, ref category)) {
-                enter = true;
-            }
-            Widgets.Tip("The kind of item. Each kind has its own filters below.");
-
-            ImGui.SameLine();
-            ImGui.BeginDisabled(category == "Salvage");
-            ImGui.SetNextItemWidth(100);
-            Widgets.Choice("##market-min-tier", MarketSearch.Tiers, ref minTier);
-            Widgets.Tip("The lowest loot tier, with the level it needs. Salvage has no tier.");
-            ImGui.SameLine();
-            Widgets.TextDisabled("to");
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(100);
-            Widgets.Choice("##market-max-tier", MarketSearch.Tiers, ref maxTier);
-            Widgets.Tip("The highest loot tier.");
-            ImGui.EndDisabled();
-
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(100);
-            if (Widgets.Choice("##market-sort", MarketSearch.SortKeys, ref sortBy)) {
-                enter = true;
-            }
-            Widgets.Tip("What to sort the results by.");
-
-            ImGui.SameLine();
-            if (ImGui.Checkbox("High first", ref sortDescending)) {
-                enter = true;
-            }
-            Widgets.Tip("Sorts highest (or latest) first.");
-
-            ImGui.SameLine();
-            if (ImGui.Button("Search") || enter) {
-                page = 1;
-                StartSearch();
-            }
-            Widgets.Tip($"Searches the market, the same way the website does ({MarketApi.DefaultBaseUrl}).");
-        }
-
-        private void RenderFilters() {
-            var shown = MarketSearch.Filters.Where(f => !f.LootOnly && (f.Category == null || f.Category == category)).ToList();
-
-            if (!ImGui.BeginTable("market-filter-table", 3, ImGuiTableFlags.SizingStretchSame)) {
-                return;
-            }
-
-            foreach (var filter in shown) {
-                ImGui.TableNextColumn();
-                Widgets.TextDisabled(filter.Label);
-                ImGui.SetNextItemWidth(-1);
-
-                var value = filterValues.TryGetValue(filter.Key, out var current) ? current : "";
-
-                if (filter.Kind == FilterKind.Choice) {
-                    if (Widgets.Choice($"##{filter.Key}", filter.Options, ref value)) {
-                        filterValues[filter.Key] = value;
-                    }
-                }
-                else {
-                    var flags = filter.Kind == FilterKind.Text ? ImGuiInputTextFlags.None : ImGuiInputTextFlags.CharsDecimal;
-
-                    if (ImGui.InputText($"##{filter.Key}", ref value, 60, flags)) {
-                        filterValues[filter.Key] = value;
-                    }
-                }
-
-                Widgets.Tip(filter.Tip);
-            }
-
-            if (category == "Misc") {
-                ImGui.TableNextColumn();
-                ImGui.Checkbox("Carved jewels only", ref carvedJewelOnly);
-                Widgets.Tip("For gems: only carved jewels.");
-            }
-
-            ImGui.EndTable();
-
-            if (ImGui.SmallButton("Clear filters")) {
-                filterValues.Clear();
-                carvedJewelOnly = false;
-            }
-            Widgets.Tip("Empties every filter box. Search again to see the difference.");
-        }
-
-        private void RenderResults() {
-            if (search.Busy) {
-                Widgets.TextDisabled("Searching...");
-            }
-            else if (search.Error != null) {
-                Widgets.TextColored(Colors.Warning, $"The market couldn't be searched: {search.Error}");
-            }
-
-            var result = search.Result;
-
-            if (result == null) {
-                if (!search.Busy && search.Error == null) {
-                    Widgets.TextDisabled("Search to see what's for sale.");
-                }
-                return;
-            }
-
-            var listings = result.Listings ?? new List<MarketListing>();
-            var pages = Math.Max(1, (result.TotalCount + MarketSearch.PageSize - 1) / MarketSearch.PageSize);
-
-            Widgets.Text($"{result.TotalCount:N0} listing{(result.TotalCount == 1 ? "" : "s")}");
-            ImGui.SameLine();
-
-            ImGui.BeginDisabled(page <= 1 || search.Busy);
-            if (ImGui.SmallButton("< Prev")) {
-                page--;
-                StartSearch();
-            }
-            ImGui.EndDisabled();
-            Widgets.Tip("The previous page of results.");
-
-            ImGui.SameLine();
-            Widgets.TextDisabled($"page {page} of {pages}");
-            ImGui.SameLine();
-
-            ImGui.BeginDisabled(page >= pages || search.Busy);
-            if (ImGui.SmallButton("Next >")) {
-                page++;
-                StartSearch();
-            }
-            ImGui.EndDisabled();
-            Widgets.Tip("The next page of results.");
-
-            if (listings.Count == 0) {
-                Widgets.TextDisabled("Nothing for sale matches.");
-                return;
-            }
-
-            var extra = ExtraColumns();
-
-            if (!ImGui.BeginTable("market-results", 4 + extra.Count, Widgets.TableFlags | ImGuiTableFlags.ScrollY)) {
-                return;
-            }
-
-            ImGui.TableSetupScrollFreeze(0, 1);
-            ImGui.TableSetupColumn("Item", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Price", ImGuiTableColumnFlags.WidthFixed, 100);
-            ImGui.TableSetupColumn("Tier", ImGuiTableColumnFlags.WidthFixed, 35);
-
-            foreach (var (header, _) in extra) {
-                ImGui.TableSetupColumn(header, ImGuiTableColumnFlags.WidthFixed, 75);
-            }
-
-            ImGui.TableSetupColumn("Expires", ImGuiTableColumnFlags.WidthFixed, 70);
-            ImGui.TableHeadersRow();
-
-            var now = DateTime.UtcNow;
-
-            foreach (var listing in listings) {
-                ImGui.TableNextRow();
-                ImGui.TableNextColumn();
-                var iconHovered = icons.Draw(IconLayers.Of(listing));
-                ImGui.Selectable($"{listing.ItemName}##listing-{listing.Id}");
-                ListingTooltip(listing, iconHovered);
-
-                ImGui.TableNextColumn();
-                Widgets.Text(listing.ListedPrice.ToString("N0"));
-                ImGui.TableNextColumn();
-                Widgets.TextDisabled(listing.ItemTier.HasValue ? ItemLines.Tier(listing.ItemTier.Value) : "-");
-
-                foreach (var (_, get) in extra) {
-                    ImGui.TableNextColumn();
-                    Widgets.TextDisabled(get(listing) ?? "-");
-                }
-
-                ImGui.TableNextColumn();
-                Widgets.TextDisabled(MarketSearch.ExpiresIn(listing.ExpiresAtUtc, now));
-            }
-
-            ImGui.EndTable();
-        }
-
-        /// <summary>
-        /// The columns the website adds for a category, as far as the plugin reads the listings.
-        /// </summary>
-        private List<(string Header, Func<MarketListing, string> Get)> ExtraColumns() {
-            var columns = new List<(string, Func<MarketListing, string>)>();
-            string N(double? value, string format) => value?.ToString(format, CultureInfo.InvariantCulture);
-
-            switch (category) {
-                case "Weapon":
-                    columns.Add(("DPS", l => N(l.Dps, "0.0")));
-                    columns.Add(("Damage", l => l.BaseDamage?.ToString()));
-                    break;
-                case "Armor":
-                case "Clothing":
-                    columns.Add(("Armor", l => l.ArmorLevel?.ToString()));
-                    columns.Add(("Ward", l => l.WardLevel?.ToString()));
-                    break;
-                case "Jewelry":
-                    columns.Add(("Ward", l => l.WardLevel?.ToString()));
-                    break;
-                case "SigilTrinket":
-                    columns.Add(("Proc", l => l.SigilTriggerChance.HasValue ? N(l.SigilTriggerChance * 100, "0.#") + "%" : null));
-                    columns.Add(("Cooldown", l => l.SigilCooldown.HasValue ? N(l.SigilCooldown, "0.0") + "s" : null));
-                    columns.Add(("Level", l => l.SigilCurrentLevel.HasValue ? $"{l.SigilCurrentLevel}/{l.SigilMaxLevel?.ToString() ?? "-"}" : null));
-                    break;
-                case "Salvage":
-                    columns.Add(("Material", l => l.SalvageMaterial));
-                    columns.Add(("Work", l => N(l.SalvageWorkmanship, "0.00")));
-                    columns.Add(("Units", l => l.SalvageUnits?.ToString()));
-                    columns.Add(("Per unit", l => l.SalvageUnits > 0 ? N((double)l.ListedPrice / l.SalvageUnits.Value, "N0") : null));
-                    break;
-            }
-
-            return columns;
-        }
-
-        /// <summary>
-        /// The listing's every stat (ItemLines), with its price under its name.
-        /// </summary>
-        private static void ListingTooltip(MarketListing listing, bool iconHovered) {
-            if (!ImGui.IsItemHovered() && !iconHovered) {
-                return;
-            }
-
-            var lines = ItemLines.Build(listing);
-            lines.Insert(1, new ItemLine($"Price: {listing.ListedPrice:N0} pyreals", ItemLineStyle.Detail));
-            ItemTooltip.Show(lines, iconHovered: true);
-        }
-
-        private void StartSearch() {
-            var query = MarketSearch.Query(searchText, category, minTier, maxTier, filterValues, sortBy, sortDescending, page, carvedJewelOnly);
-            search.Start(() => api.SearchListings(query));
         }
 
         public void Dispose() {

@@ -72,7 +72,8 @@ namespace DaraletPlayer.Ui {
 
             if (!hinted) {
                 hinted = true;
-                CoreManager.Current.Actions.AddChatText("[Daralet] Selected it: press your appraise key for the game's appraisal. (Plugin appraisal, on the Daralet window's top line, shows it in the plugin instead.)", 5);
+                PluginCore.Chat("Selected it: press your appraise key for the game's appraisal. "
+                    + "(Plugin appraisal, on the Daralet window's top line, shows it in the plugin instead.)");
             }
         }
 
@@ -92,7 +93,8 @@ namespace DaraletPlayer.Ui {
             }
 
             var number = windows.Count + 1;
-            var window = new AppraisalWindow(feed, settings, icons, $"appraisal-{number}", $"Appraisal {number}", FirstPosition + Cascade * (number - 1));
+            var position = FirstPosition + Cascade * (number - 1);
+            var window = new AppraisalWindow(feed, settings, icons, $"appraisal-{number}", $"Appraisal {number}", position);
             windows.Add(window);
             return window;
         }

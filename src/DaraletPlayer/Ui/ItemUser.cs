@@ -9,13 +9,11 @@ using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// Using an item from the inventory's lists, as double-clicking it in the game's inventory does (UseRules decides what
-    /// that is): gear is put on with the game's own auto-wield, or taken off; anything else is used; and a tool that's used
-    /// on something turns the mouse into a target, and the next item picked in the lists (or yourself, or what you have
-    /// selected in the world, if the tool allows) is what it's used on. Shared by every list, so a tool picked up in one
-    /// can be used on an item in another.
+    /// Using an item as a double-click in the game's inventory does (UseRules decides what that is): gear goes on or off,
+    /// anything else is used, and a tool used on something turns the mouse into a target for the next item picked. Shared
+    /// by every list, so a tool picked up in one can be used on an item in another.
     /// </summary>
-    internal static class ItemUser {
+    internal static partial class ItemUser {
         /// <summary>The tool waiting for a target, or 0.</summary>
         private static int tool;
         private static uint toolUsable;
@@ -40,10 +38,7 @@ namespace DaraletPlayer.Ui {
         /// <summary>The frame a right-click or Escape put the tool down.</summary>
         private static int cancelledFrame = -1;
 
-        /// <summary>
-        /// Whether a click this frame belongs to targeting: an item's right-click menu stays shut for the right-click that
-        /// put the tool down, as it does while one is up.
-        /// </summary>
+        /// <summary>Whether a click this frame belongs to targeting, so item menus stay shut for it.</summary>
         public static bool TakesClicks => Targeting || cancelledFrame == ImGui.GetFrameCount();
 
         // the game's colours for the target cursor: ready, over something it works on, over something it doesn't
@@ -82,7 +77,8 @@ namespace DaraletPlayer.Ui {
             }
 
             var kind = KindOf(item);
-            PluginCore.LogFile($"[use] {item.Name} ({id:X8}): {kind}, usable 0x{Usable(item):X8}, target type 0x{TargetType(item):X8}, type 0x{ItemType(item):X8}");
+            var flags = $"usable 0x{Usable(item):X8}, target type 0x{TargetType(item):X8}, type 0x{ItemType(item):X8}";
+            PluginCore.LogFile($"[use] {item.Name} ({id:X8}): {kind}, {flags}");
 
             switch (kind) {
                 case UseKind.Wield:
@@ -102,7 +98,7 @@ namespace DaraletPlayer.Ui {
                     startedFrame = ImGui.GetFrameCount();
                     break;
                 default:
-                    Chat($"The {item.Name} can't be used.");
+                    PluginCore.Chat($"The {item.Name} can't be used.");
                     break;
             }
         }
@@ -118,11 +114,10 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// Uses the item from a hotbar slot: as Use, except that a tool used on something goes straight onto what the slot
-        /// says (HotbarUseOn) instead of waiting for a target to be picked, unless picking is what it says.
+        /// Use from a hotbar slot: a tool goes straight onto what the slot says (HotbarUseOn) instead of waiting for a
+        /// target, unless the slot says to pick one.
         /// </summary>
-        /// <param name="oneClickHeal">A kit goes on you at once (One-click Heal), unless the slot says your selection or
-        /// picking.</param>
+        /// <param name="oneClickHeal">A kit goes on you at once, unless the slot says your selection or pick.</param>
         public static void UseFromBar(int id, string useOn, bool oneClickHeal = false) {
             var item = CoreManager.Current.WorldFilter[id];
 
@@ -130,9 +125,11 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            // a kit's use flags only name a target that isn't you (in the game you select yourself, or pick yourself), so
-            // "yourself" in Auto never takes it; One-click Heal sends it to you all the same, and the server heals you
-            if (oneClickHeal && IsKit(item) && useOn != HotbarUseOn.Selection && useOn != HotbarUseOn.Pick) {
+            // a kit's use flags never name you as a target (in the game you pick yourself), so Auto can't put it on you;
+            // One-click Heal sends it to you anyway, and the server heals you
+            var slotWantsOthers = useOn == HotbarUseOn.Selection || useOn == HotbarUseOn.Pick;
+
+            if (oneClickHeal && IsKit(item) && !slotWantsOthers) {
                 PluginCore.LogFile($"[use] {item.Name} ({id:X8}) from a hotbar: One-click Heal, on yourself");
                 Apply(id, CoreManager.Current.CharacterFilter.Id);
                 return;
@@ -147,7 +144,8 @@ namespace DaraletPlayer.Ui {
             var me = CoreManager.Current.CharacterFilter.Id;
             var onSelf = UseRules.Targets(usable, UsePlace.Self) && (TargetType(item) & UseRules.CreatureType) != 0;
             var selection = SelectionFor(item);
-            PluginCore.LogFile($"[use] {item.Name} ({id:X8}) from a hotbar, on {useOn ?? HotbarUseOn.Auto}: yourself {(onSelf ? "allowed" : "not allowed")}, selection 0x{selection:X8}");
+            var selfNote = onSelf ? "allowed" : "not allowed";
+            PluginCore.LogFile($"[use] {item.Name} ({id:X8}) from a hotbar, on {useOn ?? HotbarUseOn.Auto}: yourself {selfNote}, selection 0x{selection:X8}");
 
             switch (useOn) {
                 case HotbarUseOn.Self:
@@ -155,7 +153,7 @@ namespace DaraletPlayer.Ui {
                         Apply(id, me);
                     }
                     else {
-                        Chat($"The {item.Name} can't be used on you.");
+                        PluginCore.Chat($"The {item.Name} can't be used on you.");
                     }
 
                     break;
@@ -164,7 +162,7 @@ namespace DaraletPlayer.Ui {
                         Apply(id, selection);
                     }
                     else {
-                        Chat($"Select something the {item.Name} works on first.");
+                        PluginCore.Chat($"Select something the {item.Name} works on first.");
                     }
 
                     break;
@@ -184,8 +182,7 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// A healing, stamina or mana kit: the server's Healer, which Decal calls a HealingKit, whichever vital it restores.
-        /// A kit Decal doesn't know as one is still a used-on-a-creature tool with Kit in its name.
+        /// A healing, stamina or mana kit: Decal's HealingKit, or failing that, a tool used on creatures with Kit in its name.
         /// </summary>
         public static bool IsKit(WorldObject item) {
             if (item == null) {
@@ -196,8 +193,8 @@ namespace DaraletPlayer.Ui {
                 return true;
             }
 
-            return KindOf(item) == UseKind.Target && (TargetType(item) & UseRules.CreatureType) != 0
-                && (item.Name ?? "").IndexOf("Kit", StringComparison.OrdinalIgnoreCase) >= 0;
+            var onCreatures = KindOf(item) == UseKind.Target && (TargetType(item) & UseRules.CreatureType) != 0;
+            return onCreatures && (item.Name ?? "").IndexOf("Kit", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>What you have selected, if the tool works on it where it is; 0 otherwise.</summary>
@@ -212,13 +209,25 @@ namespace DaraletPlayer.Ui {
 
             var usable = Usable(tool);
             var targetType = TargetType(tool);
+            var place = PlaceOf(target);
+
+            bool CanTarget(UsePlace at) => UseRules.CanTarget(usable, targetType, ItemType(target), at);
+
+            var valid = CanTarget(place) || (place == UsePlace.Remote && CanTarget(UsePlace.Viewed));
+            return valid ? id : 0;
+        }
+
+        /// <summary>Where something is, as a tool's use flags name it: worn, in your packs, or out in the world.</summary>
+        private static UsePlace PlaceOf(WorldObject target) {
+            var me = CoreManager.Current.CharacterFilter.Id;
+
+            if (target.Values(LongValueKey.Wielder, 0) == me) {
+                return UsePlace.Wielded;
+            }
+
             var container = target.Values(LongValueKey.Container, 0);
             var inPack = container == me || CoreManager.Current.WorldFilter[container]?.Values(LongValueKey.Container, 0) == me;
-            var place = target.Values(LongValueKey.Wielder, 0) == me ? UsePlace.Wielded : inPack ? UsePlace.Contained : UsePlace.Remote;
-
-            var valid = UseRules.CanTarget(usable, targetType, ItemType(target), place)
-                || (place == UsePlace.Remote && UseRules.CanTarget(usable, targetType, ItemType(target), UsePlace.Viewed));
-            return valid ? id : 0;
+            return inPack ? UsePlace.Contained : UsePlace.Remote;
         }
 
         private static void Apply(int tool, int target) {
@@ -226,126 +235,11 @@ namespace DaraletPlayer.Ui {
             CoreManager.Current.Actions.ApplyItem(tool, target);
         }
 
-        /// <summary>Takes a worn item off, into your main pack.</summary>
-        public static void TakeOff(int id) {
-            CoreManager.Current.Actions.MoveItem(id, CoreManager.Current.CharacterFilter.Id, 0, false);
-        }
-
-        /// <summary>The item being put on once what's in its way is off, or 0.</summary>
-        private static int wielding;
-        private static readonly Queue<int> inTheWay = new Queue<int>();
-
-        /// <summary>The worn item being taken off now, or 0, and when that was asked.</summary>
-        private static int takingOff;
-        private static DateTime takingOffSince;
-        private static DateTime lastOffAt;
-
-        /// <summary>How long an item gets to come off: past this, it can't (a full pack), and the wield is given up.</summary>
-        private static readonly TimeSpan TakeOffTimeout = TimeSpan.FromSeconds(4);
-
         /// <summary>
-        /// A wait after each item comes off before the next move: a move sent the moment the last landed was dropped
-        /// unanswered (the looter found the same).
+        /// The item just drawn in a list: while targeting, hovering says whether the tool works on it and a click uses it on
+        /// it; otherwise a click selects it and a double-click uses it.
         /// </summary>
-        private static readonly TimeSpan BetweenMoves = TimeSpan.FromMilliseconds(250);
-
-        /// <summary>
-        /// Puts an item on, replacing what's worn where it goes (UseRules.ToTakeOff): the server won't put it over anything,
-        /// and the game's own auto-wield from a plugin doesn't take anything off first, as a double-click in the game does.
-        /// So what's in the way comes off into your main pack one at a time (Step, every frame), then it goes on.
-        /// </summary>
-        public static void Wield(int id) {
-            var item = CoreManager.Current.WorldFilter[id];
-
-            if (item == null) {
-                return;
-            }
-
-            var worn = CoreManager.Current.WorldFilter.GetInventory().Cast<WorldObject>()
-                .Where(o => o.Id != id && o.Values(LongValueKey.EquippedSlots, 0) != 0)
-                .Select(o => new WornItem { Id = o.Id, Slots = unchecked((uint)o.Values(LongValueKey.EquippedSlots, 0)), BothHands = BothHands(o) })
-                .ToList();
-
-            var slots = unchecked((uint)item.Values(LongValueKey.EquipableSlots, 0));
-            var off = UseRules.ToTakeOff(slots, BothHands(item), worn);
-
-            if (off.Count == 0) {
-                CoreManager.Current.Actions.AutoWield(id);
-                return;
-            }
-
-            PluginCore.LogFile($"[use] {item.Name}: taking off {string.Join(", ", off.Select(o => CoreManager.Current.WorldFilter[o]?.Name ?? o.ToString("X8")))} first");
-            wielding = id;
-            takingOff = 0;
-            lastOffAt = DateTime.MinValue;
-            inTheWay.Clear();
-
-            foreach (var o in off) {
-                inTheWay.Enqueue(o);
-            }
-        }
-
-        /// <summary>The next step of a Wield: wait for the last item to come off, take off the next, or put the item on.</summary>
-        private static void Step() {
-            if (wielding == 0) {
-                return;
-            }
-
-            var now = DateTime.UtcNow;
-
-            if (takingOff != 0) {
-                var item = CoreManager.Current.WorldFilter[takingOff];
-
-                if (item != null && item.Values(LongValueKey.EquippedSlots, 0) != 0) {
-                    if (now - takingOffSince > TakeOffTimeout) {
-                        Chat($"Couldn't take off the {item.Name} to make room (is your main pack full?).");
-                        wielding = 0;
-                    }
-
-                    return;
-                }
-
-                takingOff = 0;
-                lastOffAt = now;
-            }
-
-            if (now - lastOffAt < BetweenMoves) {
-                return;
-            }
-
-            if (inTheWay.Count > 0) {
-                takingOff = inTheWay.Dequeue();
-                takingOffSince = now;
-                TakeOff(takingOff);
-                return;
-            }
-
-            // gone while the rest came off (dropped, banked): nothing to put on
-            if (CoreManager.Current.WorldFilter[wielding] != null) {
-                CoreManager.Current.Actions.AutoWield(wielding);
-            }
-
-            wielding = 0;
-        }
-
-        /// <summary>
-        /// A two-hander, a caster or a bow: nothing goes in the off hand with it. A thrown weapon is a missile weapon too,
-        /// but it stacks, and a shield can go with it.
-        /// </summary>
-        private static bool BothHands(WorldObject item) {
-            var slots = unchecked((uint)item.Values(LongValueKey.EquipableSlots, 0)) | unchecked((uint)item.Values(LongValueKey.EquippedSlots, 0));
-
-            return (slots & EquipSlots.TwoHanded) != 0
-                || item.ObjectClass == ObjectClass.WandStaffOrb
-                || ((slots & EquipSlots.MissileWeapon) != 0 && item.Values(LongValueKey.StackMax, 1) <= 1);
-        }
-
-        /// <summary>
-        /// An item in a list, drawn just before: while targeting, hovering it says whether the tool works on it and clicking
-        /// it uses the tool on it; otherwise a double-click uses it.
-        /// </summary>
-        /// <param name="usable">Whether it can be used from here: what you carry or wear, not what's in the bank (which can
-        /// still be a target).</param>
+        /// <param name="usable">Can be used from here: not in the bank (which can still be a target).</param>
         public static void Item(int id, UsePlace place, bool usable) {
             var hovered = ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem);
 
@@ -375,10 +269,7 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        /// <summary>
-        /// Once a frame, from each list: Escape or a right-click puts the tool down; the reticle follows the mouse; and a bar
-        /// over the list says what's being used, with buttons for yourself and your world selection when the tool allows.
-        /// </summary>
+        /// <summary>Once a frame from each list: the reticle, and a bar saying what's being used, with On yourself and the like.</summary>
         public static void Render() {
             if (!Frame()) {
                 return;
@@ -389,9 +280,8 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// Once a frame from a window that isn't a list (a hotbar): a wield's next step, and while a tool is up, Escape or a
-        /// right-click putting it down and the reticle following the mouse. A wield or a tool started from a hotbar goes on
-        /// with the inventory closed.
+        /// Once a frame from a window that isn't a list (a hotbar), so a wield or tool started there goes on with the
+        /// inventory closed.
         /// </summary>
         public static void RenderCursor() {
             if (Frame()) {
@@ -456,8 +346,8 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// The target cursor: a reticle centred on the mouse, over every window. A plugin can't change the game's own cursor,
-        /// so this is drawn under it, white until it's over something, then green or red.
+        /// The target cursor, centred on the mouse over every window: a plugin can't change the game's own cursor. The
+        /// game's yellow reticle, or its red one over something the tool doesn't work on.
         /// </summary>
         private static void DrawReticle() {
             var frame = ImGui.GetFrameCount();
@@ -468,19 +358,23 @@ namespace DaraletPlayer.Ui {
 
             drawnFrame = frame;
 
-            // what was hovered last frame: the lists drawn after this one haven't said yet this frame
-            var cantUse = hoverFrame >= frame - 1 && hoverValid == false;
+            // last frame's hover: the lists drawn after this one haven't said yet this frame
+            var hoverKnown = hoverFrame >= frame - 1 && hoverValid.HasValue;
+            var cantUse = hoverKnown && hoverValid == false;
 
-            // the game's own reticles, at their size: yellow with nothing under it or something it works on, red over
-            // something it doesn't
             const float artSize = 32;
+            var art = cantUse ? ItemIcons.ArtReticleInvalid : ItemIcons.ArtReticle;
+            var artAt = ImGui.GetMousePos() - new Vector2(artSize / 2, artSize / 2);
 
-            if (Icons != null && Icons.DrawArt(ImGui.GetForegroundDrawList(), cantUse ? ItemIcons.ArtReticleInvalid : ItemIcons.ArtReticle,
-                ImGui.GetMousePos() - new Vector2(artSize / 2, artSize / 2), artSize)) {
+            if (Icons != null && Icons.DrawArt(ImGui.GetForegroundDrawList(), art, artAt, artSize)) {
                 return;
             }
 
-            var colour = hoverFrame >= frame - 1 && hoverValid.HasValue ? (hoverValid.Value ? CanUse : CantUse) : Ready;
+            DrawShapeReticle(hoverKnown ? (hoverValid.Value ? CanUse : CantUse) : Ready);
+        }
+
+        /// <summary>A reticle drawn with lines, if the game's picture couldn't be made.</summary>
+        private static void DrawShapeReticle(Vector4 colour) {
             var c = ImGui.GetColorU32(colour);
             var shadow = ImGui.GetColorU32(new Vector4(0, 0, 0, 0.8f));
             var at = ImGui.GetMousePos();
@@ -498,14 +392,14 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// Uses the tool on the target, the game's own use-on (Actions.ApplyItem), which the server checks again; one it
-        /// doesn't work on gets the game's message instead, and the tool stays up for another try.
+        /// Uses the tool on the target (the game's own use-on, which the server checks). On a target it doesn't work on, the
+        /// tool stays up for another try.
         /// </summary>
         private static void UseOn(int target, bool valid) {
             var name = CoreManager.Current.WorldFilter[target]?.Name ?? "that";
 
             if (!valid) {
-                Chat($"You can't use the {toolName} on the {name}.");
+                PluginCore.Chat($"You can't use the {toolName} on the {name}.");
                 return;
             }
 
@@ -529,31 +423,25 @@ namespace DaraletPlayer.Ui {
             var item = selected == 0 ? null : CoreManager.Current.WorldFilter[selected];
             var me = CoreManager.Current.CharacterFilter.Id;
 
-            // something you carry is picked from the lists, and you are "On yourself"
-            if (item == null || selected == me || item.Values(LongValueKey.Container, 0) != 0 || item.Values(LongValueKey.Wielder, 0) == me) {
+            if (item == null || selected == me) {
                 return null;
             }
 
-            return item;
+            // something you carry is picked from the lists instead
+            var carried = item.Values(LongValueKey.Container, 0) != 0 || item.Values(LongValueKey.Wielder, 0) == me;
+            return carried ? null : item;
         }
 
         private static UseKind KindOf(WorldObject item) {
-            return UseRules.Kind(Usable(item), unchecked((uint)item.Values(LongValueKey.EquipableSlots, 0)),
-                item.Values(LongValueKey.EquippedSlots, 0) != 0);
+            var equipable = unchecked((uint)item.Values(LongValueKey.EquipableSlots, 0));
+            var equipped = item.Values(LongValueKey.EquippedSlots, 0) != 0;
+            return UseRules.Kind(Usable(item), equipable, equipped);
         }
 
-        // Decal's names for these come from the network message's header flags: Unknown10 is flag 0x10, the item's use flags
-        // (ACE's ItemUseable); UsageMask is its TargetType; Category is the item's own ItemType.
+        // Decal names these by the message's header flags: Unknown10 (flag 0x10) is the use flags (ACE's ItemUseable),
+        // UsageMask the TargetType, Category the ItemType.
         private static uint Usable(WorldObject item) => unchecked((uint)item.Values(LongValueKey.Unknown10, 0));
         private static uint TargetType(WorldObject item) => unchecked((uint)item.Values(LongValueKey.UsageMask, 0));
         private static uint ItemType(WorldObject item) => unchecked((uint)item.Values(LongValueKey.Category, 0));
-
-        private static void Chat(string text) {
-            try {
-                CoreManager.Current.Actions.AddChatText($"[Daralet] {text}", 5);
-            }
-            catch (Exception) {
-            }
-        }
     }
 }

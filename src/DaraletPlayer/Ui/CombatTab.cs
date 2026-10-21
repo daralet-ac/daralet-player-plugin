@@ -20,12 +20,15 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            if (Widgets.TabItem("Target", "Your selected target's vitals, buffs, debuffs and threat table, and a tracked target you can watch alongside it.")) {
+            if (Widgets.TabItem("Target", "Your selected target's vitals, buffs, debuffs and threat table, and a tracked "
+                + "target you can watch alongside it.")) {
                 targetTab.Render();
                 ImGui.EndTabItem();
             }
 
-            if (Widgets.TabItem("Hotbars", "Bars of items you use with a click or a hotkey: potions, kits, weapons to swap. Drag items onto them from your packs. Set their size, pages, colours, cooldowns, structure bars and keys here.")) {
+            if (Widgets.TabItem("Hotbars", "Bars of items you use with a click or a hotkey: potions, kits, weapons to "
+                + "swap. Drag items onto them from your packs. Set their size, pages, colours, cooldowns, structure bars and "
+                + "keys here.")) {
                 hotbars.RenderTab();
                 ImGui.EndTabItem();
             }

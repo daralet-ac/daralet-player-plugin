@@ -7,8 +7,7 @@ using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// The Combat tab's Hotbars: the bars down the left with the ways of arranging them, and the chosen bar's settings on
-    /// the right, under a preview drawn with the bar's own looks, in five tabs.
+    /// The Combat tab's Hotbars page: the bars down the left, and the chosen bar's settings on the right under a preview.
     /// </summary>
     internal partial class Hotbars {
         private int selected;
@@ -19,6 +18,24 @@ namespace DaraletPlayer.Ui {
         private int keysRow = 1;
 
         private static readonly string[] SampleNames = { "Healing Kit", "Mana Stone", "Sword", "Potion", "Wand", "Shield" };
+
+        private static readonly (string Label, string Tip, Func<HotbarBar, uint> Get, Action<HotbarBar, uint> Set)[] CustomColours = {
+            ("Slot", "Behind each slot's icon, and an empty slot.", b => b.SlotBackground, (b, c) => b.SlotBackground = c),
+            ("Border", "Round each slot.", b => b.SlotBorder, (b, c) => b.SlotBorder = c),
+            ("Hover", "Over the slot under the mouse.", b => b.HoverColor, (b, c) => b.HoverColor = c),
+            ("Used", "The flash when a slot is used, and the frame round a slot picked up with Move...", b => b.PressColor, (b, c) => b.PressColor = c),
+            ("Worn", "The frame round something you're wearing or wielding.", b => b.WornColor, (b, c) => b.WornColor = c),
+            ("None left", "The shade over a slot whose item you don't have with you.", b => b.MissingColor, (b, c) => b.MissingColor = c),
+            ("Keys", "The hotkeys on the slots.", b => b.KeyColor, (b, c) => b.KeyColor = c),
+            ("Counts", "How many you carry.", b => b.CountColor, (b, c) => b.CountColor = c),
+            ("Page arrows", "The page arrows and number.", b => b.PagerColor, (b, c) => b.PagerColor = c),
+            ("Cooldown shade", "The shade over an item cooling down. Its alpha is how dark.", b => b.CooldownShade, (b, c) => b.CooldownShade = c),
+            ("Cooldown time", "The seconds left, and the Bar style's bar.", b => b.CooldownColor, (b, c) => b.CooldownColor = c),
+            ("Ready flash", "The flash when a cooldown ends.", b => b.ReadyColor, (b, c) => b.ReadyColor = c),
+            ("Uses full", "The uses bar with every use left.", b => b.StructureFull, (b, c) => b.StructureFull = c),
+            ("Uses low", "The uses bar with none left (with Colour by amount).", b => b.StructureLow, (b, c) => b.StructureLow = c),
+            ("Behind bars", "Behind the uses bar and the cooldown bar: the part that's gone.", b => b.StructureBack, (b, c) => b.StructureBack = c),
+        };
 
         public void RenderTab() {
             Frame();
@@ -106,28 +123,7 @@ namespace DaraletPlayer.Ui {
         }
 
         private static string Summary(HotbarBar bar) {
-            return $"{bar.Columns} x {bar.Rows}, {bar.Pages} page{(bar.Pages == 1 ? "" : "s")}";
-        }
-
-        /// <summary>A full-width button that stays lit while its mode is on. Returns true when it's clicked.</summary>
-        private static bool ModeButton(string label, bool on) {
-            if (on) {
-                ImGui.PushStyleColor(ImGuiCol.Button, ImGui.GetStyle().Colors[(int)ImGuiCol.ButtonActive]);
-            }
-
-            var clicked = ImGui.Button(label, new Vector2(-1, 0));
-
-            if (on) {
-                ImGui.PopStyleColor();
-            }
-
-            return clicked;
-        }
-
-        private static void Hint(string text) {
-            ImGui.PushStyleColor(ImGuiCol.Text, Colors.Info);
-            Widgets.TextWrapped(text);
-            ImGui.PopStyleColor();
+            return $"{bar.Columns} x {bar.Rows}, {Words.Count(bar.Pages, "page")}";
         }
 
         // ---- the right: the chosen bar ----
@@ -226,8 +222,8 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// A row of made-up slots drawn exactly as the bar draws its own: a stack with its count, one cooling down with uses
-        /// left, one worn, and empty ones, with the bar's real keys (or sample ones while it has none).
+        /// Made-up slots drawn exactly as the bar draws its own: a stack, one cooling down, one worn, and empty ones, with
+        /// the bar's keys (or sample ones while it has none).
         /// </summary>
         private void RenderPreview(HotbarBar bar) {
             var style = ImGui.GetStyle();
@@ -262,7 +258,7 @@ namespace DaraletPlayer.Ui {
                 };
 
                 if (bar.ShowKeys) {
-                    look.Key = hasKeys ? bar.KeyAt(0, i)?.ShortLabel ?? "" : i < Feed.Keys.NumberRow.Length ? Feed.Keys.ShortName(Feed.Keys.NumberRow[i]) : "";
+                    look.Key = hasKeys ? bar.KeyAt(0, i)?.ShortLabel ?? "" : SampleKey(i);
                 }
 
                 if (look.Filled || bar.ShowEmpty) {
@@ -274,6 +270,12 @@ namespace DaraletPlayer.Ui {
 
             ImGui.Dummy(new Vector2(ImGui.GetContentRegionAvail().X, height));
             ImGui.Spacing();
+        }
+
+        /// <summary>1, 2, 3... for a preview whose bar has no keys yet.</summary>
+        private static string SampleKey(int column) {
+            var row = Feed.Keys.NumberRow;
+            return column < row.Length ? Feed.Keys.ShortName(row[column]) : "";
         }
 
         /// <summary>Icons for the preview: what's on the bar's first row, then whatever else you carry.</summary>
@@ -395,30 +397,12 @@ namespace DaraletPlayer.Ui {
             }
 
             if (ImGui.BeginTable("look-colours", 4, ImGuiTableFlags.SizingFixedFit)) {
-                var colours = new (string Label, string Tip, Func<HotbarBar, uint> Get, Action<HotbarBar, uint> Set)[] {
-                    ("Slot", "Behind each slot's icon, and an empty slot.", b => b.SlotBackground, (b, c) => b.SlotBackground = c),
-                    ("Border", "Round each slot.", b => b.SlotBorder, (b, c) => b.SlotBorder = c),
-                    ("Hover", "Over the slot under the mouse.", b => b.HoverColor, (b, c) => b.HoverColor = c),
-                    ("Used", "The flash when a slot is used, and the frame round a slot picked up with Move...", b => b.PressColor, (b, c) => b.PressColor = c),
-                    ("Worn", "The frame round something you're wearing or wielding.", b => b.WornColor, (b, c) => b.WornColor = c),
-                    ("None left", "The shade over a slot whose item you don't have with you.", b => b.MissingColor, (b, c) => b.MissingColor = c),
-                    ("Keys", "The hotkeys on the slots.", b => b.KeyColor, (b, c) => b.KeyColor = c),
-                    ("Counts", "How many you carry.", b => b.CountColor, (b, c) => b.CountColor = c),
-                    ("Page arrows", "The page arrows and number.", b => b.PagerColor, (b, c) => b.PagerColor = c),
-                    ("Cooldown shade", "The shade over an item cooling down. Its alpha is how dark.", b => b.CooldownShade, (b, c) => b.CooldownShade = c),
-                    ("Cooldown time", "The seconds left, and the Bar style's bar.", b => b.CooldownColor, (b, c) => b.CooldownColor = c),
-                    ("Ready flash", "The flash when a cooldown ends.", b => b.ReadyColor, (b, c) => b.ReadyColor = c),
-                    ("Uses full", "The uses bar with every use left.", b => b.StructureFull, (b, c) => b.StructureFull = c),
-                    ("Uses low", "The uses bar with none left (with Colour by amount).", b => b.StructureLow, (b, c) => b.StructureLow = c),
-                    ("Behind bars", "Behind the uses bar and the cooldown bar: the part that's gone.", b => b.StructureBack, (b, c) => b.StructureBack = c),
-                };
-
-                for (var i = 0; i < colours.Length; i++) {
+                for (var i = 0; i < CustomColours.Length; i++) {
                     if (i % 2 == 0) {
                         ImGui.TableNextRow();
                     }
 
-                    var (label, tip, get, set) = colours[i];
+                    var (label, tip, get, set) = CustomColours[i];
                     ImGui.TableNextColumn();
                     ImGui.AlignTextToFramePadding();
                     Widgets.TextDisabled(label);
@@ -461,8 +445,14 @@ namespace DaraletPlayer.Ui {
 
             for (var i = 0; i < 2; i++) {
                 var slotAt = at + new Vector2(6 + i * (size + 2), 6);
+                var look = new SlotLook {
+                    Filled = true,
+                    Name = SampleNames[i * 2],
+                    Layers = i * 2 < layers.Count ? layers[i * 2] : null,
+                };
+
                 SlotPainter.Background(drawList, sample, slotAt, size, SlotPainter.Border(sample, 1));
-                SlotPainter.Contents(drawList, sample, icons, new SlotLook { Filled = true, Name = SampleNames[i * 2], Layers = i * 2 < layers.Count ? layers[i * 2] : null }, slotAt, size, 1);
+                SlotPainter.Contents(drawList, sample, icons, look, slotAt, size, 1);
             }
 
             Centred(label, width);
@@ -577,327 +567,27 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        // ---- Keys ----
-
-        private void RenderKeys(HotbarWindow window, HotbarBar bar) {
-            Widgets.TextDisabled("Click a slot below, then press its key. Right-click one to clear it.");
-            Widgets.TextColored(Colors.Warning, "The game hears these keys too: pick ones it doesn't use.");
-            ImGui.Spacing();
-
-            var cell = (float)Math.Round(ImGui.GetFontSize() * 3);
-
-            for (var row = 0; row < bar.Rows; row++) {
-                var first = true;
-
-                for (var col = 0; col < bar.Columns; col++) {
-                    Flow(ref first, cell);
-
-                    var key = bar.KeyAt(row, col);
-                    var capturing = IsCapturing(window, row, col);
-                    var label = capturing ? "..." : key?.ShortLabel ?? "-";
-
-                    if (capturing) {
-                        ImGui.PushStyleColor(ImGuiCol.Button, ImGui.GetStyle().Colors[(int)ImGuiCol.ButtonActive]);
-                    }
-
-                    if (ImGui.Button($"{label}##key-{row}-{col}", new Vector2(cell, 0))) {
-                        StartCapture(window, row, col);
-                    }
-
-                    if (capturing) {
-                        ImGui.PopStyleColor();
-                    }
-
-                    if (ImGui.IsItemClicked(ImGuiMouseButton.Right) && key != null) {
-                        bar.SetKey(row, col, null);
-                        settings.Changed();
-                    }
-
-                    var where = bar.Rows > 1 ? $"Row {row + 1}, slot {col + 1}" : $"Slot {col + 1}";
-                    Widgets.Tip(key != null ? $"{where}: {key.Label}. Click to change it, right-click to clear it." : $"{where}: no key. Click, then press the key to use it with.");
-                }
-            }
-
-            ImGui.Spacing();
-
-            if (BeginForm("keys-quick")) {
-                if (bar.Rows > 1) {
-                    Label("On row", "The row the quick sets below go on.");
-                    keysRow = Math.Max(1, Math.Min(bar.Rows, keysRow));
-                    Stepper("##keys-row", ref keysRow, 1, bar.Rows, save: false);
-                }
-
-                Label("Quick set", "Sets the row's slots from the left in one go. Keys used elsewhere move here.");
-                var first = true;
-                var row = keysRow - 1;
-
-                if (FlowButton(ref first, "1 to 0", "1 to 9, then 0, - and =.")) {
-                    SetRow(bar, row, bar.NumberKeys(row, false, false, false));
-                }
-
-                if (FlowButton(ref first, "Shift + 1 to 0", "The same with Shift held.")) {
-                    SetRow(bar, row, bar.NumberKeys(row, false, true, false));
-                }
-
-                if (FlowButton(ref first, "F1 to F12", "The function keys.")) {
-                    SetRow(bar, row, bar.FunctionKeys(row));
-                }
-
-                var armed = clearArmedFrame >= ImGui.GetFrameCount() - 1;
-
-                if (FlowButton(ref first, armed ? "Really clear?" : "Clear all", "Takes every key off this bar, its page keys too. Click twice.")) {
-                    if (armed) {
-                        bar.Keys.Clear();
-                        bar.NextPageKey = new HotkeyBinding();
-                        bar.PreviousPageKey = new HotkeyBinding();
-                        clearArmedFrame = -1;
-                        settings.Changed();
-                    }
-                    else {
-                        clearArmedFrame = ImGui.GetFrameCount();
-                    }
-                }
-                else if (armed && ImGui.IsItemHovered()) {
-                    clearArmedFrame = ImGui.GetFrameCount();
-                }
-
-                if (bar.Pages > 1) {
-                    Label("Page keys", "Keys to turn the bar's pages. Click one, then press the key; right-click clears it.");
-                    first = true;
-                    PageKey(ref first, "Next", bar.NextPageKey, b => bar.NextPageKey = b, $"{window.Title}'s next page");
-                    PageKey(ref first, "Back", bar.PreviousPageKey, b => bar.PreviousPageKey = b, $"{window.Title}'s page before");
-                }
-
-                ImGui.EndTable();
-            }
-
-            Section("Display");
-            Check("Hotkeys on", ref bar.HotkeysOn, "Pressing a slot's key uses it, while the game's window is in front and you're not typing in chat or a text box.");
-            Check("Show Hotkeys", ref bar.ShowKeys, "Each slot's key, short (S1 for Shift+1, C for Ctrl, A for Alt), in a corner.");
-
-            if (bar.ShowKeys && BeginForm("keys-display")) {
-                Label("Corner", "Which corner of the slot the key is shown in.");
-
-                if (Segmented("key-corner", SlotCorner.Options, ref bar.KeyCorner)) {
-                    settings.Changed();
-                }
-
-                Label("Key size", "How big the keys are drawn on the slots, as a share of the bar's font, apart from the counts and cooldown times.");
-                var percent = (int)Math.Round(bar.KeyScale * 100);
-
-                if (Slider("##key-size", ref percent, 50, 250, "%d%%")) {
-                    bar.KeyTextScale = percent / 100f;
-                }
-
-                ImGui.EndTable();
-            }
-        }
-
-        private void SetRow(HotbarBar bar, int row, List<(int Col, HotkeyBinding Binding)> keys) {
-            foreach (var (col, binding) in keys) {
-                Data.Forget(binding);
-                bar.SetKey(row, col, binding);
-            }
-
-            settings.Changed();
-        }
-
-        /// <summary>A page key as a button showing it: click to set it (the next key pressed), right-click to clear it.</summary>
-        private void PageKey(ref bool first, string label, HotkeyBinding binding, Action<HotkeyBinding> set, string what) {
-            var text = $"{label}: {(binding?.IsSet == true ? binding.Label : "none")}";
-
-            if (FlowButton(ref first, $"{text}##page-{label}", $"The key that turns to the {(label == "Next" ? "next page" : "page before")}. Click, then press it; Escape cancels. Right-click clears it.")) {
-                StartCapture(what, set);
-            }
-
-            if (ImGui.IsItemClicked(ImGuiMouseButton.Right) && binding?.IsSet == true) {
-                set(new HotkeyBinding());
-                settings.Changed();
-            }
-        }
-
         // ---- Items ----
 
         private void RenderItems(HotbarBar bar) {
             var mine = bar.SlotsFor(Character);
             ImGui.Spacing();
-            Widgets.TextWrapped($"{mine.Count} slot{(mine.Count == 1 ? "" : "s")} filled for {Character}. Each character has their own items; the layout, look and keys are shared.");
+            Widgets.TextWrapped($"{Words.Count(mine.Count, "slot")} filled for {Character}. "
+                + "Each character has their own items; the layout, look and keys are shared.");
             ImGui.PushStyleColor(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
-            Widgets.TextWrapped("Drag items onto the bar from your packs, the Inventory window or the game's own pack, and spells from the game's spellbook or spell bar (or right-click a slot, Put a spell here). When a stack runs out, the slot uses the next one like it you carry.");
+            Widgets.TextWrapped("Drag items onto the bar from your packs, the Inventory window or the game's own pack, "
+                + "and spells from the game's spellbook or spell bar (or right-click a slot, Put a spell here). "
+                + "When a stack runs out, the slot uses the next one like it you carry.");
             ImGui.PopStyleColor();
             ImGui.Spacing();
 
-            var armed = emptyArmedFrame >= ImGui.GetFrameCount() - 1;
+            var emptyLabel = Armed(emptyArmedFrame) ? "Really empty it?##items" : "Empty this bar";
 
-            if (ImGui.Button(armed ? "Really empty it?##items" : "Empty this bar")) {
-                if (armed) {
-                    mine.Clear();
-                    emptyArmedFrame = -1;
-                    settings.Changed();
-                }
-                else {
-                    emptyArmedFrame = ImGui.GetFrameCount();
-                }
-            }
-            else if (armed && ImGui.IsItemHovered()) {
-                emptyArmedFrame = ImGui.GetFrameCount();
+            if (SecondClick(ref emptyArmedFrame, ImGui.Button(emptyLabel))) {
+                mine.Clear();
+                settings.Changed();
             }
             Widgets.Tip("Takes every item off this bar for this character, on every page. The items stay in your packs. Click twice.");
-        }
-
-        // ---- the pieces every tab is made of ----
-
-        /// <summary>The width a control in a form gets: the same for all, so they line up.</summary>
-        private static float ControlWidth => (float)Math.Round(ImGui.GetFontSize() * 12);
-
-        private static void Section(string title) {
-            ImGui.Spacing();
-            Widgets.TextColored(Colors.Info, title);
-            ImGui.Separator();
-        }
-
-        /// <summary>A form: labels in a column on the left, their controls lined up on the right. End it with EndTable.</summary>
-        private static bool BeginForm(string id) {
-            if (!ImGui.BeginTable(id, 2)) {
-                return false;
-            }
-
-            ImGui.TableSetupColumn("label", ImGuiTableColumnFlags.WidthFixed, (float)Math.Round(ImGui.GetFontSize() * 7.5f));
-            ImGui.TableSetupColumn("control", ImGuiTableColumnFlags.WidthStretch);
-            return true;
-        }
-
-        /// <summary>A form's next row: its label, with the tooltip; the control drawn next goes beside it.</summary>
-        private static void Label(string text, string tip) {
-            ImGui.TableNextRow();
-            ImGui.TableNextColumn();
-            ImGui.AlignTextToFramePadding();
-            Widgets.TextDisabled(text);
-            Widgets.Tip(tip);
-            ImGui.TableNextColumn();
-        }
-
-        /// <summary>
-        /// Before something width pixels wide: it goes on the same line as the last if it fits, else on the next. The
-        /// first of a run starts a line.
-        /// </summary>
-        private static void Flow(ref bool first, float width) {
-            if (first) {
-                first = false;
-                return;
-            }
-
-            var right = ImGui.GetItemRectMax().X + ImGui.GetStyle().ItemSpacing.X + width;
-
-            if (right <= ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X) {
-                ImGui.SameLine();
-            }
-        }
-
-        private void FlowCheck(ref bool first, string label, ref bool value, string tip) {
-            var width = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemInnerSpacing.X + ImGui.CalcTextSize(label).X;
-            Flow(ref first, width);
-            Check(label, ref value, tip);
-        }
-
-        private static bool FlowButton(ref bool first, string label, string tip) {
-            var shown = label.Split(new[] { "##" }, StringSplitOptions.None)[0];
-            Flow(ref first, ImGui.CalcTextSize(shown).X + ImGui.GetStyle().FramePadding.X * 2);
-            var clicked = ImGui.Button(label);
-            Widgets.Tip(tip);
-            return clicked;
-        }
-
-        /// <summary>A row of buttons, one lit: the choice it's set to.</summary>
-        private static bool Segmented(string id, (string Value, string Label)[] options, ref string value) {
-            var changed = false;
-            ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(1, ImGui.GetStyle().ItemSpacing.Y));
-
-            for (var i = 0; i < options.Length; i++) {
-                if (i > 0) {
-                    ImGui.SameLine();
-                }
-
-                var on = options[i].Value == value;
-
-                if (on) {
-                    ImGui.PushStyleColor(ImGuiCol.Button, ImGui.GetStyle().Colors[(int)ImGuiCol.ButtonActive]);
-                }
-
-                if (ImGui.Button($"{options[i].Label}##{id}-{options[i].Value}") && !on) {
-                    value = options[i].Value;
-                    changed = true;
-                }
-
-                if (on) {
-                    ImGui.PopStyleColor();
-                }
-            }
-
-            ImGui.PopStyleVar();
-            return changed;
-        }
-
-        /// <summary>A number with - and + buttons beside it.</summary>
-        private void Stepper(string id, ref int value, int min, int max, bool save = true) {
-            ImGui.SetNextItemWidth((float)Math.Round(ImGui.GetFontSize() * 7));
-
-            if (ImGui.InputInt(id, ref value, 1)) {
-                value = Math.Max(min, Math.Min(max, value));
-
-                if (save) {
-                    settings.Changed();
-                }
-            }
-        }
-
-        private bool Slider(string id, ref int value, int min, int max, string format) {
-            ImGui.SetNextItemWidth(ControlWidth);
-            var changed = ImGui.SliderInt(id, ref value, min, max, format);
-
-            if (changed) {
-                settings.Changed();
-            }
-            Widgets.Tip("Ctrl+click to type a number.");
-            return changed;
-        }
-
-        private void Check(string label, ref bool value, string tip) {
-            if (ImGui.Checkbox(label, ref value)) {
-                settings.Changed();
-            }
-            Widgets.Tip(tip);
-        }
-
-        private bool Color(string id, ref uint color, string tip) {
-            var (r, g, b, a) = PackedColor.Unpack(color);
-            var value = new Vector4(r, g, b, a);
-            var changed = ImGui.ColorEdit4(id, ref value, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.AlphaBar | ImGuiColorEditFlags.AlphaPreviewHalf);
-
-            if (changed) {
-                color = PackedColor.Pack(value.X, value.Y, value.Z, value.W);
-                settings.Changed();
-            }
-            Widgets.Tip(tip + " Click to pick a colour; its alpha is how see-through it is.");
-            return changed;
-        }
-
-        /// <summary>The frame round a picker: lit when it's the one chosen, faint under the mouse.</summary>
-        private static void PickerFrame(ImDrawListPtr drawList, Vector2 min, Vector2 max, bool chosen, bool hovered) {
-            if (chosen) {
-                drawList.AddRectFilled(min, max, ImGui.GetColorU32(ImGuiCol.Header), 3);
-                drawList.AddRect(min, max, ImGui.GetColorU32(ImGuiCol.ButtonActive), 3, ImDrawFlags.None, 1.5f);
-            }
-            else if (hovered) {
-                drawList.AddRect(min, max, ImGui.GetColorU32(ImGuiCol.Border), 3);
-            }
-        }
-
-        /// <summary>A picker's name, centred under it.</summary>
-        private static void Centred(string text, float width) {
-            var x = ImGui.GetCursorPosX();
-            ImGui.SetCursorPosX(x + Math.Max(0, (width - ImGui.CalcTextSize(text).X) / 2));
-            Widgets.Text(text);
         }
     }
 }

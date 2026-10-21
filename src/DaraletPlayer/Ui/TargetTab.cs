@@ -8,9 +8,8 @@ using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// The Target tab, and the two windows it controls: one for whatever you have selected, and one for the creature you're
-    /// tracking, so you can watch both. They show what @playerui targets sends, asked for once a second: vitals, every spell
-    /// on the creature, who it's attacking and its threat table.
+    /// The Target tab and its two windows: what you have selected, and the creature you're tracking. Each shows what
+    /// @playerui targets sends once a second: vitals, spells, who it's attacking and its threat table.
     /// </summary>
     internal class TargetTab : IDisposable {
         private const float WindowWidth = 220;
@@ -33,8 +32,10 @@ namespace DaraletPlayer.Ui {
             this.settings = settings;
 
             tracker = new TargetTracker(feed);
-            selectedWindow = new FloatingWindow("target", "Target", settings, new Vector2(500, 60), RenderSelectedWindow, inUse: SelectedInUse);
-            trackedWindow = new FloatingWindow("tracked", "Tracked Target", settings, new Vector2(740, 60), RenderTrackedWindow, visibleByDefault: false, inUse: TrackedInUse);
+            selectedWindow = new FloatingWindow("target", "Target", settings, new Vector2(500, 60), RenderSelectedWindow,
+                inUse: SelectedInUse);
+            trackedWindow = new FloatingWindow("tracked", "Tracked Target", settings, new Vector2(740, 60), RenderTrackedWindow,
+                visibleByDefault: false, inUse: TrackedInUse);
         }
 
         public void Render() {
@@ -118,9 +119,7 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("How many rows of the threat table the target windows show. The tab shows all of them.");
         }
 
-        /// <summary>
-        /// Everything about one creature, for the tab: vitals, spells in tables, and the whole threat table.
-        /// </summary>
+        /// <summary>Everything about one creature, for the tab: vitals, spells in tables, and the whole threat table.</summary>
         private void RenderFull(uint guid) {
             var target = feed.Target(guid);
 
@@ -147,9 +146,7 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        /// <summary>
-        /// The name line and vital bars. Returns false when there's nothing more to show (not loaded, gone, or a player).
-        /// </summary>
+        /// <summary>The name line and vital bars. False when there's nothing more to show (not loaded, gone, or a player).</summary>
         private bool RenderHeader(uint guid, TargetInfo target, float barWidth, float barHeight = 0) {
             if (target == null) {
                 Widgets.TextDisabled("Loading...");
@@ -164,7 +161,8 @@ namespace DaraletPlayer.Ui {
             if (target.IsPlayer) {
                 Widgets.Text(target.Name ?? "");
                 var health = feed.ClientHealth(guid);
-                Widgets.Bar(health ?? 0, Colors.Health, health.HasValue ? $"{health.Value * 100:0}%" : "?", barWidth, barHeight);
+                var label = health.HasValue ? $"{health.Value * 100:0}%" : "?";
+                Widgets.Bar(health ?? 0, Colors.Health, label, barWidth, barHeight);
                 Widgets.Tip("Another player's health, as the game shows it. Their spells and exact vitals aren't sent.");
                 return false;
             }
@@ -225,7 +223,8 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// The threat table as bars, each as long as its share of the highest: red for you, blue for other players, grey for creatures.
+        /// The threat table as bars, each its share of the highest: red for you, blue for other players, grey for creatures.
+        /// Click a row to select them.
         /// </summary>
         private void RenderThreat(TargetInfo target, int rows, float barWidth, float barHeight = 0) {
             if (target.Threat.Count == 0) {
@@ -238,13 +237,11 @@ namespace DaraletPlayer.Ui {
             foreach (var entry in target.Threat.Take(rows)) {
                 var color = entry.IsYou ? Colors.ThreatYou : entry.IsPlayer ? Colors.ThreatPlayer : Colors.ThreatOther;
                 var attacking = target.AttackTarget == entry.Guid ? " <" : "";
+                var label = $"{entry.Name}  {entry.Threat}{attacking}";
 
-                Widgets.Bar(Display.ThreatShare(entry.Threat, highest), color, $"{entry.Name}  {entry.Threat}{attacking}", barWidth, barHeight);
+                Widgets.Bar(Display.ThreatShare(entry.Threat, highest), color, label, barWidth, barHeight);
 
-                // clicking someone in the table selects them, player or creature
-                if (ImGui.IsItemHovered()) {
-                    ImGui.GetWindowDrawList().AddRect(ImGui.GetItemRectMin(), ImGui.GetItemRectMax(), ImGui.GetColorU32(ImGuiCol.ButtonHovered));
-                }
+                Widgets.OutlineIfHovered();
 
                 if (ImGui.IsItemClicked(ImGuiMouseButton.Left)) {
                     CoreManager.Current.Actions.SelectItem(unchecked((int)entry.Guid));
@@ -300,8 +297,7 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            // clicking the tracked creature selects it, like a fellow in the fellowship window, unless the click was on
-            // someone in its threat table, who's selected instead
+            // clicking the tracked creature selects it, unless the click was on someone in its threat table
             threatClicked = false;
             ImGui.BeginGroup();
             RenderCompact(tracker.Tracked, trackedWindow.Scale);
@@ -317,13 +313,15 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("Stops tracking this creature.");
         }
 
-        /// <summary>
-        /// One creature in a floating window: the name, vital bars, then debuffs, buffs and threat as the settings say.
-        /// </summary>
+        /// <summary>One creature in a floating window: name, vital bars, then debuffs, buffs and threat as the settings say.</summary>
         private void RenderCompact(uint guid, float scale) {
             var target = feed.Target(guid);
-            var width = target?.IsOk == true ? Widgets.VitalBarWidth(WindowWidth * scale, target.MaxHealth, target.MaxStamina, target.MaxMana) : WindowWidth * scale;
+            var width = WindowWidth * scale;
             var barHeight = WindowBarHeight * scale;
+
+            if (target?.IsOk == true) {
+                width = Widgets.VitalBarWidth(width, target.MaxHealth, target.MaxStamina, target.MaxMana);
+            }
 
             if (!RenderHeader(guid, target, width, barHeight)) {
                 return;
@@ -379,9 +377,7 @@ namespace DaraletPlayer.Ui {
             return spell.Yours ? Colors.Danger : Colors.DebuffOther;
         }
 
-        /// <summary>
-        /// Starts tracking a creature and shows the Tracked Target window, which starts out hidden.
-        /// </summary>
+        /// <summary>Starts tracking a creature and shows the Tracked Target window, which starts out hidden.</summary>
         private void Track(uint guid) {
             tracker.Track(guid);
             trackedWindow.Visible = true;

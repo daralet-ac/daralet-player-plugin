@@ -20,20 +20,18 @@ namespace DaraletPlayer.Ui {
         private readonly Settings settings;
         private readonly FloatingWindow window;
 
+        /// <summary>The fellow right-clicked in the window, whose vitals its menu offers; null when it wasn't on a fellow.</summary>
+        private string menuMember;
+
         public FellowshipTab(PlayerFeed feed, Settings settings) {
             this.feed = feed;
             this.settings = settings;
 
-            window = new FloatingWindow("fellowship", "Fellowship", settings, new Vector2(20, 200), RenderWindow, inUse: FellowshipInUse,
-                menuItems: RenderMenuMember);
+            window = new FloatingWindow("fellowship", "Fellowship", settings, new Vector2(20, 200), RenderWindow,
+                inUse: FellowshipInUse, menuItems: RenderMenuMember);
         }
 
-        /// <summary>The fellow right-clicked in the window, whose vitals its menu offers; null when it wasn't on a fellow.</summary>
-        private string menuMember;
-
-        /// <summary>
-        /// The window's right-click menu, over a fellow: which of their vitals it shows, for them alone.
-        /// </summary>
+        /// <summary>The window's right-click menu, over a fellow: which of their vitals it shows, for them alone.</summary>
         private void RenderMenuMember() {
             if (menuMember == null) {
                 return;
@@ -84,7 +82,9 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            window.RenderControls("Show the fellowship window", "A small window with each member's health, stamina and mana that stays on screen while you play. Click a name in it to select that member.");
+            window.RenderControls("Show the fellowship window",
+                "A small window with each member's health, stamina and mana that stays on screen while you play. "
+                + "Click a name in it to select that member.");
             RenderWindowOptions();
 
             ImGui.Separator();
@@ -99,7 +99,9 @@ namespace DaraletPlayer.Ui {
             Widgets.Text(fellowship.Name ?? "");
             ImGui.SameLine();
             Widgets.TextDisabled(Describe(fellowship));
-            Widgets.Tip("Sharing XP needs every member within 5 levels of the leader, or all of them level 50 or higher. Even share splits XP equally; otherwise higher levels get more. Open fellowships let any member recruit. Locked ones can't take new members.");
+            Widgets.Tip("Sharing XP needs every member within 5 levels of the leader, or all of them level 50 or higher. "
+                + "Even share splits XP equally; otherwise higher levels get more. "
+                + "Open fellowships let any member recruit. Locked ones can't take new members.");
 
             RenderTable(fellowship);
         }
@@ -117,13 +119,19 @@ namespace DaraletPlayer.Ui {
             if (ImGui.Checkbox("Mana##fellowship", ref data.FellowshipShowMana)) {
                 settings.Changed();
             }
-            Widgets.Tip("Shows each member's mana in the fellowship window. Right-click a member, here or in the window, to choose their health, stamina and mana bars for them alone.");
+            Widgets.Tip("Shows each member's mana in the fellowship window. "
+                + "Right-click a member, here or in the window, to choose their health, stamina and mana bars for them alone.");
         }
 
         private static string Describe(FellowshipInfo fellowship) {
             var parts = new List<string>();
 
-            parts.Add(fellowship.ShareXp ? (fellowship.EvenShare ? "sharing XP evenly" : "sharing XP") : "not sharing XP");
+            if (!fellowship.ShareXp) {
+                parts.Add("not sharing XP");
+            }
+            else {
+                parts.Add(fellowship.EvenShare ? "sharing XP evenly" : "sharing XP");
+            }
 
             if (fellowship.Open) {
                 parts.Add("open");
@@ -190,11 +198,8 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            var data = settings.Data;
-            var scale = window.Scale;
-            var members = fellowship.Members;
-            var width = Widgets.VitalBarWidth(WindowBarWidth * scale, members.SelectMany(m => new[] { m.MaxHealth, m.MaxStamina, m.MaxMana }).ToArray());
-            var height = WindowBarHeight * scale;
+            var maximums = fellowship.Members.SelectMany(m => new[] { m.MaxHealth, m.MaxStamina, m.MaxMana }).ToArray();
+            var barSize = new Vector2(Widgets.VitalBarWidth(WindowBarWidth * window.Scale, maximums), WindowBarHeight * window.Scale);
             var selected = unchecked((uint)CoreManager.Current.Actions.CurrentSelection);
 
             // a right-click is on a fellow (their vitals join the window's menu) or not
@@ -202,53 +207,52 @@ namespace DaraletPlayer.Ui {
                 menuMember = null;
             }
 
-            foreach (var member in members) {
+            foreach (var member in fellowship.Members) {
                 ImGui.PushID((int)member.Guid);
-
-                // the name and bars are one group, so clicking anywhere on a member selects them, the way the game's own
-                // fellowship panel does
-                ImGui.BeginGroup();
-
-                var far = !member.Distance.HasValue;
-                Widgets.TextColored(far ? Colors.Muted : member.Guid == selected ? Colors.Info : Colors.Text, MemberLabel(member, fellowship));
-
-                var (health, stamina, mana) = data.FellowShows(member.Name);
-
-                if (health) {
-                    Widgets.VitalBar(member.Health, member.MaxHealth, Colors.Health, width, height);
-                }
-
-                if (stamina) {
-                    Widgets.VitalBar(member.Stamina, member.MaxStamina, Colors.Stamina, width, height);
-                }
-
-                if (mana) {
-                    Widgets.VitalBar(member.Mana, member.MaxMana, Colors.Mana, width, height);
-                }
-
-                ImGui.EndGroup();
-
-                if (ImGui.IsItemHovered()) {
-                    ImGui.GetWindowDrawList().AddRect(ImGui.GetItemRectMin(), ImGui.GetItemRectMax(), ImGui.GetColorU32(ImGuiCol.ButtonHovered));
-                }
-
-                if (ImGui.IsItemClicked(ImGuiMouseButton.Left)) {
-                    Select(member);
-                }
-
-                if (ImGui.IsItemClicked(ImGuiMouseButton.Right)) {
-                    menuMember = member.Name;
-                }
-
-                MemberTip(member);
-
+                RenderWindowMember(member, fellowship, member.Guid == selected, barSize);
                 ImGui.PopID();
             }
         }
 
         /// <summary>
-        /// A member's name in the table, greyed out when they're too far away to say how far, which selects them when clicked.
+        /// One fellow in the window: their name and bars, as one group, so clicking anywhere on them selects them the way the
+        /// game's own fellowship panel does.
         /// </summary>
+        private void RenderWindowMember(FellowInfo member, FellowshipInfo fellowship, bool selected, Vector2 barSize) {
+            ImGui.BeginGroup();
+
+            var nameColor = !member.Distance.HasValue ? Colors.Muted : selected ? Colors.Info : Colors.Text;
+            Widgets.TextColored(nameColor, MemberLabel(member, fellowship));
+
+            var (health, stamina, mana) = settings.Data.FellowShows(member.Name);
+
+            if (health) {
+                Widgets.VitalBar(member.Health, member.MaxHealth, Colors.Health, barSize.X, barSize.Y);
+            }
+
+            if (stamina) {
+                Widgets.VitalBar(member.Stamina, member.MaxStamina, Colors.Stamina, barSize.X, barSize.Y);
+            }
+
+            if (mana) {
+                Widgets.VitalBar(member.Mana, member.MaxMana, Colors.Mana, barSize.X, barSize.Y);
+            }
+
+            ImGui.EndGroup();
+            Widgets.OutlineIfHovered();
+
+            if (ImGui.IsItemClicked(ImGuiMouseButton.Left)) {
+                Select(member);
+            }
+
+            if (ImGui.IsItemClicked(ImGuiMouseButton.Right)) {
+                menuMember = member.Name;
+            }
+
+            MemberTip(member);
+        }
+
+        /// <summary>A member's name in the table, greyed out when they're too far away to say how far; a click selects them.</summary>
         private void MemberName(FellowInfo member, FellowshipInfo fellowship) {
             var far = !member.Distance.HasValue;
 
@@ -278,10 +282,11 @@ namespace DaraletPlayer.Ui {
         }
 
         private static void MemberTip(FellowInfo member) {
-            Widgets.Tip((member.Distance.HasValue
+            var where = member.Distance.HasValue
                 ? $"Click to select {member.Name}, {Display.Distance(member.Distance)} away."
-                : $"{member.Name} is too far away to select. {member.Location}")
-                + " Right-click to choose which of their vitals the fellowship window shows.");
+                : $"{member.Name} is too far away to select. {member.Location}";
+
+            Widgets.Tip(where + " Right-click to choose which of their vitals the fellowship window shows.");
         }
 
         private static void Select(FellowInfo member) {

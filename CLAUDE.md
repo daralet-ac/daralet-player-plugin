@@ -70,7 +70,7 @@ dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj
 - **Decal's WorldFilter.GetByContainer and GetInventory go stale.** An item moved into a bank pack after the bank was
   opened (a `/bank deposit`) didn't show in GetByContainer until the bank was reopened, though the client and the item's
   own `LongValueKey.Container` had it. The bank tab groups `WorldFilter.GetAll()` by each object's Container instead
-  (`BankBrowser.Snapshot`, twice a second, and the frame after Decal hears any object change, `InventoryChanges`, so a move shows the moment the server answers).
+  (`InventoryBrowser.Snapshot`, twice a second, and the frame after Decal hears any object change, `InventoryChanges`, so a move shows the moment the server answers).
 - **The game drops an item dragged from its pack and let go over a plugin window.** ImGui windows aren't game panels, so
   to the game the button came up over the world. `GameDrag` eats that WM_LBUTTONUP (Decal's `WindowMessage`, `e.Eat`)
   when it's over a window the drag was held over last frame (`GameDrag.Cover`, from `FloatingWindow` and `PlayerHud`) and
@@ -281,7 +281,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   lowest roll quality, 0 to 100, rounded as the tooltip shows it, and an item without that roll doesn't match. Switching
   empties the box. A rule can also mark what it decides (`LootMarks`: `LootRule.Highlight`, a frame colour, and `Icon`, a
   symbol drawn with ImGui shapes in the top left corner, in the frame's colour or gold), drawn by `ItemIcons.DrawMark` in
-  the Corpse window, the Test tab and, with **Loot marks** (`SettingsData.BankLootMarks`), the Inventory tab, which has
+  the Corpse window, the Test tab and, with **Loot marks** (`SettingsData.InventoryLootMarks`), the Inventory tab, which has
   every listed item described to match it. Item tooltips (bank, packs, Loot tab, Corpse window) end with the rule that decides the item, in its outcome's colour (`ItemTooltip.Show(..., rule)`). The first rule that matches decides the mark too, so an earlier rule without
   one hides a later one's.
   **Unlearned spells only** (`LootRule.UnlearnedSpellsOnly`, Misc) takes scrolls whose spell the character doesn't know:
@@ -299,7 +299,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   the start, hidden. Colours are packed as ImGui's u32 by hand (`PackedColor`). A slot keeps the item's guid and what it
   is (weenie class, `WorldObject.Type`, and name, and its icon layers): when that one's gone (a stack used up) it takes
   the fullest one like it you carry (`HotbarItems.Resolve`), and meanwhile shows the saved icon, shaded. Items go on by
-  dropping them from the inventory's lists (`BankBrowser.DragType`, the item in `BankBrowser.DraggedItem`) or from the
+  dropping them from the inventory's lists (`InventoryBrowser.DragType`, the item in `InventoryBrowser.DraggedItem`) or from the
   game's own pack (`GameDrag`); only what you carry or wear. While one's held over a slot, the slot shows its icon at half
   opacity (`HotbarWindow.DrawDropPreview`, `ItemIcons.DrawAt`'s tint), drawn after the slot itself, or the slot's
   background covers it; the red circle where it can't go. Slots only move in **Edit mode** (dragged, onto another
@@ -350,7 +350,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   spellcasting mode to cast spells." and does nothing, before any word about the target. The target: none for an untargeted spell, you for a self-only one (SpellFlags.SelfTargeted
   0x8), your selection for a harmful one (not Beneficial 0x4), and your selection or you for the rest. A spell you don't
   know shows shaded.
-  **The settings page** (`Ui/Hotbars.Settings.cs`, the other half of `Hotbars`): the bars down the left (shown or not,
+  **The settings page** (`Ui/Hotbars.Settings.cs`, with its Keys tab in `.Settings.Keys.cs` and the form pieces in
+  `.Settings.Controls.cs`): the bars down the left (shown or not,
   New hotbar) with Move slots (Edit mode) and Bind keys as lit buttons; the chosen bar on the right, under a preview of
   made-up slots (a count, a cooldown with uses left, a worn item, empty ones), in tabs Layout, Look, Cooldowns and uses,
   Keys and Items. Every slot anywhere (the bar, the preview, the style and cooldown pickers) is drawn by `SlotPainter`
@@ -393,7 +394,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
 - **The website's icons** are at `https://play.daralet.ac/images/<iconHex>.png` (13,000 of them, `daralet-website/images`),
   named by the portal.dat icon id, which is what the market listings' `iconHex` and Decal's `LongValueKey.Icon` give.
 
-- **Inventory tab** (`Ui/BankTab.cs`, `Ui/BankBrowser.cs`, `Ui/BankCommandBar.cs`, `Feed/BankCommands.cs`): sub tabs Carried
+- **Inventory tab** (`Ui/InventoryTab.cs`, `Ui/InventoryBrowser*.cs`, `Ui/BankCommandBar.cs`, `Feed/BankCommands.cs`): sub tabs Carried
   (your packs, anywhere) and Bank (the bank's packs, while it's open). The `/bank` buttons are a `BankCommandBar` above the
   items in each, and in the Bank window: one bar, shared, so its "what" box carries over. Deposit with the box empty
   is Deposit packs (your "deposit"-tagged packs), with words in it a deposit of those. A bank pack has a **Tags**
@@ -405,25 +406,25 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `Entity/PackIcons.cs`: pouches have no white), plus the pack's own icon back; the bank's views add Withdraw, Sort
   and Search, and Carried has its own Sort, the server's `/sort` of your packs (`Commands/PlayerCommands/Sort.cs`, no bank
   needed, no words); the rest are under More. The last command's first reply
-  line shows under the buttons, and hovering it shows the whole reply. Carried and Bank are each a `BankBrowser`
+  line shows under the buttons, and hovering it shows the whole reply. Carried and Bank are each a `InventoryBrowser`
   (`carried: true` for yours), with their own selected pack and search. **Show my packs** on the Bank view
   (`SettingsData.BankShowCarried`) lists your packs there too, above the bank's, to drag between them. **Bank window**
   (`SettingsData.BankWindow`) hides the game's bank window (see above) and opens the plugin's own, a `FloatingWindow` you
-  size yourself (`defaultSize`, its size saved like its position), with its own `BankBrowser`. It opens and closes with the
-  bank, which `BankTab` follows every frame, so it works with the main window closed. The **Inventory window** (controls
-  on the Carried tab, window id `carried`, hidden by default) is Carried in a `FloatingWindow` with its own `BankBrowser`
+  size yourself (`defaultSize`, its size saved like its position), with its own `InventoryBrowser`. It opens and closes with the
+  bank, which `InventoryTab` follows every frame, so it works with the main window closed. The **Inventory window** (controls
+  on the Carried tab, window id `carried`, hidden by default) is Carried in a `FloatingWindow` with its own `InventoryBrowser`
   (`retailAllowed: true`). Its **Retail** box (`SettingsData.CarriedRetail`, on by default) lays it out like the game's inventory
-  (`BankBrowser.RenderRetail`): the paperdoll at the top left (shown whatever Worn says) and the packs beside it on the
+  (`InventoryBrowser.RenderRetail`): the paperdoll at the top left (shown whatever Worn says) and the packs beside it on the
   right, the two as tall as each other so their bottoms line up: the row is the pack column's height (from last frame, `packsHeight`), and the paperdoll closes up the space under its trinket and sigils' row to fit (`RenderPaperdoll(sigilGap)`, the empty row 1 and its gaps in the game's layout), and
   the chosen pack's items as the grid across the whole width below. The packs are icons only, each with a fill bar down its right side, over the icon, filling from the bottom (`LongValueKey.ItemSlots`; 102 for the main
-  pack when the client isn't told) and its name on hover, then an empty square for each side pack slot left (`LongValueKey.PackSlots`, 7 when the client isn't told; drop a pack on one to put it there), with a burden bar down its right (`CharacterFilter.Burden`; hover it for the percent and `BurdenUnits`, full at 300%, the most you can carry, and yellow past 100%, with faint lines at 100% and 200%). The pop-out's **Reset width** makes it just wide enough, in Retail, for the paperdoll (with a little room) and the packs beside it, leaving the grid a little over seven columns (`RetailWidthShort`); in the plain view, for six columns of items (`BankBrowser.RetailColumns`, `GridWidthShort`). `FloatingWindow.SetWidth` sizes the window. No `/bank` bar in Retail: its top line has Loot marks and Sort (`/sort`) instead, and the chosen pack is framed with the selection frame and a light brown arrow on its left edge, pointing in (`DrawChosenPack`). Packs (not the main pack) are dragged onto another pack, in any pack list, to take its place (`MoveItem` to that pack's container and slot, `Holder.Parent`/`Slot`): packs can't go inside packs, so that's how they're reordered, or moved between yours and the bank's at a place.
+  pack when the client isn't told) and its name on hover, then an empty square for each side pack slot left (`LongValueKey.PackSlots`, 7 when the client isn't told; drop a pack on one to put it there), with a burden bar down its right (`CharacterFilter.Burden`; hover it for the percent and `BurdenUnits`, full at 300%, the most you can carry, and yellow past 100%, with faint lines at 100% and 200%). The pop-out's **Reset width** makes it just wide enough, in Retail, for the paperdoll (with a little room) and the packs beside it, leaving the grid a little over seven columns (`RetailWidthShort`); in the plain view, for six columns of items (`InventoryBrowser.RetailColumns`, `GridWidthShort`). `FloatingWindow.SetWidth` sizes the window. No `/bank` bar in Retail: its top line has Loot marks and Sort (`/sort`) instead, and the chosen pack is framed with the selection frame and a light brown arrow on its left edge, pointing in (`DrawChosenPack`). Packs (not the main pack) are dragged onto another pack, in any pack list, to take its place (`MoveItem` to that pack's container and slot, `Holder.Parent`/`Slot`): packs can't go inside packs, so that's how they're reordered, or moved between yours and the bank's at a place.
   `PlayerFeed.SendCommand` keeps the System and Help chat (types 5 and 15, Decal's `e.Color`) that comes back within three
-  seconds as the command's reply. The items show as a list or, with **Grid** (`SettingsData.BankGrid`), as icons only, as
+  seconds as the command's reply. The items show as a list or, with **Grid** (`SettingsData.InventoryGrid`), as icons only, as
   many to a row as fit, each with the list's hover, drag and right-click; a stack shows its size in the corner. A drag shows
   only the item's icon, centred on the mouse and drawn on the foreground draw list (no preview tooltip, which ImGui fades).
-  Dropped on another item, it goes to that item's container and slot (`BankBrowser.MoveTo`, `MoveItem` without stacking,
+  Dropped on another item, it goes to that item's container and slot (`InventoryBrowser.MoveTo`, `MoveItem` without stacking,
   unless it's a stack of the same thing), which is how items are reordered within a pack. **Worn**
-  (`SettingsData.BankShowWorn`) slides out a paperdoll of what you're wearing on the right (`BankBrowser.RenderWorn`), laid
+  (`SettingsData.InventoryShowWorn`) slides out a paperdoll of what you're wearing on the right (`InventoryBrowser.RenderWorn`), laid
   out as the game's equipment panel by `EquipSlots` (the game's EquipMask bits, one square per slot; an item covering
   several shows in each; an empty one shows the game's own picture of it, `EquipSlot.EmptyIcon`, found in portal.dat by the
   bevelled blue frame they share and drawn as it is, `ItemIcons.DrawPlain`). The window grows by the panel's width when
@@ -449,7 +450,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (flag 0x10), `UsageMask` the TargetType, `Category` the ItemType. Each use logs them to log.txt (`[use]` lines).
 
 - **Dragging into the world** (`Ui/WorldDrop.cs`): an item (or pack) let go outside every ImGui window is given to what it was let go over, or dropped on the ground, as the game's own pack does. A plugin can't ask what's under the mouse, so the selection is cleared and the game is posted a left click there (`PostMessage` to `Decal.Hwnd`): whatever it selects within 300ms gets the item (`Actions.GiveItem`); nothing, and it's dropped (`Actions.DropItem`). Yourself does nothing; the bank's items are left alone. `[drop]` lines in log.txt. The game's own panels aren't ImGui windows, so letting go over one counts as the world.
-- **Dragging in from the game** (`Ui/GameDrag.cs`, first version): a plugin can't see the game's drag, so it's inferred: the left button went down outside every ImGui window (ImGui counts no window hovered while a button held from outside is down), moved, and came up over one of ours, and the dragged thing is the game's selection. What can be dragged in is anything on the ground (`GameDraggedGroundItem`): let go over a spot (`BankBrowser.GameDropTarget`), a pack goes in a pack slot (or takes a pack's place), anything else in a pack or at a grid slot, by `MoveItem`; elsewhere it shows red. While it's held over our windows ImGui hovers nothing, so the drag is drawn by hand: the pack's icon under the mouse over an inventory window (`GameDrag.DrawIcon`; the game's own drag icon isn't drawn over ImGui windows), and the green ring or red circle over the spot it's over (`GameDrag.OverLastItem`, the mouse against the spot's square). Each drop spot's verdict is logged when it changes (`[drop]` lines, `LogDropMark`). `[drag-in]` lines in log.txt say what was seen.
+- **Dragging in from the game** (`Ui/GameDrag.cs`, first version): a plugin can't see the game's drag, so it's inferred: the left button went down outside every ImGui window (ImGui counts no window hovered while a button held from outside is down), moved, and came up over one of ours, and the dragged thing is the game's selection. What can be dragged in is anything on the ground (`GameDraggedGroundItem`): let go over a spot (`InventoryBrowser.GameDropTarget`), a pack goes in a pack slot (or takes a pack's place), anything else in a pack or at a grid slot, by `MoveItem`; elsewhere it shows red. While it's held over our windows ImGui hovers nothing, so the drag is drawn by hand: the pack's icon under the mouse over an inventory window (`GameDrag.DrawIcon`; the game's own drag icon isn't drawn over ImGui windows), and the green ring or red circle over the spot it's over (`GameDrag.OverLastItem`, the mouse against the spot's square). Each drop spot's verdict is logged when it changes (`[drop]` lines, `LogDropMark`). `[drag-in]` lines in log.txt say what was seen.
 - **Item icons** (`Ui/ItemIcons.cs`, `Feed/IconLayers.cs`): every item list (bank, Loot tab, Corpse window, Market) draws
   an item's underlay, icon and overlay before its name. UtilityBelt.Service's only icon loader is meant for its scripts
   (`ScriptHudManager.GetIconTexture`, which reads portal.dat), but a `ScriptHudManager` made with `new` works: its
@@ -506,7 +507,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (`Widgets.VitalBarWidth`): a big font wrote each bar's numbers over the next. Clicking a threat row selects that
   creature or player. The **Map window** is the World tab's map in a `FloatingWindow` with its own `MapView` (its own pan,
   zoom and Follow me); the arrow window's **Details** box leaves the arrow alone.
-- **The game's UI pictures** (`Resources/ui`, embedded as `DaraletPlayer.Resources.ui.<name>.png`, drawn by `ItemIcons.DrawArt`): taken from the client by hand, since they aren't item icons: the main pack (`main-pack`), the green behind each pack in the Retail column (`pack-background`, with the pack's icon on it without its usual tile), the ring over the slot an item is held over in a drag (`drop-ring`, 17x16, scaled to the slot's width; a frame over a list line), and the red crossed-out circle (`drop-invalid`, not the reticle's) where it can't go, letting go there doing nothing (`Accepted(allowed)`: a pack only in a pack slot, on a pack, the main pack or the bank's own slots, never among a pack's items; an item not in a full pack; a paperdoll square only for what its `EquipableSlots` include), the empty slot (`empty-slot`: a pack's room left in the grids, which show a pack as its every slot, `BankBrowser.Slots`, and the side pack slots left in the Retail column), the selection frame (`selected`: the selected item, as `Actions.CurrentSelection` says, in the grids, the paperdoll and the Retail pack column, a click in a list selecting it as the game's pack does), and the target reticles (`reticle`, `reticle-invalid`). The Retail chosen pack's arrow is still drawn with shapes: the game's own hasn't been found. The grids have no gap between squares, as the game's pack has none.
+- **The game's UI pictures** (`Resources/ui`, embedded as `DaraletPlayer.Resources.ui.<name>.png`, drawn by `ItemIcons.DrawArt`): taken from the client by hand, since they aren't item icons: the main pack (`main-pack`), the green behind each pack in the Retail column (`pack-background`, with the pack's icon on it without its usual tile), the ring over the slot an item is held over in a drag (`drop-ring`, 17x16, scaled to the slot's width; a frame over a list line), and the red crossed-out circle (`drop-invalid`, not the reticle's) where it can't go, letting go there doing nothing (`Accepted(allowed)`: a pack only in a pack slot, on a pack, the main pack or the bank's own slots, never among a pack's items; an item not in a full pack; a paperdoll square only for what its `EquipableSlots` include), the empty slot (`empty-slot`: a pack's room left in the grids, which show a pack as its every slot, `InventoryBrowser.Slots`, and the side pack slots left in the Retail column), the selection frame (`selected`: the selected item, as `Actions.CurrentSelection` says, in the grids, the paperdoll and the Retail pack column, a click in a list selecting it as the game's pack does), and the target reticles (`reticle`, `reticle-invalid`). The Retail chosen pack's arrow is still drawn with shapes: the game's own hasn't been found. The grids have no gap between squares, as the game's pack has none.
 - **The installer** (`installer/Daralet.iss`, Inno Setup 6, built and released by `.github/workflows/release.yml` on a
   `v*` tag that must match the csproj's `<Version>`): copies `Daralet.dll` and writes Decal's entry itself, the values
   UtilityBelt's plugin template installer writes (`(Default)` name, `Enabled`, `Object`, `Assembly`, `Path`, and
@@ -532,9 +533,13 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
 - **Everything the plugin writes** goes in `Documents\Decal Plugins\Daralet` (`DataFolder`): `settings.json`, `log.txt`,
   `Loot Profiles`, `world-data`. Only files a player drops in by hand (`dereth-map.png`, `locations.xml`) are looked for
   next to the dll (`PluginCore.AssemblyDirectory`).
-- **Settings** (`Settings.cs`) live in `settings.json` there, shared by every character:
+- **Settings** (`Settings.cs`, what the file holds in `SettingsData.cs`, each window's in `WindowPlacement.cs`) live in
+  `settings.json` there, shared by every character:
   window positions and visibility, and display options. A DataContract reader skips field initialisers, so new settings
   get their defaults in `SetDefaults`, which runs before a file is read as well. Saved two seconds after the last change.
+  A renamed setting keeps its old `DataMember` name, or players lose it: the Inventory tab was the Bank tab, so
+  `InventoryGrid`, `InventoryShowWorn` and `InventoryLootMarks` are still `bankGrid`, `bankShowWorn` and `bankLootMarks`
+  in the file.
 
 `@playerui` only ever sends a player data about themselves, their fellowship and what they're fighting (for a monster
 they've selected: its vitals, every buff and debuff on it, and its threat table). The server is the
@@ -549,6 +554,11 @@ checks (greying out market buttons away from a broker, say) are only there to be
   GPL-compatible license (MIT, BSD, Apache 2.0, (A)GPL; daralet-ACE is AGPL-3.0, like ACE); anything else not written
   here goes on NOTICE's list. The installer installs `LICENSE`, `NOTICE` and UtilityBelt.Service's MIT notice.
 - Braces on every `if`, even one-line bodies.
+- One type per file. A big class is split into partial files by topic, named `Class.Topic.cs` (`InventoryBrowser.Retail.cs`,
+  `LootTab.Corpse.cs`), so a file names what's in it; look for a class's other parts before adding to its main file.
+  Fields go at the top of the class, and lines stay under about 125 characters: long tooltips are joined with `+`.
+- Small shared pieces live in one place: `Widgets` (text, tips, `Button`, `OutlineIfHovered`, bars), `Colors`,
+  `PluginCore.Chat` for a line in chat, `Words.Count` for "3 rules".
 - Code comments explain why, in plain words; tooltips (`Widgets.Tip`) on every control say what it does and which command it
   sends.
 - The user commits and pushes with GitHub Desktop: leave changes staged (`git add`), don't commit. New branches with

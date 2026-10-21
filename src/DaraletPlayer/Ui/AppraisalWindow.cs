@@ -9,11 +9,8 @@ using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// The plugin's appraisal of an item, chosen from an item's right-click menu in the Corpse window or the bank (with
-    /// Plugin appraisal on; otherwise the game's, Appraisal): a window that stays until closed, showing the item's icon, name,
-    /// kind and tier, what your loot rules make of it, how it compares with what you're wearing where it goes, and every stat
-    /// the server describes (ItemLines, the tooltips' lines), with a bar for each roll's quality. Appraise shows an item in the
-    /// first of these; Appraise in new window opens another (Appraisal keeps them).
+    /// The plugin's appraisal of an item: its icon, name, kind and tier, what your loot rules make of it, every stat the
+    /// server describes with a bar for each roll's quality, and how it compares with what you're wearing where it goes.
     /// </summary>
     internal class AppraisalWindow : IDisposable {
         // the game's equip locations (Decal's EquipableSlots and EquippedSlots): any of these is "a weapon", so a sword is
@@ -23,6 +20,7 @@ namespace DaraletPlayer.Ui {
         private const int Held = 0x01000000;
         private const int TwoHanded = 0x02000000;
         private const int WeaponSlots = MeleeWeapon | MissileWeapon | Held | TwoHanded;
+
         /// <summary>The header icon's size: the game's 32-pixel icons, drawn half again as big.</summary>
         private const float IconSize = 48;
 
@@ -66,6 +64,8 @@ namespace DaraletPlayer.Ui {
         /// <summary>Whether it's showing an item: a window that isn't can take the next Appraise in new window.</summary>
         public bool InUse => guid != 0;
 
+        private CorpseItemInfo Item => fromCorpse ?? (feed.Described.TryGetValue(guid, out var described) ? described : null);
+
         /// <summary>
         /// Shows an item: one from a corpse with the corpse's description of it, or one you carry or have banked, which the
         /// server is asked to describe if it hasn't been. The equipped items it would replace are asked about too.
@@ -89,34 +89,9 @@ namespace DaraletPlayer.Ui {
             ItemUse.Request(item);
         }
 
-        /// <summary>Whether it can be worn or wielded: only then is it compared with what you're wearing.</summary>
-        private bool IsEquippable => (CoreManager.Current.WorldFilter[unchecked((int)guid)]?.Values(LongValueKey.EquipableSlots, 0) ?? 0) != 0;
-
-        /// <summary>
-        /// What you're wearing that this item would replace: everything equipped in a place it can go (both rings for a ring,
-        /// a chest piece and arm piece for a coat), any weapon or caster for a weapon. Not the item itself, when it's what's
-        /// being worn.
-        /// </summary>
-        private List<uint> Equipped() {
-            var world = CoreManager.Current.WorldFilter;
-            var slots = world[unchecked((int)guid)]?.Values(LongValueKey.EquipableSlots, 0) ?? 0;
-
-            if (slots == 0) {
-                return new List<uint>();
-            }
-
-            if ((slots & WeaponSlots) != 0) {
-                slots |= WeaponSlots;
-            }
-
-            return world.GetInventory().Cast<WorldObject>()
-                .Where(o => (o.Values(LongValueKey.EquippedSlots, 0) & slots) != 0 && unchecked((uint)o.Id) != guid)
-                .OrderBy(o => o.Values(LongValueKey.EquippedSlots, 0))
-                .Select(o => unchecked((uint)o.Id))
-                .ToList();
+        public void Dispose() {
+            window.Dispose();
         }
-
-        private CorpseItemInfo Item => fromCorpse ?? (feed.Described.TryGetValue(guid, out var described) ? described : null);
 
         private void Render() {
             var item = Item;
@@ -145,99 +120,7 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        /// <summary>
-        /// Compared with what you're wearing: a table of every stat either has, this item's, the worn one's, and the change
-        /// swapping would make, green where it's better and red where it's worse; then the spells gained and lost. With more
-        /// than one worn item it would replace (two rings), a choice of which.
-        /// </summary>
-        private void RenderCompare(CorpseItemInfo item) {
-            // only for something you can wear or wield: there's nothing to compare a gem or a scroll with
-            if (!IsEquippable) {
-                return;
-            }
-
-            var equipped = Equipped();
-
-            ImGui.Spacing();
-
-            if (!ImGui.CollapsingHeader($"Compared with what you're wearing##compare-{guid}")) {
-                return;
-            }
-
-            if (equipped.Count == 0) {
-                Widgets.TextDisabled("You're wearing nothing where this goes.");
-                return;
-            }
-
-            if (!equipped.Contains(compareWith)) {
-                compareWith = equipped[0];
-            }
-
-            if (equipped.Count > 1) {
-                ImGui.SetNextItemWidth(ImGui.GetFontSize() * 16);
-
-                if (ImGui.BeginCombo($"##compare-with-{guid}", WornName(compareWith))) {
-                    foreach (var choice in equipped) {
-                        if (ImGui.Selectable($"{WornName(choice)}##worn-{choice}", choice == compareWith)) {
-                            compareWith = choice;
-                        }
-                    }
-
-                    ImGui.EndCombo();
-                }
-                Widgets.Tip("This would replace more than one thing you're wearing: which to compare it with.");
-            }
-
-            if (!feed.Described.TryGetValue(compareWith, out var worn)) {
-                feed.Describe(compareWith);
-                Widgets.TextDisabled($"Getting {WornName(compareWith)}'s details...");
-                return;
-            }
-
-            var rows = ItemCompare.Rows(item, worn);
-
-            if (rows.Count > 0 && ImGui.BeginTable($"compare-{guid}", 4, ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit)) {
-                ImGui.TableSetupColumn("Stat");
-                ImGui.TableSetupColumn("This");
-                ImGui.TableSetupColumn(equipped.Count > 1 ? "Worn" : WornName(compareWith));
-                ImGui.TableSetupColumn("Change");
-                Widgets.HeadersRow(null, "This item.", "What you're wearing there now.", "What swapping to this item would do: green better, red worse.");
-
-                foreach (var row in rows) {
-                    ImGui.TableNextRow();
-                    ImGui.TableNextColumn();
-                    Widgets.TextDisabled(row.Stat.Label);
-                    ImGui.TableNextColumn();
-                    Widgets.Text(ItemCompare.Text(row.Stat, row.This));
-                    ImGui.TableNextColumn();
-                    Widgets.Text(ItemCompare.Text(row.Stat, row.Equipped));
-                    ImGui.TableNextColumn();
-
-                    if (row.Change.HasValue) {
-                        Widgets.TextColored(row.Better == true ? Colors.Good : Colors.Danger, ItemCompare.ChangeText(row.Stat, row.Change.Value));
-                    }
-                    else {
-                        Widgets.TextDisabled("same");
-                    }
-                }
-
-                ImGui.EndTable();
-            }
-
-            var (gained, lost) = ItemCompare.Spells(item, worn);
-
-            if (gained.Count > 0) {
-                Widgets.TextColored(Colors.Good, "Gains: " + string.Join(", ", gained));
-            }
-
-            if (lost.Count > 0) {
-                Widgets.TextColored(Colors.Danger, "Loses: " + string.Join(", ", lost));
-            }
-        }
-
-        private static string WornName(uint worn) {
-            return CoreManager.Current.WorldFilter[unchecked((int)worn)]?.Name ?? "what you're wearing";
-        }
+        // ---- the header ----
 
         /// <summary>
         /// The icon, larger, with your loot rule's mark; beside it the name, larger, in the title colour, then the item's kind
@@ -246,7 +129,7 @@ namespace DaraletPlayer.Ui {
         private void RenderHeader(CorpseItemInfo item) {
             var world = CoreManager.Current.WorldFilter[unchecked((int)guid)];
             var name = item?.Name ?? world?.Name ?? "Item";
-            var rule = item == null ? null : Loot.Decide(settings.Data.Loot.ActiveFor(CoreManager.Current.CharacterFilter.Name), item).Rule;
+            var rule = LootRuleFor(item);
 
             var top = ImGui.GetCursorScreenPos();
             var drawList = ImGui.GetWindowDrawList();
@@ -260,12 +143,7 @@ namespace DaraletPlayer.Ui {
 
             ImGui.SameLine();
             ImGui.BeginGroup();
-
-            // the name a size up: ImGui.NET has no font push here, so it's drawn straight onto the window
-            var nameSize = ImGui.GetFontSize() * NameScale;
-            var at = ImGui.GetCursorScreenPos();
-            drawList.AddText(ImGui.GetFont(), nameSize, at, ImGui.GetColorU32(ItemTooltip.Title), name);
-            ImGui.Dummy(new Vector2(ImGui.CalcTextSize(name).X * NameScale, nameSize));
+            RenderName(name);
 
             var kind = Kind(item);
 
@@ -274,7 +152,7 @@ namespace DaraletPlayer.Ui {
             }
 
             if (rule != null) {
-                Widgets.TextColored(OutcomeColor(rule.Outcome), $"{rule.Outcome}: {rule.Name}");
+                Widgets.TextColored(ItemTooltip.OutcomeColor(rule.Outcome), $"{rule.Outcome}: {rule.Name}");
                 Widgets.Tip("The first of your active loot profile's rules this item matches, and what it would do with it.");
             }
             else if (item != null) {
@@ -286,6 +164,25 @@ namespace DaraletPlayer.Ui {
             if (iconHovered) {
                 ImGui.SetTooltip("Right-click an item in the Corpse window or the bank to appraise it here.");
             }
+        }
+
+        /// <summary>The name a size up: ImGui.NET has no font push here, so it's drawn straight onto the window.</summary>
+        private static void RenderName(string name) {
+            var size = ImGui.GetFontSize() * NameScale;
+            var at = ImGui.GetCursorScreenPos();
+
+            ImGui.GetWindowDrawList().AddText(ImGui.GetFont(), size, at, ImGui.GetColorU32(ItemTooltip.Title), name);
+            ImGui.Dummy(new Vector2(ImGui.CalcTextSize(name).X * NameScale, size));
+        }
+
+        /// <summary>The rule in your active loot profile that decides the item, or null.</summary>
+        private LootRule LootRuleFor(CorpseItemInfo item) {
+            if (item == null) {
+                return null;
+            }
+
+            var list = settings.Data.Loot.ActiveFor(CoreManager.Current.CharacterFilter.Name);
+            return Loot.Decide(list, item).Rule;
         }
 
         /// <summary>"Armor, T5", from the description; "" before there is one.</summary>
@@ -309,6 +206,8 @@ namespace DaraletPlayer.Ui {
             return string.Join(", ", parts);
         }
 
+        // ---- the stats ----
+
         /// <summary>
         /// The item's lines, without the title and kind the header has. A heading gets a rule across under it; a stat that
         /// rolled gets its quality at the right as a bar and a percentage, in the quality's colour.
@@ -326,16 +225,12 @@ namespace DaraletPlayer.Ui {
             var spacing = ImGui.GetStyle().ItemSpacing.X;
 
             // the quality column's left edge: past the widest stat that rolled, and never past the wrap
-            var qualityLeft = Math.Min(wrap,
-                body.Where(l => l.Quality.HasValue).Select(l => ImGui.CalcTextSize(l.Text).X).DefaultIfEmpty(0).Max() + ImGui.GetFontSize() * 1.5f);
+            var widestRolled = body.Where(l => l.Quality.HasValue).Select(l => ImGui.CalcTextSize(l.Text).X).DefaultIfEmpty(0).Max();
+            var qualityLeft = Math.Min(wrap, widestRolled + ImGui.GetFontSize() * 1.5f);
 
             foreach (var line in body) {
                 if (line.Style == ItemLineStyle.Heading) {
-                    ImGui.Spacing();
-                    Widgets.TextColored(ItemTooltip.Heading, line.Text);
-                    var y = ImGui.GetCursorScreenPos().Y - ImGui.GetStyle().ItemSpacing.Y / 2;
-                    var left = ImGui.GetCursorScreenPos().X;
-                    ImGui.GetWindowDrawList().AddLine(new Vector2(left, y), new Vector2(left + wrap, y), ImGui.GetColorU32(ImGuiCol.Separator));
+                    RenderHeading(line.Text, wrap);
                     continue;
                 }
 
@@ -346,6 +241,17 @@ namespace DaraletPlayer.Ui {
                     RenderQuality(line.Quality.Value, lineStart + qualityLeft, barWidth, percentWidth, spacing);
                 }
             }
+        }
+
+        /// <summary>A section's heading, with a rule across under it.</summary>
+        private static void RenderHeading(string text, float width) {
+            ImGui.Spacing();
+            Widgets.TextColored(ItemTooltip.Heading, text);
+
+            var y = ImGui.GetCursorScreenPos().Y - ImGui.GetStyle().ItemSpacing.Y / 2;
+            var left = ImGui.GetCursorScreenPos().X;
+            var color = ImGui.GetColorU32(ImGuiCol.Separator);
+            ImGui.GetWindowDrawList().AddLine(new Vector2(left, y), new Vector2(left + width, y), color);
         }
 
         /// <summary>A roll's quality: a bar filled as far as it rolled in its range, and the percentage after it.</summary>
@@ -373,12 +279,141 @@ namespace DaraletPlayer.Ui {
             ImGui.PopTextWrapPos();
         }
 
-        private static Vector4 OutcomeColor(LootOutcome outcome) {
-            return ItemTooltip.OutcomeColor(outcome);
+        // ---- compared with what you're wearing ----
+
+        /// <summary>
+        /// Compared with what you're wearing: a table of every stat either has, and the change swapping would make, green
+        /// where it's better and red where it's worse; then the spells gained and lost.
+        /// </summary>
+        private void RenderCompare(CorpseItemInfo item) {
+            // only for something you can wear or wield: there's nothing to compare a gem or a scroll with
+            if (EquipableSlots(guid) == 0) {
+                return;
+            }
+
+            var equipped = Equipped();
+
+            ImGui.Spacing();
+
+            if (!ImGui.CollapsingHeader($"Compared with what you're wearing##compare-{guid}")) {
+                return;
+            }
+
+            if (equipped.Count == 0) {
+                Widgets.TextDisabled("You're wearing nothing where this goes.");
+                return;
+            }
+
+            if (!equipped.Contains(compareWith)) {
+                compareWith = equipped[0];
+            }
+
+            if (equipped.Count > 1) {
+                RenderCompareChoice(equipped);
+            }
+
+            if (!feed.Described.TryGetValue(compareWith, out var worn)) {
+                feed.Describe(compareWith);
+                Widgets.TextDisabled($"Getting {WornName(compareWith)}'s details...");
+                return;
+            }
+
+            var wornHeading = equipped.Count > 1 ? "Worn" : WornName(compareWith);
+            RenderCompareTable(ItemCompare.Rows(item, worn), wornHeading);
+
+            var (gained, lost) = ItemCompare.Spells(item, worn);
+
+            if (gained.Count > 0) {
+                Widgets.TextColored(Colors.Good, "Gains: " + string.Join(", ", gained));
+            }
+
+            if (lost.Count > 0) {
+                Widgets.TextColored(Colors.Danger, "Loses: " + string.Join(", ", lost));
+            }
         }
 
-        public void Dispose() {
-            window.Dispose();
+        /// <summary>Which of the worn items it would replace (two rings, say) to compare it with.</summary>
+        private void RenderCompareChoice(List<uint> equipped) {
+            ImGui.SetNextItemWidth(ImGui.GetFontSize() * 16);
+
+            if (ImGui.BeginCombo($"##compare-with-{guid}", WornName(compareWith))) {
+                foreach (var choice in equipped) {
+                    if (ImGui.Selectable($"{WornName(choice)}##worn-{choice}", choice == compareWith)) {
+                        compareWith = choice;
+                    }
+                }
+
+                ImGui.EndCombo();
+            }
+            Widgets.Tip("This would replace more than one thing you're wearing: which to compare it with.");
+        }
+
+        private void RenderCompareTable(List<CompareRow> rows, string wornHeading) {
+            var flags = ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit;
+
+            if (rows.Count == 0 || !ImGui.BeginTable($"compare-{guid}", 4, flags)) {
+                return;
+            }
+
+            ImGui.TableSetupColumn("Stat");
+            ImGui.TableSetupColumn("This");
+            ImGui.TableSetupColumn(wornHeading);
+            ImGui.TableSetupColumn("Change");
+            Widgets.HeadersRow(null, "This item.", "What you're wearing there now.",
+                "What swapping to this item would do: green better, red worse.");
+
+            foreach (var row in rows) {
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                Widgets.TextDisabled(row.Stat.Label);
+                ImGui.TableNextColumn();
+                Widgets.Text(ItemCompare.Text(row.Stat, row.This));
+                ImGui.TableNextColumn();
+                Widgets.Text(ItemCompare.Text(row.Stat, row.Equipped));
+                ImGui.TableNextColumn();
+
+                if (row.Change.HasValue) {
+                    var color = row.Better == true ? Colors.Good : Colors.Danger;
+                    Widgets.TextColored(color, ItemCompare.ChangeText(row.Stat, row.Change.Value));
+                }
+                else {
+                    Widgets.TextDisabled("same");
+                }
+            }
+
+            ImGui.EndTable();
+        }
+
+        /// <summary>
+        /// What you're wearing that this item would replace: everything equipped in a place it can go (both rings for a ring,
+        /// a chest piece and arm piece for a coat), any weapon or caster for a weapon. Not the item itself, when it's what's
+        /// being worn.
+        /// </summary>
+        private List<uint> Equipped() {
+            var slots = EquipableSlots(guid);
+
+            if (slots == 0) {
+                return new List<uint>();
+            }
+
+            if ((slots & WeaponSlots) != 0) {
+                slots |= WeaponSlots;
+            }
+
+            return CoreManager.Current.WorldFilter.GetInventory().Cast<WorldObject>()
+                .Where(o => (o.Values(LongValueKey.EquippedSlots, 0) & slots) != 0 && unchecked((uint)o.Id) != guid)
+                .OrderBy(o => o.Values(LongValueKey.EquippedSlots, 0))
+                .Select(o => unchecked((uint)o.Id))
+                .ToList();
+        }
+
+        /// <summary>Where an item can be worn or wielded; 0 for something that can't.</summary>
+        private static int EquipableSlots(uint item) {
+            return CoreManager.Current.WorldFilter[unchecked((int)item)]?.Values(LongValueKey.EquipableSlots, 0) ?? 0;
+        }
+
+        private static string WornName(uint worn) {
+            return CoreManager.Current.WorldFilter[unchecked((int)worn)]?.Name ?? "what you're wearing";
         }
     }
 }

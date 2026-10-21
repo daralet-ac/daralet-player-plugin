@@ -85,7 +85,8 @@ namespace DaraletPlayer.Ui {
             try {
                 Spell = SpellOf(first, second);
                 upFrames = 0;
-                PluginCore.LogFile($"[spell-drag] the game began a drag: 0x{first:X8}, 0x{second:X8}, {third}{(Spell != 0 ? $": spell {Spell}" : "")}");
+                var spell = Spell != 0 ? $": spell {Spell}" : "";
+                PluginCore.LogFile($"[spell-drag] the game began a drag: 0x{first:X8}, 0x{second:X8}, {third}{spell}");
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);

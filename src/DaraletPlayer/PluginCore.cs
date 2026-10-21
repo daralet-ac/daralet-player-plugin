@@ -7,19 +7,15 @@ using DaraletPlayer.Ui;
 
 namespace DaraletPlayer {
     /// <summary>
-    /// The Daralet plugin. Startup() runs when Decal loads the plugin, or when the hot-reload loader (Daralet.Loader.dll)
-    /// loads a new build, and Shutdown() when it's unloaded. Only CoreManager.Current is used, never PluginBase.Host / Core,
-    /// because a hot-reloaded copy isn't registered with Decal and those are never set up for it.
+    /// The Daralet plugin, started by Decal or by the hot-reload loader. Only CoreManager.Current is used, never
+    /// PluginBase.Host / Core: a hot-reloaded copy isn't registered with Decal, so those are never set up for it.
     /// </summary>
     [FriendlyName("Daralet")]
     public class PluginCore : PluginBase {
         // System.IO.Path is written out in full in here: PluginBase has a Path property of its own
         private static string assemblyDirectory;
 
-        /// <summary>
-        /// The id in the plugin's own chat links (&lt;Tell:IIDString:id:...&gt;), which Decal hands to ChatNameClicked: any fixed
-        /// number other plugins don't use. UtilityBelt's are a hash of its name.
-        /// </summary>
+        /// <summary>The id in the plugin's chat links, handed back by ChatNameClicked: any fixed number other plugins don't use.</summary>
         private const int ChatLinkId = 0x44617261;
 
         private Settings settings;
@@ -29,8 +25,8 @@ namespace DaraletPlayer {
         private bool updateAnnounced;
 
         /// <summary>
-        /// The folder the plugin dll is in, where a dereth-map.png or locations.xml put there by hand is looked for. The loader sets
-        /// this, since a plugin loaded from bytes has no location. Everything the plugin writes goes in DataFolder instead.
+        /// The folder the dll is in, for files a player drops in by hand. Set by the loader, since a plugin loaded from bytes
+        /// has no location. Everything the plugin writes goes in DataFolder.
         /// </summary>
         public static string AssemblyDirectory {
             get {
@@ -69,8 +65,8 @@ namespace DaraletPlayer {
         }
 
         /// <summary>
-        /// Each step on its own: the loader swaps builds in a running game, and a step that fails must not leave a feed asking
-        /// the server for data with nothing left to hide the replies from chat.
+        /// Each step on its own: a failed step must not leave a feed asking the server for data with nothing left to hide
+        /// the replies from chat (the loader swaps builds in a running game).
         /// </summary>
         protected override void Shutdown() {
             ShutdownStep(() => {
@@ -85,10 +81,7 @@ namespace DaraletPlayer {
             ShutdownStep(() => Loot.KnowsScrollSpell = null);
         }
 
-        /// <summary>
-        /// Whether the character has learned the spell on a scroll, for loot rules' Unlearned spells only: the scroll's spell
-        /// comes with it when the client learns of it (Decal's AssociatedSpell); null when it didn't.
-        /// </summary>
+        /// <summary>Whether the character knows a scroll's spell (Decal's AssociatedSpell), or null when the client wasn't told.</summary>
         private static bool? KnowsScrollSpell(uint guid) {
             try {
                 var spell = CoreManager.Current.WorldFilter[unchecked((int)guid)]?.Values(LongValueKey.AssociatedSpell, 0) ?? 0;
@@ -119,9 +112,7 @@ namespace DaraletPlayer {
             }
         }
 
-        /// <summary>
-        /// Says once in chat that a newer version is out, after login: a line added before then never shows.
-        /// </summary>
+        /// <summary>Says once in chat that a newer version is out, after login: a line added before then never shows.</summary>
         private void AnnounceUpdate() {
             var newer = updates?.Newer;
 
@@ -141,10 +132,7 @@ namespace DaraletPlayer {
             }
         }
 
-        /// <summary>
-        /// A click on one of the plugin's chat links. Only release pages of this plugin are opened: anyone can put a link
-        /// with this id in a tell.
-        /// </summary>
+        /// <summary>A click on one of the plugin's chat links. Only its release pages open: anyone can put this id in a tell.</summary>
         private void Core_ChatNameClicked(object sender, ChatClickInterceptEventArgs e) {
             try {
                 if (e.Id != ChatLinkId) {
@@ -163,14 +151,14 @@ namespace DaraletPlayer {
             }
         }
 
-        /// <summary>
-        /// /dap (or @dap) shows and hides the window.
-        /// </summary>
+        /// <summary>/dap (or @dap) shows and hides the window.</summary>
         private void Core_CommandLineText(object sender, ChatParserInterceptEventArgs e) {
             try {
                 var text = e.Text?.Trim();
+                var isDap = string.Equals(text, "/dap", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(text, "@dap", StringComparison.OrdinalIgnoreCase);
 
-                if (string.Equals(text, "/dap", StringComparison.OrdinalIgnoreCase) || string.Equals(text, "@dap", StringComparison.OrdinalIgnoreCase)) {
+                if (isDap) {
                     e.Eat = true;
                     hud.Toggle();
                 }
@@ -184,9 +172,7 @@ namespace DaraletPlayer {
             Log(ex.ToString());
         }
 
-        /// <summary>
-        /// Writes to log.txt only, not to chat: for things about chat itself, which must not add to it.
-        /// </summary>
+        /// <summary>Writes to log.txt only, not to chat: for things about chat itself, which must not add to it.</summary>
         internal static void LogFile(string message) {
             // logging must never be what crashes the plugin
             try {
@@ -203,6 +189,15 @@ namespace DaraletPlayer {
 
             try {
                 CoreManager.Current.Actions.AddChatText($"[Daralet] {message}", 1);
+            }
+            catch {
+            }
+        }
+
+        /// <summary>A note to the player in chat, in the System colour. Not logged.</summary>
+        internal static void Chat(string text) {
+            try {
+                CoreManager.Current.Actions.AddChatText($"[Daralet] {text}", 5);
             }
             catch {
             }

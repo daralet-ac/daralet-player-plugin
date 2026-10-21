@@ -16,6 +16,10 @@ namespace DaraletPlayer.Ui {
         /// <summary>Quick enough to follow a kill count; it's only asked for while the tab is open.</summary>
         private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
 
+        private static readonly (string Value, string Label)[] Shows = {
+            ("all", "All"), ("started", "Started"), ("available", "Not started"), ("done", "Done"),
+        };
+
         private readonly PlayerFeed feed;
         private readonly Action<string, float, float> goTo;
 
@@ -25,10 +29,6 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>The quest whose Abandon was pressed once, waiting for Yes.</summary>
         private uint abandoning;
-
-        private static readonly (string Value, string Label)[] Shows = {
-            ("all", "All"), ("started", "Started"), ("available", "Not started"), ("done", "Done"),
-        };
 
         /// <param name="goTo">Makes a spot the World tab's destination: a name, then map x (east) and y (north).</param>
         public QuestsTab(PlayerFeed feed, Action<string, float, float> goTo) {
@@ -126,7 +126,9 @@ namespace DaraletPlayer.Ui {
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
 
-                if (ImGui.Selectable($"{quest.Name}##quest-{quest.Id}", quest.Id == selected, ImGuiSelectableFlags.SpanAllColumns)) {
+                var label = $"{quest.Name}##quest-{quest.Id}";
+
+                if (ImGui.Selectable(label, quest.Id == selected, ImGuiSelectableFlags.SpanAllColumns)) {
                     selected = quest.Id;
                     abandoning = 0;
                 }
@@ -146,7 +148,9 @@ namespace DaraletPlayer.Ui {
 
         private void RenderDetails(QuestInfo quest) {
             Widgets.TextColored(ItemTooltip.Title, quest.Name ?? "");
-            Widgets.TextColored(StageColor(quest), StageText(quest) + (TimeText(quest) is string time ? $"  ({TimeLabel(quest)} {time})" : ""));
+            var time = TimeText(quest);
+            var timer = time != null ? $"  ({TimeLabel(quest)} {time})" : "";
+            Widgets.TextColored(StageColor(quest), StageText(quest) + timer);
 
             if (quest.MaxSolves.HasValue || quest.Solves > 0) {
                 RenderProgress(quest, ImGui.GetFontSize() * 14);
@@ -252,7 +256,7 @@ namespace DaraletPlayer.Ui {
             return quest.IsDone ? Colors.Good : quest.IsStarted ? Colors.Info : Colors.Muted;
         }
 
-        private string TimeLabel(QuestInfo quest) => quest.IsDone ? "again in" : "time left";
+        private static string TimeLabel(QuestInfo quest) => quest.IsDone ? "again in" : "time left";
 
         /// <summary>
         /// The quest's timer counted down from the reply: time left on a timed one, or until a done one can be done again.

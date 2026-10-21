@@ -5,28 +5,6 @@ using DaraletPlayer.Feed;
 using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
-    /// <summary>
-    /// What a hotbar slot shows: worked out from its item on a bar, or made up for the settings' preview, so the two are
-    /// drawn by the same code and the preview is what the bar looks like.
-    /// </summary>
-    internal class SlotLook {
-        public bool Filled;
-        public IconLayers Layers;
-        /// <summary>Its first letters stand in for its icon until that's loaded.</summary>
-        public string Name;
-        /// <summary>You have none: the slot shows what it was, shaded.</summary>
-        public bool Missing;
-        public bool Worn;
-        public (double Left, double Total)? Cooldown;
-        public (int Left, int Total)? Structure;
-        public int? Count;
-        /// <summary>The hotkey's short label, or empty.</summary>
-        public string Key = "";
-        /// <summary>The flashes when it's used and when its cooldown ends, as how strong they are now, 0 to 1.</summary>
-        public float UsedFlash;
-        public float ReadyFlash;
-    }
-
     /// <summary>Draws hotbar slots in a bar's looks: the bar itself, its settings' preview, and the style pickers.</summary>
     internal static class SlotPainter {
         /// <summary>A slot's square and its border round the outside, so the icon itself is drawn whole.</summary>
@@ -35,7 +13,8 @@ namespace DaraletPlayer.Ui {
             drawList.AddRectFilled(at, corner, bar.SlotBackground);
 
             if (border > 0) {
-                drawList.AddRect(at - new Vector2(border / 2), corner + new Vector2(border / 2), bar.SlotBorder, 0, ImDrawFlags.None, border);
+                var outset = new Vector2(border / 2);
+                drawList.AddRect(at - outset, corner + outset, bar.SlotBorder, 0, ImDrawFlags.None, border);
             }
         }
 
@@ -49,44 +28,22 @@ namespace DaraletPlayer.Ui {
         /// hotkey and the flashes, all inside the slot.
         /// </summary>
         /// <param name="cooldownStyle">A cooldown style to draw instead of the bar's (the style picker's samples).</param>
-        public static void Contents(ImDrawListPtr drawList, HotbarBar bar, ItemIcons icons, SlotLook look, Vector2 at, float size, float scale,
-            string cooldownStyle = null) {
+        public static void Contents(ImDrawListPtr drawList, HotbarBar bar, ItemIcons icons, SlotLook look, Vector2 at,
+            float size, float scale, string cooldownStyle = null) {
             var corner = at + new Vector2(size, size);
             drawList.PushClipRect(at, corner, true);
 
             if (look.Filled) {
                 // underlay, icon and overlay, the size of the slot; while there's no picture yet, the name's first letters
                 if (!icons.DrawAt(drawList, look.Layers, at, size)) {
-                    var initials = new string((look.Name ?? "?").Split(' ').Where(w => w.Length > 0).Take(2).Select(w => w[0]).ToArray());
-                    var initialsSize = LabelSize(icons, bar, initials, bar.TextScale);
-                    Label(drawList, icons, bar, initials, at + new Vector2((size - initialsSize.X) / 2, (size - initialsSize.Y) / 2), bar.KeyColor, bar.TextScale);
+                    LabelCentred(drawList, icons, bar, Initials(look.Name), at, size, bar.KeyColor, bar.TextScale);
                 }
 
                 if (look.Missing) {
                     drawList.AddRectFilled(at, corner, bar.MissingColor);
                 }
                 else {
-                    if (bar.MarkWorn && look.Worn) {
-                        var thickness = Math.Max(1, (float)Math.Round(2 * scale));
-                        var inset = new Vector2(thickness / 2, thickness / 2);
-                        drawList.AddRect(at + inset, corner - inset, bar.WornColor, 0, ImDrawFlags.None, thickness);
-                    }
-
-                    if (look.Cooldown.HasValue) {
-                        Cooldown(drawList, bar, icons, cooldownStyle ?? bar.Cooldown, look.Cooldown.Value, at, size);
-                    }
-
-                    var counted = bar.ShowCounts && look.Count.HasValue;
-
-                    if (bar.ShowStructure && look.Structure.HasValue) {
-                        Structure(drawList, bar, icons, look.Structure.Value, at, size, scale, counted);
-                    }
-
-                    if (counted) {
-                        var count = look.Count.Value;
-                        var text = count >= 10000 ? $"{count / 1000}k" : count.ToString();
-                        Label(drawList, icons, bar, text, corner - LabelSize(icons, bar, text, bar.TextScale), bar.CountColor, bar.TextScale);
-                    }
+                    ItemState(drawList, bar, icons, look, at, size, scale, cooldownStyle);
                 }
             }
 
@@ -105,19 +62,56 @@ namespace DaraletPlayer.Ui {
             drawList.PopClipRect();
         }
 
-        private static void Cooldown(ImDrawListPtr drawList, HotbarBar bar, ItemIcons icons, string style, (double Left, double Total) cooldown, Vector2 at, float size) {
+        /// <summary>Over an item you have: the worn frame, the cooldown, the structure bar and the count.</summary>
+        private static void ItemState(ImDrawListPtr drawList, HotbarBar bar, ItemIcons icons, SlotLook look, Vector2 at,
+            float size, float scale, string cooldownStyle) {
+            var corner = at + new Vector2(size, size);
+
+            if (bar.MarkWorn && look.Worn) {
+                var thickness = Math.Max(1, (float)Math.Round(2 * scale));
+                var inset = new Vector2(thickness / 2, thickness / 2);
+                drawList.AddRect(at + inset, corner - inset, bar.WornColor, 0, ImDrawFlags.None, thickness);
+            }
+
+            if (look.Cooldown.HasValue) {
+                Cooldown(drawList, bar, icons, cooldownStyle ?? bar.Cooldown, look.Cooldown.Value, at, size);
+            }
+
+            var counted = bar.ShowCounts && look.Count.HasValue;
+
+            if (bar.ShowStructure && look.Structure.HasValue) {
+                Structure(drawList, bar, icons, look.Structure.Value, at, size, scale, counted);
+            }
+
+            if (counted) {
+                var count = look.Count.Value;
+                var text = count >= 10000 ? $"{count / 1000}k" : count.ToString();
+                var bottomRight = corner - LabelSize(icons, bar, text, bar.TextScale);
+                Label(drawList, icons, bar, text, bottomRight, bar.CountColor, bar.TextScale);
+            }
+        }
+
+        /// <summary>"Healing Kit" as "HK": what a slot shows until its icon has loaded.</summary>
+        private static string Initials(string name) {
+            var words = (name ?? "?").Split(' ').Where(w => w.Length > 0).Take(2);
+            return new string(words.Select(w => w[0]).ToArray());
+        }
+
+        private static void Cooldown(ImDrawListPtr drawList, HotbarBar bar, ItemIcons icons, string style,
+            (double Left, double Total) cooldown, Vector2 at, float size) {
             var corner = at + new Vector2(size, size);
             var share = (float)Math.Max(0, Math.Min(1, cooldown.Left / cooldown.Total));
+            var shareOfSize = (float)Math.Round(size * share);
 
             switch (style) {
                 case CooldownStyle.Sweep:
                     Sweep(drawList, bar, at, size, 1 - share);
                     break;
                 case CooldownStyle.FillUp:
-                    drawList.AddRectFilled(at, new Vector2(corner.X, at.Y + (float)Math.Round(size * share)), bar.CooldownShade);
+                    drawList.AddRectFilled(at, new Vector2(corner.X, at.Y + shareOfSize), bar.CooldownShade);
                     break;
                 case CooldownStyle.FillDown:
-                    drawList.AddRectFilled(new Vector2(at.X, corner.Y - (float)Math.Round(size * share)), corner, bar.CooldownShade);
+                    drawList.AddRectFilled(new Vector2(at.X, corner.Y - shareOfSize), corner, bar.CooldownShade);
                     break;
                 case CooldownStyle.Dim:
                     drawList.AddRectFilled(at, corner, bar.CooldownShade);
@@ -125,14 +119,13 @@ namespace DaraletPlayer.Ui {
                 case CooldownStyle.Bar:
                     var height = Math.Max(2, (float)Math.Round(size / 10));
                     drawList.AddRectFilled(at, new Vector2(corner.X, at.Y + height), bar.StructureBack);
-                    drawList.AddRectFilled(at, new Vector2(at.X + (float)Math.Round(size * share), at.Y + height), bar.CooldownColor);
+                    drawList.AddRectFilled(at, new Vector2(at.X + shareOfSize, at.Y + height), bar.CooldownColor);
                     break;
             }
 
             if (bar.CooldownText) {
                 var text = CooldownShape.TimeLeft(cooldown.Left, bar.CooldownDecimals);
-                var textSize = LabelSize(icons, bar, text, bar.CooldownScale);
-                Label(drawList, icons, bar, text, at + new Vector2((size - textSize.X) / 2, (size - textSize.Y) / 2), bar.CooldownColor, bar.CooldownScale);
+                LabelCentred(drawList, icons, bar, text, at, size, bar.CooldownColor, bar.CooldownScale);
             }
         }
 
@@ -161,7 +154,8 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>The structure bar along one side, and the uses left as a number in a corner nothing else is using.</summary>
-        private static void Structure(ImDrawListPtr drawList, HotbarBar bar, ItemIcons icons, (int Left, int Total) structure, Vector2 at, float size, float scale, bool counted) {
+        private static void Structure(ImDrawListPtr drawList, HotbarBar bar, ItemIcons icons, (int Left, int Total) structure,
+            Vector2 at, float size, float scale, bool counted) {
             var (left, total) = structure;
             var share = Math.Max(0, Math.Min(1, (float)left / total));
             var color = bar.StructureByAmount ? PackedColor.Lerp(bar.StructureLow, bar.StructureFull, share) : bar.StructureFull;
@@ -236,10 +230,18 @@ namespace DaraletPlayer.Ui {
         /// A slot's text, sharp and bright at any size (ItemIcons.DrawLabel), or ImGui's own text, inset as the label's
         /// outline would be, if it can't be made.
         /// </summary>
-        private static void Label(ImDrawListPtr drawList, ItemIcons icons, HotbarBar bar, string text, Vector2 at, uint color, float scale) {
+        private static void Label(ImDrawListPtr drawList, ItemIcons icons, HotbarBar bar, string text, Vector2 at, uint color,
+            float scale) {
             if (!icons.DrawLabel(drawList, text, at, Pixels(scale), color)) {
                 Text(drawList, bar, text, at + new Vector2(2, 1), color, scale);
             }
+        }
+
+        /// <summary>A slot's text in the middle of the slot.</summary>
+        private static void LabelCentred(ImDrawListPtr drawList, ItemIcons icons, HotbarBar bar, string text, Vector2 at,
+            float size, uint color, float scale) {
+            var textSize = LabelSize(icons, bar, text, scale);
+            Label(drawList, icons, bar, text, at + (new Vector2(size, size) - textSize) / 2, color, scale);
         }
 
         /// <summary>The size a slot's text is drawn at: the window's font, times the bar's Text size.</summary>

@@ -9,21 +9,20 @@ using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// One hotbar in a floating window of its own: a grid of slots (columns by rows, on as many pages as it has), each an
-    /// item you carry or wear, used with a click or its hotkey. Items are dragged on from the inventory's lists or the game's
-    /// own pack. The slots themselves only move in Edit mode (dragging them) or from their right-click menu (Move...), so
-    /// a click in a fight never knocks one off.
+    /// One hotbar in its own floating window: a grid of slots on one or more pages, each an item or spell, used with a click
+    /// or its hotkey. Slots only move in Edit mode or from their right-click menu, so a click in a fight never knocks one off.
     /// </summary>
-    internal class HotbarWindow : IDisposable {
-        /// <summary>A slot dragged in Edit mode: the drag carries nothing, the slot is Hotbars' own note of it.</summary>
+    /// <remarks>The right-click menu is in <c>HotbarWindow.Menu.cs</c>.</remarks>
+    internal partial class HotbarWindow : IDisposable {
+        /// <summary>A slot dragged in Edit mode: the payload is empty, the slot is Hotbars' own note of it.</summary>
         internal const string SlotDragType = "DAP_HOTBAR";
 
         /// <summary>How long a slot lights up after it's used, and after its cooldown ends.</summary>
         private const double UsedFlashSeconds = 0.25;
         private const double ReadyFlashSeconds = 0.45;
 
-        /// <summary>How much of a slot's width the green ring spans, over a slot an item can be let go on.</summary>
-        private const float DropRingScale = 0.9f;
+        /// <summary>How see-through the preview of a held item is: half.</summary>
+        private static readonly uint PreviewTint = PackedColor.Pack(255, 255, 255, 128);
 
         private readonly Hotbars owner;
         private readonly PlayerFeed feed;
@@ -36,6 +35,12 @@ namespace DaraletPlayer.Ui {
         private readonly Dictionary<(int, int, int), DateTime> usedAt = new Dictionary<(int, int, int), DateTime>();
         private readonly Dictionary<(int, int, int), DateTime> readyAt = new Dictionary<(int, int, int), DateTime>();
         private readonly HashSet<(int, int, int)> coolingDown = new HashSet<(int, int, int)>();
+
+        /// <summary>
+        /// What's held over the slot being drawn (whether it can go there, and its icon). Set by the drop targets, drawn
+        /// over the slot once the slot itself is.
+        /// </summary>
+        private (bool Allowed, IconLayers Icon)? dropPreview;
 
         public HotbarWindow(Hotbars owner, HotbarBar bar, PlayerFeed feed, Settings settings, ItemIcons icons, bool visibleByDefault) {
             this.owner = owner;
@@ -96,7 +101,7 @@ namespace DaraletPlayer.Ui {
                 }
             }
 
-            // something dragged in from the game's own pack: its icon follows the mouse here, where the game's isn't drawn
+            // the game's own drag icon isn't drawn over our windows, so draw it here
             if (GameDrag.Dragging) {
                 var selection = CoreManager.Current.Actions.CurrentSelection;
 
@@ -109,10 +114,7 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        /// <summary>
-        /// The page arrows, a column at the left: the top half turns back a page, the bottom half on, with the page number
-        /// between them.
-        /// </summary>
+        /// <summary>The page arrows at the left: the top half turns back a page, the bottom half on, the number between.</summary>
         private void RenderPager(ImDrawListPtr drawList, Vector2 at, Vector2 size, float border) {
             ImGui.SetCursorScreenPos(at);
             ImGui.InvisibleButton("##pager", size);
@@ -133,24 +135,37 @@ namespace DaraletPlayer.Ui {
                 drawList.AddRect(at - new Vector2(border / 2), corner + new Vector2(border / 2), Bar.SlotBorder, 0, ImDrawFlags.None, border);
             }
 
+            var halfway = at.Y + size.Y / 2;
+
             if (hovered) {
-                var half = upper ? (at, new Vector2(corner.X, at.Y + size.Y / 2)) : (new Vector2(at.X, at.Y + size.Y / 2), corner);
-                drawList.AddRectFilled(half.Item1, half.Item2, Bar.HoverColor);
+                var (min, max) = upper ? (at, new Vector2(corner.X, halfway)) : (new Vector2(at.X, halfway), corner);
+                drawList.AddRectFilled(min, max, Bar.HoverColor);
             }
 
-            var width = size.X * 0.6f;
+            var halfWidth = size.X * 0.3f;
             var height = Math.Min(size.X * 0.45f, size.Y * 0.2f);
             var middle = at.X + size.X / 2;
             var top = at.Y + 3;
             var bottom = corner.Y - 3;
-            drawList.AddTriangleFilled(new Vector2(middle, top), new Vector2(middle + width / 2, top + height), new Vector2(middle - width / 2, top + height), Bar.PagerColor);
-            drawList.AddTriangleFilled(new Vector2(middle - width / 2, bottom - height), new Vector2(middle + width / 2, bottom - height), new Vector2(middle, bottom), Bar.PagerColor);
+
+            // up arrow at the top, down arrow at the bottom
+            drawList.AddTriangleFilled(
+                new Vector2(middle, top),
+                new Vector2(middle + halfWidth, top + height),
+                new Vector2(middle - halfWidth, top + height),
+                Bar.PagerColor);
+            drawList.AddTriangleFilled(
+                new Vector2(middle - halfWidth, bottom - height),
+                new Vector2(middle + halfWidth, bottom - height),
+                new Vector2(middle, bottom),
+                Bar.PagerColor);
 
             var number = (Bar.Page + 1).ToString();
             var textSize = SlotPainter.TextSize(Bar, number);
 
             if (size.Y >= textSize.Y + height * 2 + 4) {
-                SlotPainter.Text(drawList, Bar, number, new Vector2(middle - textSize.X / 2, at.Y + (size.Y - textSize.Y) / 2), Bar.PagerColor);
+                var textAt = new Vector2(middle - textSize.X / 2, at.Y + (size.Y - textSize.Y) / 2);
+                SlotPainter.Text(drawList, Bar, number, textAt, Bar.PagerColor);
             }
         }
 
@@ -163,8 +178,9 @@ namespace DaraletPlayer.Ui {
                 settings.Changed();
             }
 
+            var buttons = ImGuiButtonFlags.MouseButtonLeft | ImGuiButtonFlags.MouseButtonRight;
             ImGui.SetCursorScreenPos(at);
-            ImGui.InvisibleButton($"##slot-{row}-{col}", new Vector2(size, size), ImGuiButtonFlags.MouseButtonLeft | ImGuiButtonFlags.MouseButtonRight);
+            ImGui.InvisibleButton($"##slot-{row}-{col}", new Vector2(size, size), buttons);
             var hovered = ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem);
 
             if (hovered) {
@@ -247,7 +263,7 @@ namespace DaraletPlayer.Ui {
             }
 
             if (item == null) {
-                Chat($"You don't have any {slot.Name} with you.");
+                PluginCore.Chat($"You don't have any {slot.Name} with you.");
                 return;
             }
 
@@ -299,11 +315,11 @@ namespace DaraletPlayer.Ui {
             }
 
             var flags = ImGuiDragDropFlags.AcceptBeforeDelivery | ImGuiDragDropFlags.AcceptNoDrawDefaultRect;
-            var itemPayload = ImGui.AcceptDragDropPayload(BankBrowser.DragType, flags);
+            var itemPayload = ImGui.AcceptDragDropPayload(InventoryBrowser.DragType, flags);
 
             if (itemPayload.NativePtr != null) {
                 // only what you carry or wear: the bank's items can't be used from here
-                var id = BankBrowser.DraggedItem;
+                var id = InventoryBrowser.DraggedItem;
                 var allowed = HotbarItems.IsMine(id);
                 dropPreview = (allowed, ItemIcons.Of(CoreManager.Current.WorldFilter[id]));
 
@@ -382,22 +398,12 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// What's held over the slot drawn now (an item from a list or the game's pack, or a slot in Move slots mode): whether
-        /// it can go there, and its icon. Set by the drop targets, drawn over the slot once the slot itself is.
-        /// </summary>
-        private (bool Allowed, IconLayers Icon)? dropPreview;
-
-        /// <summary>How see-through the preview of a held item is: half.</summary>
-        private static readonly uint PreviewTint = PackedColor.Pack(255, 255, 255, 128);
-
-        /// <summary>
-        /// Where a held item would go: its own icon, half see-through, in the slot (over whatever's there, so it's what the
-        /// slot would hold), with a thin frame; a plain highlight while its icon isn't loaded. Where it can't go, the
+        /// A held item's icon, half see-through, over the slot it would go in, with a thin frame. Where it can't go, the
         /// game's red crossed-out circle.
         /// </summary>
         private void DrawDropPreview(ImDrawListPtr drawList, bool allowed, IconLayers icon, Vector2 at, float size) {
             if (!allowed) {
-                DrawDropMark(false);
+                DrawCantDrop();
                 return;
             }
 
@@ -414,259 +420,14 @@ namespace DaraletPlayer.Ui {
             drawList.AddRect(at + inset, corner - inset, PackedColor.Fade(Bar.KeyColor, 0.7f), 0, ImDrawFlags.None, thickness);
         }
 
-        /// <summary>The game's red crossed-out circle over the slot something's held over where it can't go (or its green ring where it can).</summary>
-        private void DrawDropMark(bool allowed) {
+        /// <summary>The game's red crossed-out circle over the last item drawn: what's held can't go there.</summary>
+        private void DrawCantDrop() {
             var drawList = ImGui.GetWindowDrawList();
             var min = ImGui.GetItemRectMin();
             var max = ImGui.GetItemRectMax();
-            var width = max.X - min.X;
-            var shape = allowed ? ItemIcons.DropRingSize : new Vector2(1, 1);
-            var across = (float)Math.Round(width * (allowed ? DropRingScale : 1));
-            var size = new Vector2(across, (float)Math.Round(across * shape.Y / shape.X));
-            var at = (min + max) / 2 - size / 2;
-            var spot = new Vector2((float)Math.Round(at.X), (float)Math.Round(at.Y));
-            var art = allowed ? ItemIcons.ArtDropRing : ItemIcons.ArtDropInvalid;
 
-            if (icons.DrawArt(drawList, art, spot, size)) {
-                // the ring twice: its soft edge builds up to the brightness the game's has
-                if (allowed) {
-                    icons.DrawArt(drawList, art, spot, size);
-                }
-
-                return;
-            }
-
-            drawList.AddRect(min + Vector2.One, max - Vector2.One, ImGui.GetColorU32(allowed ? Colors.Good : Colors.Danger), 0, ImDrawFlags.None, 2);
-        }
-
-        private void SlotMenu(string character, HotbarSlot slot, WorldObject item, (int Page, int Row, int Col) spot) {
-            // the right-click that puts a tool down, cancels a move or clears a key isn't one for the menu
-            if (ItemUser.TakesClicks || owner.TakesRightClick || !ImGui.BeginPopupContextItem($"slot-menu-{spot.Row}-{spot.Col}")) {
-                return;
-            }
-
-            if (slot != null) {
-                Widgets.TextDisabled(slot.Name ?? "");
-                ImGui.Separator();
-                ItemItems(slot, item, spot);
-                ImGui.Separator();
-                MoveItems(character, spot);
-
-                if (ImGui.MenuItem("Clear slot")) {
-                    Bar.Take(character, spot.Page, spot.Row, spot.Col);
-                    settings.Changed();
-                }
-                Widgets.Tip(slot.IsSpell ? "Empties the slot. You still know the spell." : "Empties the slot. The item stays in your pack.");
-            }
-            else {
-                var selection = CoreManager.Current.Actions.CurrentSelection;
-
-                if (HotbarItems.IsMine(selection)) {
-                    var selected = CoreManager.Current.WorldFilter[selection];
-
-                    if (ImGui.MenuItem($"Put {selected.Name} here")) {
-                        Put(character, spot, selected);
-                    }
-                    Widgets.Tip("Puts the item you have selected in this slot.");
-                }
-                else {
-                    Widgets.TextDisabled("Empty: drag an item or a spell here.");
-                }
-            }
-
-            SpellMenu(character, spot);
-            ImGui.Separator();
-            KeyItems(spot);
-            ImGui.Separator();
-            BarItems();
-            ImGui.EndPopup();
-        }
-
-        private void ItemItems(HotbarSlot slot, WorldObject item, (int, int, int) spot) {
-            if (slot.IsSpell) {
-                if (!Spells.Known(slot.SpellId)) {
-                    Widgets.TextDisabled("You don't know this spell.");
-                    return;
-                }
-
-                if (ImGui.MenuItem("Cast")) {
-                    Use(slot, null, spot);
-                }
-                Widgets.Tip("What clicking the slot does: casts the spell, on yourself if it's only cast on yourself, an offensive one on your selection, and anything else on your selection or yourself. Only in spellcasting mode.");
-                return;
-            }
-
-            if (item == null) {
-                Widgets.TextDisabled("You don't have any with you.");
-                return;
-            }
-
-            var label = ItemUser.MenuLabel(item.Id);
-
-            if (label != null && ImGui.MenuItem(label)) {
-                Use(slot, item, spot);
-            }
-            Widgets.Tip("What clicking the slot does: wear or wield it (or take it off), or use it.");
-
-            var tool = ItemUser.IsTool(item.Id);
-            var useOnOpen = tool && ImGui.BeginMenu("Use on");
-
-            if (tool) {
-                Widgets.Tip("What a tool like a healing kit or a mana stone is used on when the slot is used: you, what you have selected, or a target you pick each time, as double-clicking it in your pack does.");
-            }
-
-            if (useOnOpen) {
-                var current = slot.UseOn ?? HotbarUseOn.Auto;
-
-                foreach (var (value, text) in HotbarUseOn.Options) {
-                    if (ImGui.MenuItem(text, "", current == value)) {
-                        slot.UseOn = value == HotbarUseOn.Auto ? null : value;
-                        settings.Changed();
-                    }
-                }
-
-                ImGui.EndMenu();
-            }
-
-            Appraisal.MenuItems(unchecked((uint)item.Id));
-        }
-
-        /// <summary>Text typed into the spell picker, to find a spell by part of its name.</summary>
-        private static string spellFilter = "";
-
-        /// <summary>The spells you know, by name, read at most every few seconds: a spellbook can hold hundreds.</summary>
-        private static List<(int Id, string Name)> spellBook;
-        private static DateTime spellBookAt = DateTime.MinValue;
-
-        /// <summary>
-        /// Put a spell here: the spells you know, found by part of their name, for a slot (the other way to add one is to
-        /// drag it from the game's spellbook or spell bar).
-        /// </summary>
-        private void SpellMenu(string character, (int Page, int Row, int Col) spot) {
-            var open = ImGui.BeginMenu("Put a spell here");
-            Widgets.Tip("Picks a spell you know for this slot, by part of its name. You can also drag one onto the bar from the game's spellbook or spell bar.");
-
-            if (!open) {
-                return;
-            }
-
-            if (spellBook == null || DateTime.UtcNow - spellBookAt > TimeSpan.FromSeconds(5)) {
-                spellBook = Spells.Book();
-                spellBookAt = DateTime.UtcNow;
-            }
-
-            ImGui.SetNextItemWidth(ImGui.GetFontSize() * 14);
-            ImGui.InputText("##spell-filter", ref spellFilter, 64);
-            Widgets.Tip("Part of the spell's name.");
-
-            const int shown = 30;
-            var words = spellFilter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            var matches = spellBook.Where(s => words.All(w => s.Name.IndexOf(w, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
-
-            foreach (var (id, name) in matches.Take(shown)) {
-                if (ImGui.MenuItem($"{name}##spell-{id}")) {
-                    Bar.Put(character, spot.Page, spot.Row, spot.Col, Spells.SlotFor(id));
-                    settings.Changed();
-                }
-            }
-
-            if (matches.Count > shown) {
-                Widgets.TextDisabled($"and {matches.Count - shown} more: type more of the name");
-            }
-            else if (matches.Count == 0) {
-                Widgets.TextDisabled(spellBook.Count == 0 ? "You don't know any spells." : "No spell you know has that in its name.");
-            }
-
-            ImGui.EndMenu();
-        }
-
-        private void MoveItems(string character, (int Page, int Row, int Col) spot) {
-            if (ImGui.MenuItem("Move...")) {
-                owner.StartMoving(this, spot);
-            }
-            Widgets.Tip("Picks the slot up: click another slot, on any bar, to put it there (swapping with what's there). Right-click or Escape leaves it where it was.");
-
-            var open = ImGui.BeginMenu("Move to");
-            Widgets.Tip("Swaps the slot with the one next to it, the one in the same place on another page, or puts it in the first empty slot on another bar's page.");
-
-            if (!open) {
-                return;
-            }
-
-            void To(string label, bool enabled, (int, int, int) to) {
-                if (ImGui.MenuItem(label, "", false, enabled)) {
-                    HotbarBar.Exchange(character, Bar, spot, Bar, to);
-                    settings.Changed();
-                }
-            }
-
-            To("Left", spot.Col > 0, (spot.Page, spot.Row, spot.Col - 1));
-            To("Right", spot.Col < Bar.Columns - 1, (spot.Page, spot.Row, spot.Col + 1));
-            To("Up", spot.Row > 0, (spot.Page, spot.Row - 1, spot.Col));
-            To("Down", spot.Row < Bar.Rows - 1, (spot.Page, spot.Row + 1, spot.Col));
-
-            if (Bar.Pages > 1) {
-                ImGui.Separator();
-
-                for (var page = 0; page < Bar.Pages; page++) {
-                    To($"Page {page + 1}", page != spot.Page, (page, spot.Row, spot.Col));
-                }
-            }
-
-            var others = owner.Windows.Where(w => w != this).ToList();
-
-            if (others.Count > 0) {
-                ImGui.Separator();
-
-                foreach (var other in others) {
-                    if (ImGui.MenuItem(other.Title)) {
-                        owner.MoveToBar(this, spot, other);
-                    }
-                }
-            }
-
-            ImGui.EndMenu();
-        }
-
-        private void KeyItems((int Page, int Row, int Col) spot) {
-            var key = Bar.KeyAt(spot.Row, spot.Col);
-
-            if (ImGui.MenuItem(key == null ? "Set hotkey..." : $"Change hotkey ({key.Label})...")) {
-                owner.StartCapture(this, spot.Row, spot.Col);
-            }
-            Widgets.Tip("Press a key (with Ctrl, Shift or Alt if you like) to use this slot with it, on whichever page is showing. Escape cancels. A key used elsewhere moves here. The game still hears the key too, so pick one it doesn't use, or unbind it in the game's keymap.");
-
-            if (key != null && ImGui.MenuItem("Clear hotkey")) {
-                Bar.SetKey(spot.Row, spot.Col, null);
-                settings.Changed();
-            }
-        }
-
-        private void BarItems() {
-            if (Bar.Pages > 1 && ImGui.BeginMenu("Page")) {
-                for (var page = 0; page < Bar.Pages; page++) {
-                    if (ImGui.MenuItem($"Page {page + 1}", "", page == Bar.Page)) {
-                        Bar.Page = page;
-                        settings.Changed();
-                    }
-                }
-
-                ImGui.EndMenu();
-            }
-
-            if (ImGui.MenuItem("Edit mode", "", owner.EditMode)) {
-                owner.EditMode = !owner.EditMode;
-            }
-            Widgets.Tip("Arranging the bars: drag a slot to another place, on any bar, or off the bars to empty it. Clicking a slot doesn't use it while this is on.");
-
-            if (ImGui.MenuItem("Bind keys", "", owner.BindMode)) {
-                owner.BindMode = !owner.BindMode;
-            }
-            Widgets.Tip("Hover a slot and press a key to make it that slot's hotkey; right-click a slot to clear its key. Escape when you're done.");
-
-            if (ImGui.BeginMenu("Window")) {
-                Window.RenderMenuItems();
-                ImGui.EndMenu();
+            if (!icons.DrawDropArt(drawList, min, max, allowed: false)) {
+                drawList.AddRect(min + Vector2.One, max - Vector2.One, ImGui.GetColorU32(Colors.Danger), 0, ImDrawFlags.None, 2);
             }
         }
 
@@ -754,29 +515,44 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            List<ItemLine> lines;
+            var lines = slot.IsSpell ? SpellLines(slot)
+                : item == null ? MissingItemLines(slot)
+                : ItemLinesFor(item);
 
-            if (slot.IsSpell) {
-                lines = SpellLines(slot);
-            }
-            else if (item == null) {
-                lines = new List<ItemLine> {
-                    new ItemLine(slot.Name ?? "", ItemLineStyle.Title),
-                    new ItemLine("You don't have any with you. The slot uses the next one like it you pick up.", ItemLineStyle.Detail),
-                };
-            }
-            else {
-                var guid = unchecked((uint)item.Id);
-                feed.Describe(guid);
+            var notes = HotbarNotes(slot, item);
 
-                lines = feed.Described.TryGetValue(guid, out var described)
-                    ? ItemUse.With(ItemLines.Build(described), guid)
-                    : ItemUse.With(new List<ItemLine> {
-                        new ItemLine(item.Name, ItemLineStyle.Title),
-                        new ItemLine("Getting the details...", ItemLineStyle.Detail),
-                    }, guid);
+            if (notes.Count > 0) {
+                lines.Add(new ItemLine("Hotbar", ItemLineStyle.Heading));
+                lines.AddRange(notes.Select(n => new ItemLine(n, ItemLineStyle.Detail)));
             }
 
+            ItemTooltip.Show(lines);
+        }
+
+        private static List<ItemLine> MissingItemLines(HotbarSlot slot) {
+            return new List<ItemLine> {
+                new ItemLine(slot.Name ?? "", ItemLineStyle.Title),
+                new ItemLine("You don't have any with you. The slot uses the next one like it you pick up.", ItemLineStyle.Detail),
+            };
+        }
+
+        /// <summary>The item's stats as the server describes it, or its name until the description comes.</summary>
+        private List<ItemLine> ItemLinesFor(WorldObject item) {
+            var guid = unchecked((uint)item.Id);
+            feed.Describe(guid);
+
+            if (feed.Described.TryGetValue(guid, out var described)) {
+                return ItemUse.With(ItemLines.Build(described), guid);
+            }
+
+            return ItemUse.With(new List<ItemLine> {
+                new ItemLine(item.Name, ItemLineStyle.Title),
+                new ItemLine("Getting the details...", ItemLineStyle.Detail),
+            }, guid);
+        }
+
+        /// <summary>The bar's own notes on a slot: cooldown left, hotkey, and what a tool is used on.</summary>
+        private List<string> HotbarNotes(HotbarSlot slot, WorldObject item) {
             var key = Bar.KeyAt(slot.Row, slot.Col);
             var cooldown = HotbarItems.Cooldown(item);
             var notes = new List<string>();
@@ -794,12 +570,7 @@ namespace DaraletPlayer.Ui {
                 notes.Add($"Used on: {HotbarUseOn.Options.First(o => o.Value == useOn).Label.ToLowerInvariant()}");
             }
 
-            if (notes.Count > 0) {
-                lines.Add(new ItemLine("Hotbar", ItemLineStyle.Heading));
-                lines.AddRange(notes.Select(n => new ItemLine(n, ItemLineStyle.Detail)));
-            }
-
-            ItemTooltip.Show(lines);
+            return notes;
         }
 
         /// <summary>A spell's tooltip: its name, school, mana and description, from the game's spell table.</summary>
@@ -820,14 +591,6 @@ namespace DaraletPlayer.Ui {
             }
 
             return lines;
-        }
-
-        private static void Chat(string text) {
-            try {
-                CoreManager.Current.Actions.AddChatText($"[Daralet] {text}", 5);
-            }
-            catch (Exception) {
-            }
         }
 
         public void Dispose() {

@@ -136,7 +136,7 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         public static void Cast(int id) {
             if (!Known(id)) {
-                Chat($"You don't know {Name(id)}.");
+                PluginCore.Chat($"You don't know {Name(id)}.");
                 return;
             }
 
@@ -144,7 +144,7 @@ namespace DaraletPlayer.Ui {
 
             // the hotbar doesn't change your combat mode for you: that's yours to choose
             if (actions.CombatMode != CombatState.Magic) {
-                Chat("You must be in spellcasting mode to cast spells.");
+                PluginCore.Chat("You must be in spellcasting mode to cast spells.");
                 return;
             }
 
@@ -161,7 +161,7 @@ namespace DaraletPlayer.Ui {
             }
             else if (spell != null && !spell.Beneficial) {
                 if (selection == 0 || selection == me) {
-                    Chat($"Select a target for {spell.Name} first.");
+                    PluginCore.Chat($"Select a target for {spell.Name} first.");
                     return;
                 }
 
@@ -173,14 +173,6 @@ namespace DaraletPlayer.Ui {
 
             PluginCore.LogFile($"[spell] {Name(id)} ({id}) from a hotbar, on 0x{target:X8}, flags 0x{spell?.Flags ?? 0:X}, target type 0x{spell?.TargetType ?? 0:X}");
             actions.CastSpell(id, target);
-        }
-
-        private static void Chat(string text) {
-            try {
-                CoreManager.Current.Actions.AddChatText($"[Daralet] {text}", 5);
-            }
-            catch (Exception) {
-            }
         }
     }
 }

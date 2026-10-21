@@ -11,7 +11,8 @@ namespace DaraletPlayer.Ui {
         public const float BarWidth = 110;
 
         /// <summary>How every list in the plugin is drawn: striped rows, column lines, columns as wide as what's in them.</summary>
-        public const ImGuiTableFlags TableFlags = ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingFixedFit;
+        public const ImGuiTableFlags TableFlags =
+            ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingFixedFit;
 
         // ImGui.NET's Text, TextColored, TextDisabled and TextWrapped take a printf format, so a "%" in what they draw is
         // read as a format: "+12%" loses its "%", and a name with "%s" in it reads memory that isn't there. These draw
@@ -40,9 +41,16 @@ namespace DaraletPlayer.Ui {
             ImGui.PopTextWrapPos();
         }
 
-        /// <summary>
-        /// Shows text in a hover tooltip for the item drawn just before this, greyed-out ones included.
-        /// </summary>
+        /// <summary>A button with a tooltip, greyed out (its tooltip still showing) while it can't be used.</summary>
+        public static bool Button(string label, bool enabled, string tip) {
+            ImGui.BeginDisabled(!enabled);
+            var clicked = ImGui.Button(label);
+            ImGui.EndDisabled();
+            Tip(tip);
+            return clicked;
+        }
+
+        /// <summary>Shows text in a hover tooltip for the item drawn just before this, greyed-out ones included.</summary>
         public static void Tip(string text) {
             if (string.IsNullOrEmpty(text) || !ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) {
                 return;
@@ -55,9 +63,7 @@ namespace DaraletPlayer.Ui {
             ImGui.EndTooltip();
         }
 
-        /// <summary>
-        /// A small (?) on the same line, explaining what's next to it when hovered.
-        /// </summary>
+        /// <summary>A small (?) on the same line, explaining what's next to it when hovered.</summary>
         public static void HelpMarker(string text) {
             ImGui.SameLine();
             ImGui.TextDisabled("(?)");
@@ -150,9 +156,7 @@ namespace DaraletPlayer.Ui {
             ImGui.Spacing();
         }
 
-        /// <summary>
-        /// A tab in a tab bar with a tooltip. Returns true while it's the open tab; call EndTabItem then.
-        /// </summary>
+        /// <summary>A tab in a tab bar with a tooltip. Returns true while it's the open tab; call EndTabItem then.</summary>
         public static bool TabItem(string label, string tip) {
             var open = ImGui.BeginTabItem(label);
             Tip(tip);
@@ -228,9 +232,6 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// A vital as a filled bar with "current / max" on it. A height of 0 is the normal line height.
-        /// </summary>
-        /// <summary>
         /// A width for vital bars that fits "current / max" for the biggest of these maximums in the font as drawn now, or
         /// the given width when that's wider: bars that line up, with their numbers inside them at any font size.
         /// </summary>
@@ -239,6 +240,15 @@ namespace DaraletPlayer.Ui {
             return Math.Max(width, ImGui.CalcTextSize($"{widest} / {widest}").X + ImGui.GetStyle().FramePadding.X * 2 + 4);
         }
 
+        /// <summary>Outlines the item drawn just before this while the mouse is over it: a sign it can be clicked.</summary>
+        public static void OutlineIfHovered() {
+            if (ImGui.IsItemHovered()) {
+                var color = ImGui.GetColorU32(ImGuiCol.ButtonHovered);
+                ImGui.GetWindowDrawList().AddRect(ImGui.GetItemRectMin(), ImGui.GetItemRectMax(), color);
+            }
+        }
+
+        /// <summary>A vital as a filled bar with "current / max" on it. A height of 0 is the normal line height.</summary>
         public static void VitalBar(uint current, uint max, Vector4 color, float width = BarWidth, float height = 0) {
             var fraction = max == 0 ? 0f : Math.Min(1f, (float)current / max);
 
@@ -257,9 +267,7 @@ namespace DaraletPlayer.Ui {
             ImGui.PopStyleColor();
         }
 
-        /// <summary>
-        /// 45s, 12m 05s, 3h 07m, 2d 04h
-        /// </summary>
+        /// <summary>45s, 12m 05s, 3h 07m, 2d 04h.</summary>
         public static string Duration(double seconds) {
             var time = TimeSpan.FromSeconds(Math.Max(0, seconds));
 
@@ -274,28 +282,5 @@ namespace DaraletPlayer.Ui {
             }
             return $"{(int)time.TotalDays}d {time.Hours:00}h";
         }
-    }
-
-    internal static class Colors {
-        public static readonly Vector4 Warning = new Vector4(1f, 0.75f, 0.3f, 1f);
-        public static readonly Vector4 Info = new Vector4(0.55f, 0.8f, 1f, 1f);
-        public static readonly Vector4 Danger = new Vector4(1f, 0.4f, 0.4f, 1f);
-        public static readonly Vector4 Muted = new Vector4(0.6f, 0.6f, 0.6f, 1f);
-        public static readonly Vector4 Good = new Vector4(0.4f, 0.9f, 0.45f, 1f);
-        public static readonly Vector4 Text = new Vector4(1f, 1f, 1f, 1f);
-
-        /// <summary>Spells someone else cast: dimmer than yours (Good / Danger), so yours stand out.</summary>
-        public static readonly Vector4 BuffOther = new Vector4(0.45f, 0.7f, 0.5f, 1f);
-        public static readonly Vector4 DebuffOther = new Vector4(0.85f, 0.55f, 0.5f, 1f);
-
-        // Threat table bars: the name is written in white on top of them, so they're all dark enough to read it on.
-        public static readonly Vector4 ThreatYou = new Vector4(0.7f, 0.18f, 0.18f, 1f);
-        public static readonly Vector4 ThreatPlayer = new Vector4(0.25f, 0.4f, 0.6f, 1f);
-        /// <summary>A creature in the table, such as a pet.</summary>
-        public static readonly Vector4 ThreatOther = new Vector4(0.35f, 0.35f, 0.35f, 1f);
-
-        public static readonly Vector4 Health = new Vector4(0.75f, 0.15f, 0.15f, 1f);
-        public static readonly Vector4 Stamina = new Vector4(0.8f, 0.65f, 0.1f, 1f);
-        public static readonly Vector4 Mana = new Vector4(0.2f, 0.4f, 0.85f, 1f);
     }
 }

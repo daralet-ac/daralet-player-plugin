@@ -36,7 +36,7 @@ namespace DaraletPlayer.Map {
     /// The Dereth map: scroll to zoom, drag to pan, hover for names. Right-click a place, a fellow or any spot for what you
     /// can do there (point the arrow at it). Based on Daralet Admin's map.
     /// </summary>
-    internal class MapView : IDisposable {
+    internal partial class MapView : IDisposable {
         public const string ImageResource = "DaraletPlayer.Resources.dereth-map.png";
 
         /// <summary>The file next to the plugin dll that's drawn instead of the built-in map, when it's there.</summary>
@@ -79,27 +79,18 @@ namespace DaraletPlayer.Map {
 
         private static readonly (uint Color, float Size, bool Square) DefaultStyle = (Col(0.7f, 0.7f, 0.7f, 1f), 2.5f, false);
 
-        /// <summary>The map image is cut into this many tiles a side (LoadTiles).</summary>
-        private const int TileGrid = 4;
-
-        private readonly ManagedTexture[,] tiles = new ManagedTexture[TileGrid, TileGrid];
-        private readonly ConcurrentQueue<(int Row, int Column, Bitmap Bitmap)> decodedTiles = new ConcurrentQueue<(int, int, Bitmap)>();
-        private bool loadStarted;
-        private int tilesMade;
-        private volatile Exception loadError;
-        private bool loadErrorLogged;
-        private volatile string loadNote;
-        private bool reloadWanted;
-
-        /// <summary>The map image downloaded by WorldData, or null to use the built-in one. Read when the map loads.</summary>
-        public static volatile string DownloadedImage;
-
         /// <summary>The map coordinates at the middle of the view.</summary>
         private Vector2 center = Vector2.Zero;
         private float zoom = 1;
 
         private Vector2 pressedAt;
         private bool pressed;
+
+        // this frame's view: where the map is on screen and how big, set at the start of Render
+        private Vector2 viewOrigin;
+        private Vector2 viewSize;
+        private Vector2 viewMid;
+        private float viewScale;
 
         /// <summary>What was right-clicked, for the menu: a spot, and the place or fellow there if there was one.</summary>
         private Vector2 menuSpot;
@@ -133,6 +124,13 @@ namespace DaraletPlayer.Map {
             return new Vector4((color & 0xFF) / 255f, ((color >> 8) & 0xFF) / 255f, ((color >> 16) & 0xFF) / 255f, 1f);
         }
 
+        /// <summary>What's under the mouse this frame: the nearest place or fellow, within reach.</summary>
+        private class Hover {
+            public Location Location;
+            public FellowInfo Fellow;
+            public float Distance = HoverDistance;
+        }
+
         public void Render(Vector2 size, MapScene scene) {
             if (size.X < 50 || size.Y < 50) {
                 return;
@@ -145,110 +143,40 @@ namespace DaraletPlayer.Map {
 
             var hovered = ImGui.IsItemHovered();
             var fitScale = Math.Min(size.X, size.Y) / (2 * MapProjection.ImageExtent);
-
-            HandleZoomAndPan(hovered, origin + size / 2, fitScale);
-
-            var scale = fitScale * zoom;
             var mid = origin + size / 2;
-            Vector2 ToScreen(float x, float y) => new Vector2(mid.X + (x - center.X) * scale, mid.Y - (y - center.Y) * scale);
+
+            HandleZoomAndPan(hovered, mid, fitScale);
+
+            viewOrigin = origin;
+            viewSize = size;
+            viewMid = mid;
+            viewScale = fitScale * zoom;
 
             drawList.PushClipRect(origin, origin + size, true);
             drawList.AddRectFilled(origin, origin + size, Col(0.12f, 0.24f, 0.48f, 1f));
 
             LoadTiles();
-            DrawTiles(drawList, ToScreen);
-
-            if (loadError != null) {
-                drawList.AddText(origin + new Vector2(8, 8), ImGui.GetColorU32(ImGuiCol.Text), "The map image couldn't be loaded. See log.txt.");
-            }
-            else if (tilesMade < TileGrid * TileGrid) {
-                drawList.AddText(origin + new Vector2(8, 8), ImGui.GetColorU32(ImGuiCol.Text), "Loading the map...");
-            }
+            DrawTiles(drawList);
+            DrawLoadingNote(drawList);
 
             var mouse = ImGui.GetIO().MousePos;
+            var hoverMouse = hovered ? mouse : (Vector2?)null;
             var textSize = ImGui.GetFontSize() * Math.Max(0.5f, Math.Min(2.5f, scene.TextScale));
-            Location hoverLocation = null;
-            FellowInfo hoverFellow = null;
-            var hoverBest = HoverDistance;
+            var hover = new Hover();
 
-            foreach (var location in scene.Locations) {
-                if (!scene.ShowType(location.Type)) {
-                    continue;
-                }
+            DrawLocations(drawList, scene, textSize, hoverMouse, hover);
 
-                var p = ToScreen(location.X, location.Y);
-
-                if (p.X < origin.X - 40 || p.Y < origin.Y - 20 || p.X > origin.X + size.X + 40 || p.Y > origin.Y + size.Y + 20) {
-                    continue;
-                }
-
-                var style = Styles.TryGetValue(location.Type, out var found) ? found : DefaultStyle;
-                Marker(drawList, p, style.Size, style.Color, style.Square);
-
-                var labelled = location.Type == "Town" ? scale >= TownLabelScale : scale >= LabelScale;
-
-                if (scene.ShowLabels && labelled) {
-                    Label(drawList, p + new Vector2(style.Size + 3, -textSize / 2), style.Color, location.Name, textSize);
-                }
-
-                var distance = Vector2.Distance(mouse, p);
-
-                if (hovered && distance <= hoverBest) {
-                    hoverBest = distance;
-                    hoverLocation = location;
-                }
-            }
-
-            if (hoverLocation != null && hoverLocation.IsPortal) {
-                drawList.AddLine(ToScreen(hoverLocation.X, hoverLocation.Y), ToScreen(hoverLocation.ExitX.Value, hoverLocation.ExitY.Value), PortalLineColor, 2);
+            if (hover.Location != null && hover.Location.IsPortal) {
+                var portal = hover.Location;
+                drawList.AddLine(ToScreen(portal.X, portal.Y), ToScreen(portal.ExitX.Value, portal.ExitY.Value), PortalLineColor, 2);
             }
 
             if (scene.Highlight != null) {
                 drawList.AddCircle(ToScreen(scene.Highlight.X, scene.Highlight.Y), 9, HighlightColor, 16, 2);
             }
 
-            var destination = scene.Destination;
-
-            if (destination != null) {
-                var p = ToScreen(destination.X, destination.Y);
-
-                if (scene.Self.HasValue) {
-                    drawList.AddLine(ToScreen(scene.Self.Value.X, scene.Self.Value.Y), p, DestinationColor, 1.5f);
-                }
-
-                drawList.AddCircle(p, 7, OutlineColor, 16, 4);
-                drawList.AddCircle(p, 7, DestinationColor, 16, 2);
-            }
-
-            if (scene.Fellows != null) {
-                foreach (var fellow in scene.Fellows) {
-                    if (!fellow.IsOnMap || fellow.Guid == scene.SelfGuid) {
-                        continue;
-                    }
-
-                    var p = ToScreen(fellow.MapX.Value, fellow.MapY.Value);
-
-                    drawList.AddCircleFilled(p, 5.5f, OutlineColor);
-
-                    // someone in a building is a ring, so you can tell they're inside
-                    if (fellow.InBuilding) {
-                        drawList.AddCircle(p, 4f, FellowColor, 12, 2);
-                    }
-                    else {
-                        drawList.AddCircleFilled(p, 4f, FellowColor);
-                    }
-
-                    Label(drawList, p + new Vector2(8, -textSize / 2), FellowColor, fellow.Name, textSize);
-
-                    var distance = Vector2.Distance(mouse, p);
-
-                    if (hovered && distance <= HoverDistance + 2 && (hoverFellow == null || distance < hoverBest)) {
-                        hoverBest = distance;
-                        hoverFellow = fellow;
-                        hoverLocation = null;
-                    }
-                }
-            }
+            DrawDestination(drawList, scene);
+            DrawFellows(drawList, scene, textSize, hoverMouse, hover);
 
             if (scene.Self.HasValue) {
                 SelfMarker(drawList, ToScreen(scene.Self.Value.X, scene.Self.Value.Y), scene.Heading);
@@ -256,13 +184,118 @@ namespace DaraletPlayer.Map {
 
             drawList.PopClipRect();
 
-            HandleClicks(hovered, mid, scale, hoverLocation, hoverFellow);
+            HandleClicks(hovered, mid, viewScale, hover.Location, hover.Fellow);
 
             if (hovered && !ImGui.IsPopupOpen(MenuId)) {
-                Tooltip(ToMap(mouse, mid, scale), hoverLocation, hoverFellow);
+                Tooltip(ToMap(mouse, mid, viewScale), hover.Location, hover.Fellow);
             }
 
             RenderMenu();
+        }
+
+        private void DrawLoadingNote(ImDrawListPtr drawList) {
+            var at = viewOrigin + new Vector2(8, 8);
+            var color = ImGui.GetColorU32(ImGuiCol.Text);
+
+            if (loadError != null) {
+                drawList.AddText(at, color, "The map image couldn't be loaded. See log.txt.");
+            }
+            else if (tilesMade < TileGrid * TileGrid) {
+                drawList.AddText(at, color, "Loading the map...");
+            }
+        }
+
+        /// <param name="mouse">Where the mouse is, or null when it isn't over the map.</param>
+        private void DrawLocations(ImDrawListPtr drawList, MapScene scene, float textSize, Vector2? mouse, Hover hover) {
+            foreach (var location in scene.Locations) {
+                if (!scene.ShowType(location.Type)) {
+                    continue;
+                }
+
+                var p = ToScreen(location.X, location.Y);
+
+                // a little past the edges, so a label reaching in still shows
+                var offScreen = p.X < viewOrigin.X - 40 || p.Y < viewOrigin.Y - 20
+                    || p.X > viewOrigin.X + viewSize.X + 40 || p.Y > viewOrigin.Y + viewSize.Y + 20;
+
+                if (offScreen) {
+                    continue;
+                }
+
+                var style = Styles.TryGetValue(location.Type, out var found) ? found : DefaultStyle;
+                Marker(drawList, p, style.Size, style.Color, style.Square);
+
+                var labelled = location.Type == "Town" ? viewScale >= TownLabelScale : viewScale >= LabelScale;
+
+                if (scene.ShowLabels && labelled) {
+                    Label(drawList, p + new Vector2(style.Size + 3, -textSize / 2), style.Color, location.Name, textSize);
+                }
+
+                if (!mouse.HasValue) {
+                    continue;
+                }
+
+                var distance = Vector2.Distance(mouse.Value, p);
+
+                if (distance <= hover.Distance) {
+                    hover.Distance = distance;
+                    hover.Location = location;
+                }
+            }
+        }
+
+        /// <summary>The destination's ring, and a line to it from you.</summary>
+        private void DrawDestination(ImDrawListPtr drawList, MapScene scene) {
+            if (scene.Destination == null) {
+                return;
+            }
+
+            var p = ToScreen(scene.Destination.X, scene.Destination.Y);
+
+            if (scene.Self.HasValue) {
+                drawList.AddLine(ToScreen(scene.Self.Value.X, scene.Self.Value.Y), p, DestinationColor, 1.5f);
+            }
+
+            drawList.AddCircle(p, 7, OutlineColor, 16, 4);
+            drawList.AddCircle(p, 7, DestinationColor, 16, 2);
+        }
+
+        /// <summary>Each fellow as a dot, or a ring when they're in a building. A fellow wins the hover over a place.</summary>
+        private void DrawFellows(ImDrawListPtr drawList, MapScene scene, float textSize, Vector2? mouse, Hover hover) {
+            if (scene.Fellows == null) {
+                return;
+            }
+
+            foreach (var fellow in scene.Fellows) {
+                if (!fellow.IsOnMap || fellow.Guid == scene.SelfGuid) {
+                    continue;
+                }
+
+                var p = ToScreen(fellow.MapX.Value, fellow.MapY.Value);
+
+                drawList.AddCircleFilled(p, 5.5f, OutlineColor);
+
+                if (fellow.InBuilding) {
+                    drawList.AddCircle(p, 4f, FellowColor, 12, 2);
+                }
+                else {
+                    drawList.AddCircleFilled(p, 4f, FellowColor);
+                }
+
+                Label(drawList, p + new Vector2(8, -textSize / 2), FellowColor, fellow.Name, textSize);
+
+                if (!mouse.HasValue) {
+                    continue;
+                }
+
+                var distance = Vector2.Distance(mouse.Value, p);
+
+                if (distance <= HoverDistance + 2 && (hover.Fellow == null || distance < hover.Distance)) {
+                    hover.Distance = distance;
+                    hover.Fellow = fellow;
+                    hover.Location = null;
+                }
+            }
         }
 
         private void HandleZoomAndPan(bool hovered, Vector2 mid, float fitScale) {
@@ -332,7 +365,10 @@ namespace DaraletPlayer.Map {
 
                 if (ImGui.MenuItem($"Point the arrow at {menuFellow.Name}")) {
                     DestinationChosen?.Invoke(new Destination {
-                        Name = menuFellow.Name, X = menuFellow.MapX ?? menuSpot.X, Y = menuFellow.MapY ?? menuSpot.Y, FellowGuid = menuFellow.Guid,
+                        Name = menuFellow.Name,
+                        X = menuFellow.MapX ?? menuSpot.X,
+                        Y = menuFellow.MapY ?? menuSpot.Y,
+                        FellowGuid = menuFellow.Guid,
                     });
                 }
                 Widgets.Tip("The arrow follows them as they move, while they're somewhere on the map.");
@@ -346,25 +382,36 @@ namespace DaraletPlayer.Map {
 
                 if (menuLocation.IsPortal && ImGui.MenuItem("Point the arrow where it goes")) {
                     DestinationChosen?.Invoke(new Destination {
-                        Name = $"Where {menuLocation.Name} goes", X = menuLocation.ExitX.Value, Y = menuLocation.ExitY.Value,
+                        Name = $"Where {menuLocation.Name} goes",
+                        X = menuLocation.ExitX.Value,
+                        Y = menuLocation.ExitY.Value,
                     });
                 }
             }
             else {
-                Widgets.TextDisabled(MapProjection.Format(menuSpot.X, menuSpot.Y));
-            }
+                var here = MapProjection.Format(menuSpot.X, menuSpot.Y);
+                Widgets.TextDisabled(here);
 
-            if (menuFellow == null && menuLocation == null && ImGui.MenuItem("Point the arrow at this spot")) {
-                DestinationChosen?.Invoke(new Destination { Name = MapProjection.Format(menuSpot.X, menuSpot.Y), X = menuSpot.X, Y = menuSpot.Y });
+                if (ImGui.MenuItem("Point the arrow at this spot")) {
+                    DestinationChosen?.Invoke(new Destination { Name = here, X = menuSpot.X, Y = menuSpot.Y });
+                }
             }
 
             if (ImGui.MenuItem("Copy coordinates")) {
-                var spot = menuFellow?.IsOnMap == true ? new Vector2(menuFellow.MapX.Value, menuFellow.MapY.Value)
-                    : menuLocation != null ? new Vector2(menuLocation.X, menuLocation.Y) : menuSpot;
+                var spot = MenuCoordinates();
                 ImGui.SetClipboardText(MapProjection.Format(spot.X, spot.Y));
             }
 
             ImGui.EndPopup();
+        }
+
+        /// <summary>Where the right-clicked fellow or place is, or the spot itself.</summary>
+        private Vector2 MenuCoordinates() {
+            if (menuFellow?.IsOnMap == true) {
+                return new Vector2(menuFellow.MapX.Value, menuFellow.MapY.Value);
+            }
+
+            return menuLocation != null ? new Vector2(menuLocation.X, menuLocation.Y) : menuSpot;
         }
 
         private static void Tooltip(Vector2 at, Location location, FellowInfo fellow) {
@@ -417,10 +464,8 @@ namespace DaraletPlayer.Map {
         }
 
         /// <summary>
-        /// A name with a one-pixel black stroke all round, so it reads on any part of the map. Everything is on whole pixels:
-        /// ImGui's font is a bitmap, and text or a stroke between pixels blurs (the first stroke here was fuzzy for that
-        /// reason, and for being stretched to 125%). At the World tab's Text 100% the font is drawn at its own size, which is
-        /// the crispest; bigger sizes stretch it.
+        /// A name with a one-pixel black stroke all round, so it reads anywhere on the map. On whole pixels: ImGui's font is
+        /// a bitmap, and text between pixels blurs.
         /// </summary>
         private static void Label(ImDrawListPtr drawList, Vector2 p, uint color, string text, float size) {
             var font = ImGui.GetFont();
@@ -457,141 +502,18 @@ namespace DaraletPlayer.Map {
             drawList.AddTriangleFilled(Point(7, 0), Point(-2, 0), Point(-4.5, 4.5), SelfColor);
         }
 
-        /// <summary>
-        /// A colour packed the way ImGui's draw lists take it. Done by hand because ImGui.GetColorU32 needs a live ImGui context,
-        /// which doesn't exist yet when these statics are set up.
-        /// </summary>
+        /// <summary>A colour packed for ImGui by hand: GetColorU32 needs an ImGui context, which statics are made before.</summary>
         internal static uint Col(float r, float g, float b, float a) {
             uint Byte(float value) => (uint)(Math.Max(0, Math.Min(1, value)) * 255 + 0.5f);
             return (Byte(a) << 24) | (Byte(b) << 16) | (Byte(g) << 8) | Byte(r);
         }
 
+        private Vector2 ToScreen(float x, float y) {
+            return new Vector2(viewMid.X + (x - center.X) * viewScale, viewMid.Y - (y - center.Y) * viewScale);
+        }
+
         private Vector2 ToMap(Vector2 screen, Vector2 mid, float scale) {
             return new Vector2(center.X + (screen.X - mid.X) / scale, center.Y - (screen.Y - mid.Y) / scale);
-        }
-
-        /// <summary>
-        /// Loads the map a tile at a time. Making one 2048-pixel texture on the game's thread stalled the game for a moment
-        /// the first time the World tab drew, so the image is decoded and cut into tiles on another thread, and one tile a
-        /// frame becomes a texture (which has to happen on the game's thread, once its graphics device exists).
-        /// </summary>
-        private void LoadTiles() {
-            // a reload waits for the load before it to finish, so tiles from the two can't be mixed up
-            if (reloadWanted && (tilesMade == TileGrid * TileGrid || loadError != null)) {
-                reloadWanted = false;
-                loadStarted = false;
-                tilesMade = 0;
-                loadError = null;
-                loadErrorLogged = false;
-            }
-
-            if (!loadStarted) {
-                loadStarted = true;
-
-                Task.Run(() => {
-                    try {
-                        using (var image = OpenImage()) {
-                            var size = image.Width / TileGrid;
-
-                            for (var row = 0; row < TileGrid; row++) {
-                                for (var column = 0; column < TileGrid; column++) {
-                                    decodedTiles.Enqueue((row, column, image.Clone(new Rectangle(column * size, row * size, size, size), PixelFormat.Format32bppArgb)));
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception ex) {
-                        // logged on the game's thread: the log writes to chat, which isn't safe from here
-                        loadError = ex;
-                    }
-                });
-            }
-
-            if (loadError != null && !loadErrorLogged) {
-                loadErrorLogged = true;
-                PluginCore.Log(loadError);
-            }
-
-            if (loadNote != null) {
-                PluginCore.Log(loadNote);
-                loadNote = null;
-            }
-
-            if (decodedTiles.TryDequeue(out var tile)) {
-                try {
-                    using (tile.Bitmap) {
-                        // on a reload, the old map stays up until each tile of the new one replaces it
-                        tiles[tile.Row, tile.Column]?.Dispose();
-                        tiles[tile.Row, tile.Column] = new ManagedTexture(tile.Bitmap);
-                    }
-
-                    tilesMade++;
-                }
-                catch (Exception ex) {
-                    loadError = ex;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Loads the map image again (WorldData downloaded a new one), keeping the old one up until the new one's ready.
-        /// </summary>
-        public void Reload() {
-            reloadWanted = true;
-        }
-
-        /// <summary>
-        /// The map image: a dereth-map.png next to the plugin dll if there is one (so an edited map can be tried without a new
-        /// build), then the one downloaded from the world data release, otherwise the one built in. Any of them has to be
-        /// square and laid out like the built-in one (MapProjection: 4 pixels of sea round 2040 of map, at 2048); one that
-        /// isn't square is skipped.
-        /// </summary>
-        private Bitmap OpenImage() {
-            foreach (var file in new[] { Path.Combine(PluginCore.AssemblyDirectory ?? "", ImageFileName), DownloadedImage }) {
-                if (string.IsNullOrEmpty(file) || !File.Exists(file)) {
-                    continue;
-                }
-
-                try {
-                    // copied out of the file so the file isn't held open, and can be saved over while the game runs
-                    using (var loaded = new Bitmap(file)) {
-                        if (loaded.Width == loaded.Height) {
-                            return new Bitmap(loaded);
-                        }
-
-                        loadNote = $"{file} is {loaded.Width}x{loaded.Height}, not square, so it isn't used.";
-                    }
-                }
-                catch (Exception ex) {
-                    loadNote = $"Couldn't read {file}, so it isn't used: {ex.Message}";
-                }
-            }
-
-            using (var stream = typeof(MapView).Assembly.GetManifestResourceStream(ImageResource)) {
-                return new Bitmap(stream);
-            }
-        }
-
-        /// <summary>
-        /// Draws the tiles made so far, each over its part of Dereth.
-        /// </summary>
-        private void DrawTiles(ImDrawListPtr drawList, Func<float, float, Vector2> toScreen) {
-            var extent = MapProjection.ImageExtent;
-            var width = 2 * extent / TileGrid;
-
-            for (var row = 0; row < TileGrid; row++) {
-                for (var column = 0; column < TileGrid; column++) {
-                    var tile = tiles[row, column];
-
-                    if (tile == null) {
-                        continue;
-                    }
-
-                    var left = -extent + column * width;
-                    var top = extent - row * width;
-                    drawList.AddImage(tile.TexturePtr, toScreen(left, top), toScreen(left + width, top - width));
-                }
-            }
         }
 
         public void Dispose() {

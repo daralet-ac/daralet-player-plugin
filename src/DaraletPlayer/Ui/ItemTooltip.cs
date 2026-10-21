@@ -46,7 +46,8 @@ namespace DaraletPlayer.Ui {
             if (lines.Any(l => l.Quality.HasValue)) {
                 var widest = lines.Max(l => Math.Min(ImGui.CalcTextSize(l.Text).X, wrapWidth));
                 var qualityLines = lines.Where(l => l.Quality.HasValue);
-                var widestWithQuality = qualityLines.Max(l => ImGui.CalcTextSize(l.Text).X + ImGui.CalcTextSize(QualityText(l.Quality.Value)).X);
+                var widestWithQuality = qualityLines.Max(l =>
+                    ImGui.CalcTextSize(l.Text).X + ImGui.CalcTextSize(QualityText(l.Quality.Value)).X);
 
                 qualityRight = Math.Max(widest, widestWithQuality + ImGui.GetFontSize() * QualityGap);
             }

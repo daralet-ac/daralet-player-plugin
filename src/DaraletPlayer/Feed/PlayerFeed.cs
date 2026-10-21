@@ -50,10 +50,7 @@ namespace DaraletPlayer.Feed {
         /// <summary>A request with no reply after this long is sent again.</summary>
         private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(3);
 
-        /// <summary>
-        /// The server ignores a request that comes sooner than 400ms after the last of its kind (PlayerUi.MinInterval), so
-        /// requests are never sent closer together than this, even when the targets change.
-        /// </summary>
+        /// <summary>The server ignores a request sooner than 400ms after the last of its kind, so never closer than this.</summary>
         private static readonly TimeSpan MinInterval = TimeSpan.FromMilliseconds(500);
 
         /// <summary>Chat this soon after a command the plugin sent is kept as that command's reply.</summary>
@@ -65,6 +62,9 @@ namespace DaraletPlayer.Feed {
         private readonly Dictionary<string, string> lastSentArguments = new Dictionary<string, string>();
         private readonly Dictionary<uint, TargetInfo> targets = new Dictionary<uint, TargetInfo>();
         private readonly Dictionary<uint, float> clientHealth = new Dictionary<uint, float>();
+
+        /// <summary>Whether the server last said it leaves the game's window out (bankwindow, lootwindow), by kind.</summary>
+        private readonly Dictionary<string, bool> windowSettings = new Dictionary<string, bool>();
 
         private readonly List<uint> describeQueue = new List<uint>();
         private readonly HashSet<uint> describeAsked = new HashSet<uint>();
@@ -97,27 +97,6 @@ namespace DaraletPlayer.Feed {
 
         /// <summary>Your bank, or null before the first reply.</summary>
         public BankInfo Bank { get; private set; }
-
-        /// <summary>
-        /// Whether the server last said it leaves the game's window out for the plugin's, by request (bankwindow,
-        /// lootwindow); missing before it's said.
-        /// </summary>
-        private readonly Dictionary<string, bool> windowSettings = new Dictionary<string, bool>();
-
-        /// <summary>
-        /// Tells the server whether to leave the game's window out for the plugin's (@playerui bankwindow or lootwindow),
-        /// until it says it has. The server forgets at logout, so this is called every frame; it only sends when the server's
-        /// last word differs, and again after a request it ignored (one that came too soon) has timed out.
-        /// </summary>
-        public void WantWindow(string kind, bool wanted) {
-            if (Status != FeedStatus.Ready || !Supports(kind) || IsWaitingFor(kind)) {
-                return;
-            }
-
-            if (!windowSettings.TryGetValue(kind, out var current) || current != wanted) {
-                Request(kind, wanted ? "on" : "off");
-            }
-        }
 
         /// <summary>Your side of the market, or null before the first reply.</summary>
         public MarketInfo Market { get; private set; }
@@ -178,12 +157,14 @@ namespace DaraletPlayer.Feed {
             waitingSince[kind] = DateTime.UtcNow;
             lastSentAt[kind] = DateTime.UtcNow;
             lastSentArguments[kind] = arguments ?? "";
-            CoreManager.Current.Actions.InvokeChatParser(string.IsNullOrEmpty(arguments) ? "@playerui " + kind : $"@playerui {kind} {arguments}");
+
+            var command = string.IsNullOrEmpty(arguments) ? "@playerui " + kind : $"@playerui {kind} {arguments}";
+            CoreManager.Current.Actions.InvokeChatParser(command);
         }
 
         /// <summary>
-        /// Asks again once the last request of this kind is older than interval, or straight away (as soon as the server
-        /// allows) when the arguments changed: a new target is shown at once. Called every frame by whatever shows the data.
+        /// Called every frame by whatever shows the data: asks again once the last request is older than interval, or as
+        /// soon as the server allows when the arguments changed (a new target shows at once).
         /// </summary>
         public void Refresh(string kind, TimeSpan interval, string arguments = null) {
             if (!Supports(kind)) {
@@ -209,8 +190,22 @@ namespace DaraletPlayer.Feed {
         }
 
         /// <summary>
-        /// Sends a player command (/bank sort, say) and keeps the chat that comes back in the next few seconds as its reply,
-        /// for the tab to show. The chat still shows in the chat window too.
+        /// Tells the server whether to leave the game's window out for the plugin's (bankwindow, lootwindow). The server
+        /// forgets at logout, so this is called every frame, and sends only while the server's last word differs.
+        /// </summary>
+        public void WantWindow(string kind, bool wanted) {
+            if (Status != FeedStatus.Ready || !Supports(kind) || IsWaitingFor(kind)) {
+                return;
+            }
+
+            if (!windowSettings.TryGetValue(kind, out var current) || current != wanted) {
+                Request(kind, wanted ? "on" : "off");
+            }
+        }
+
+        /// <summary>
+        /// Sends a player command (/bank sort, say) and keeps the chat that comes back in the next few seconds as its reply.
+        /// The chat still shows in the chat window too.
         /// </summary>
         public void SendCommand(string command) {
             if (disposed) {
@@ -224,8 +219,8 @@ namespace DaraletPlayer.Feed {
         }
 
         /// <summary>
-        /// Asks the server to describe one of your items (in your packs or your open bank), once. The tooltips call this as
-        /// the mouse passes over items; the requests go out 20 items at a time. The answer lands in Described.
+        /// Asks the server to describe one of your items, once; requests go out 20 items at a time. The answer lands in
+        /// Described.
         /// </summary>
         public void Describe(uint guid) {
             if (guid == 0 || Described.ContainsKey(guid) || describeAsked.Contains(guid)) {
@@ -248,9 +243,7 @@ namespace DaraletPlayer.Feed {
             return targets.TryGetValue(guid, out var target) ? target : null;
         }
 
-        /// <summary>
-        /// The health the client was last told for an object (0 to 1), as it shows on its own health bar, or null.
-        /// </summary>
+        /// <summary>The health the client was last told for an object (0 to 1), as its own health bar shows it, or null.</summary>
         public float? ClientHealth(uint guid) {
             return clientHealth.TryGetValue(guid, out var health) ? health : (float?)null;
         }
@@ -263,11 +256,11 @@ namespace DaraletPlayer.Feed {
         }
 
         private void SendDescribeBatch() {
-            if (describeQueue.Count == 0 || Status != FeedStatus.Ready || !Supports(KindDescribe) || IsWaitingFor(KindDescribe)) {
+            if (describeQueue.Count == 0 || Status != FeedStatus.Ready || !Supports(KindDescribe)) {
                 return;
             }
 
-            if (DateTime.UtcNow - describeSentAt < MinInterval) {
+            if (IsWaitingFor(KindDescribe) || DateTime.UtcNow - describeSentAt < MinInterval) {
                 return;
             }
 
@@ -294,14 +287,8 @@ namespace DaraletPlayer.Feed {
         private void EchoFilter_ServerDispatch(object sender, NetworkMessageEventArgs e) {
             try {
                 if (e.Message.Type == GameEventMessageType) {
-                    // the health the client asks for when something is selected, which is all a player target gets
                     if (e.Message.Value<int>("event") == UpdateHealthEvent) {
-                        // one entry for everything ever selected adds up over a long session, and only the current ones matter
-                        if (clientHealth.Count > 256) {
-                            clientHealth.Clear();
-                        }
-
-                        clientHealth[unchecked((uint)e.Message.Value<int>("object"))] = e.Message.Value<float>("health");
+                        NoteClientHealth(e.Message);
                     }
 
                     return;
@@ -320,6 +307,16 @@ namespace DaraletPlayer.Feed {
             }
         }
 
+        /// <summary>The health the client asks for when something is selected: all a player target gets.</summary>
+        private void NoteClientHealth(Message message) {
+            // only the current targets matter, so don't let it grow over a long session
+            if (clientHealth.Count > 256) {
+                clientHealth.Clear();
+            }
+
+            clientHealth[unchecked((uint)message.Value<int>("object"))] = message.Value<float>("health");
+        }
+
         private void Core_ChatBoxMessage(object sender, ChatTextInterceptEventArgs e) {
             try {
                 var text = e.Text ?? "";
@@ -334,7 +331,8 @@ namespace DaraletPlayer.Feed {
 
                     if (!pieceLogged) {
                         pieceLogged = true;
-                        PluginCore.LogFile("A piece of a @playerui reply reached chat on its own line (hidden): " + (text.Length > 200 ? text.Substring(0, 200) : text));
+                        var start = text.Length > 200 ? text.Substring(0, 200) : text;
+                        PluginCore.LogFile("A piece of a @playerui reply reached chat on its own line (hidden): " + start);
                     }
 
                     return;
@@ -347,10 +345,9 @@ namespace DaraletPlayer.Feed {
                     return;
                 }
 
-                // only the server's System and Help lines, so someone talking nearby isn't taken for the command's reply, and
-                // the Market Broker's tells, which is how it answers the Market tab's actions
-                var fromServer = e.Color == SystemChat || e.Color == HelpChat
-                    || (e.Color == TellChat && text.StartsWith("Market Broker tells you", StringComparison.Ordinal));
+                // only the server's System and Help lines (not someone talking nearby), and the Market Broker's tells
+                var brokerTell = e.Color == TellChat && text.StartsWith("Market Broker tells you", StringComparison.Ordinal);
+                var fromServer = e.Color == SystemChat || e.Color == HelpChat || brokerTell;
 
                 if (fromServer && DateTime.UtcNow - lastCommandSentAt < CommandReplyWindow && text.Trim().Length > 0) {
                     LastCommandReply.Add(text.TrimEnd('\r', '\n'));

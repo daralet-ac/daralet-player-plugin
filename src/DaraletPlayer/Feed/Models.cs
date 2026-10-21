@@ -5,7 +5,8 @@ using System.Linq;
 using System.Runtime.Serialization;
 
 namespace DaraletPlayer.Feed {
-    // These mirror the records in daralet-ACE apps/server/Entity/PlayerUi/PlayerUiSnapshots.cs, which the server sends as camelCase JSON.
+    // These mirror the records in daralet-ACE apps/server/Entity/PlayerUi/PlayerUiSnapshots.cs, which the server sends as
+    // camelCase JSON.
 
     [DataContract]
     public class HelloInfo {
@@ -119,8 +120,9 @@ namespace DaraletPlayer.Feed {
         /// </summary>
         public string Describe(MarketFilter filter, string minTier, string maxTier) {
             var param = filter?.Param ?? "";
+            var isRange = param.StartsWith("min", StringComparison.Ordinal) || param.StartsWith("max", StringComparison.Ordinal);
 
-            if (Ranges == null || filter.Category == null || !(param.StartsWith("min", StringComparison.Ordinal) || param.StartsWith("max", StringComparison.Ordinal))) {
+            if (Ranges == null || filter.Category == null || !isRange) {
                 return null;
             }
 

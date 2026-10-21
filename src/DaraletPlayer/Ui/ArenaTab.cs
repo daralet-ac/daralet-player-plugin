@@ -56,7 +56,8 @@ namespace DaraletPlayer.Ui {
             }
 
             if (arena.MinimumLevel > 1) {
-                Widgets.TextDisabled($"Duels need level {arena.MinimumLevel}. Only non-player killers and player killer lites can duel; nobody loses anything by being defeated.");
+                Widgets.TextDisabled($"Duels need level {arena.MinimumLevel}. Only non-player killers and player killer "
+                    + "lites can duel; nobody loses anything by being defeated.");
             }
 
             RenderFinding(arena);
@@ -81,13 +82,11 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip("Leaders only: your whole fellowship against another of the same size.");
 
             var busy = arena.CanLeave || !arena.Enabled;
+            var queue = ArenaCommands.Queue(levels, scaled, unrated, fellowship);
 
-            ImGui.BeginDisabled(busy);
-            if (ImGui.Button("Queue")) {
-                feed.SendCommand(ArenaCommands.Queue(levels, scaled, unrated, fellowship));
+            if (Widgets.Button("Queue", !busy, $"Waits for an opponent: {queue}.")) {
+                feed.SendCommand(queue);
             }
-            ImGui.EndDisabled();
-            Widgets.Tip($"Waits for an opponent: {ArenaCommands.Queue(levels, scaled, unrated, fellowship)}.");
 
             ImGui.SameLine();
             ImGui.SetNextItemWidth(90);
@@ -99,20 +98,20 @@ namespace DaraletPlayer.Ui {
             ImGui.InputTextWithHint("##arena-challenge", "player name", ref challengeName, 40);
             ImGui.SameLine();
 
-            ImGui.BeginDisabled(busy || BankCommands.Clean(challengeName).Length == 0);
-            if (ImGui.Button("Challenge")) {
+            var named = BankCommands.Clean(challengeName).Length > 0;
+            var challengeTip = "Asks a player to a duel, with the options above: "
+                + $"{ArenaCommands.Challenge("<name>", scaled, unrated, fellowship)}.";
+
+            if (Widgets.Button("Challenge", !busy && named, challengeTip)) {
                 feed.SendCommand(ArenaCommands.Challenge(challengeName, scaled, unrated, fellowship));
             }
-            ImGui.EndDisabled();
-            Widgets.Tip($"Asks a player to a duel, with the options above: {ArenaCommands.Challenge("<name>", scaled, unrated, fellowship)}.");
 
             ImGui.SameLine();
-            ImGui.BeginDisabled(!arena.CanLeave);
-            if (ImGui.Button("Leave")) {
+            var leaveTip = $"Leaves the queue, calls off or gives up your duel, or stops watching: {ArenaCommands.Leave}.";
+
+            if (Widgets.Button("Leave", arena.CanLeave, leaveTip)) {
                 feed.SendCommand(ArenaCommands.Leave);
             }
-            ImGui.EndDisabled();
-            Widgets.Tip($"Leaves the queue, calls off or gives up your duel, or stops watching: {ArenaCommands.Leave}.");
 
             if (arena.QueueCount > 0 && arena.QueuePlace == 0) {
                 Widgets.TextDisabled($"{arena.QueueCount} waiting in the queue.");
@@ -134,7 +133,11 @@ namespace DaraletPlayer.Ui {
                 ImGui.TableSetupColumn("Rating", ImGuiTableColumnFlags.WidthFixed, 60);
                 ImGui.TableSetupColumn("W / L / D", ImGuiTableColumnFlags.WidthFixed, 90);
                 ImGui.TableSetupColumn("Won", ImGuiTableColumnFlags.WidthStretch);
-                Widgets.HeadersRow("1v1 to fellowship-sized duels; scaled ones have their own ratings.", $"Elo rating, starting at {arena.StartingRating}.", "Wins, losses and draws.", "Share of duels won.");
+                Widgets.HeadersRow(
+                    "1v1 to fellowship-sized duels; scaled ones have their own ratings.",
+                    $"Elo rating, starting at {arena.StartingRating}.",
+                    "Wins, losses and draws.",
+                    "Share of duels won.");
 
                 foreach (var board in boards) {
                     var duels = board.Wins + board.Losses + board.Draws;
@@ -183,10 +186,12 @@ namespace DaraletPlayer.Ui {
                 ImGui.EndDisabled();
                 Widgets.Tip($"Watches it unseen: {ArenaCommands.Watch(duel.Id)}. Leave takes you back.");
 
+                var map = duel.Map != null ? ", " + duel.Map : "";
+
                 ImGui.SameLine();
                 Widgets.Text($"#{duel.Id} {duel.Sides}");
                 ImGui.SameLine();
-                Widgets.TextDisabled($"{Bracket(duel.Size, duel.Scaled, duel.Rated)}{(duel.Map != null ? ", " + duel.Map : "")}, {duel.State}");
+                Widgets.TextDisabled($"{Bracket(duel.Size, duel.Scaled, duel.Rated)}{map}, {duel.State}");
             }
         }
 
@@ -209,7 +214,8 @@ namespace DaraletPlayer.Ui {
 
                 Widgets.Text($"{result.Sides}: {outcome}");
                 ImGui.SameLine();
-                Widgets.TextDisabled($"{Bracket(result.Size, result.Scaled, result.Rated)}, {MarketSearch.Span(result.EndedAgo + since)} ago");
+                var ago = MarketSearch.Span(result.EndedAgo + since);
+                Widgets.TextDisabled($"{Bracket(result.Size, result.Scaled, result.Rated)}, {ago} ago");
             }
         }
 
@@ -234,18 +240,21 @@ namespace DaraletPlayer.Ui {
             }
             Widgets.Tip("Scaled duels have ratings of their own.");
 
-            var path = Leaderboards.All[1].Path(new LeaderboardOptions { ArenaSize = topSize, ArenaScaled = topScaled });
+            var path = Leaderboards.Arena.Path(new LeaderboardOptions { ArenaSize = topSize, ArenaScaled = topScaled });
+            var stale = DateTime.UtcNow - top.UpdatedAt > TopRefresh && !top.Busy && top.Error == null;
 
-            if (changed || topAskedFor != path || DateTime.UtcNow - top.UpdatedAt > TopRefresh && !top.Busy && top.Error == null) {
+            if (changed || topAskedFor != path || stale) {
                 topAskedFor = path;
                 top.Start(() => api.GetLeaderboard(path));
             }
 
-            LeaderboardsTab.RenderRows("arena-top-table", Leaderboards.All[1], top, feed.Hello?.Name, "", 10);
+            LeaderboardsTab.RenderRows("arena-top-table", Leaderboards.Arena, top, feed.Hello?.Name, "", 10);
         }
 
         private void RenderReply() {
-            if (feed.LastCommand == null || !feed.LastCommand.StartsWith("/arena", StringComparison.Ordinal) || feed.LastCommandReply.Count == 0) {
+            var arenaCommand = feed.LastCommand?.StartsWith("/arena", StringComparison.Ordinal) == true;
+
+            if (!arenaCommand || feed.LastCommandReply.Count == 0) {
                 return;
             }
 

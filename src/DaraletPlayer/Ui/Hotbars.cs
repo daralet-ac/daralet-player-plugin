@@ -184,7 +184,7 @@ namespace DaraletPlayer.Ui {
                 }
             }
 
-            Chat($"{to.Title} has no empty slot on its page {bar.Page + 1}.");
+            PluginCore.Chat($"{to.Title} has no empty slot on its page {bar.Page + 1}.");
         }
 
         // the slot under the mouse, for Bind keys
@@ -300,14 +300,6 @@ namespace DaraletPlayer.Ui {
             }
 
             settings.Changed();
-        }
-
-        private static void Chat(string text) {
-            try {
-                CoreManager.Current.Actions.AddChatText($"[Daralet] {text}", 5);
-            }
-            catch (Exception) {
-            }
         }
 
         public void Dispose() {

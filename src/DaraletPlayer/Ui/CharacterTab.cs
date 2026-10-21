@@ -103,7 +103,9 @@ namespace DaraletPlayer.Ui {
             }
 
             // the plugin's list look, but stretched to the column (TableFlags sizes columns to fit, and only one sizing goes)
-            if (ImGui.BeginTable($"character-{section.Title}", 2, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchProp)) {
+            var flags = ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchProp;
+
+            if (ImGui.BeginTable($"character-{section.Title}", 2, flags)) {
                 ImGui.TableSetupColumn("Stat", ImGuiTableColumnFlags.WidthStretch, 3);
                 ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthStretch, 2);
 

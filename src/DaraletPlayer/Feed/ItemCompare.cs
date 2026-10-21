@@ -135,7 +135,9 @@ namespace DaraletPlayer.Feed {
             var mine = item?.Item?.Spells ?? new List<string>();
             var theirs = equipped?.Item?.Spells ?? new List<string>();
 
-            return (mine.Except(theirs, StringComparer.OrdinalIgnoreCase).ToList(), theirs.Except(mine, StringComparer.OrdinalIgnoreCase).ToList());
+            var gained = mine.Except(theirs, StringComparer.OrdinalIgnoreCase).ToList();
+            var lost = theirs.Except(mine, StringComparer.OrdinalIgnoreCase).ToList();
+            return (gained, lost);
         }
 
         /// <summary>A value as the row writes it; "-" for one the item doesn't have.</summary>

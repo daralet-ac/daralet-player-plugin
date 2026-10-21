@@ -16,7 +16,8 @@ namespace DaraletPlayer.Feed {
         /// <summary>A profile's name made safe as a file name: characters Windows won't take become "_".</summary>
         public static string FileName(string profileName) {
             var invalid = Path.GetInvalidFileNameChars();
-            var safe = new string((profileName ?? "").Trim().Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim('.', ' ');
+            var replaced = (profileName ?? "").Trim().Select(c => invalid.Contains(c) ? '_' : c).ToArray();
+            var safe = new string(replaced).Trim('.', ' ');
             return (safe.Length == 0 ? "Loot profile" : safe) + ".json";
         }
 

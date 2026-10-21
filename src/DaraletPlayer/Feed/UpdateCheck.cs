@@ -134,7 +134,8 @@ namespace DaraletPlayer.Feed {
                 return new Version(0, 0, 0, 0);
             }
 
-            return new Version(Math.Max(0, version.Major), Math.Max(0, version.Minor), Math.Max(0, version.Build), Math.Max(0, version.Revision));
+            return new Version(Math.Max(0, version.Major), Math.Max(0, version.Minor), Math.Max(0, version.Build),
+                Math.Max(0, version.Revision));
         }
 
         public static GitHubRelease ReadRelease(string json) {

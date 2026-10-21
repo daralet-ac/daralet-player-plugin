@@ -9,24 +9,26 @@ using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// The World tab: a map of Dereth with the places from GoArrow's locations.xml, you, and your fellowship's members wherever
-    /// they're not in a dungeon. Point the destination arrow at a place, a spot or a fellow from the map's right-click menu
-    /// or the search; the arrow window shows which way to go from the way you're facing, like GoArrow's.
+    /// The World tab: a map of Dereth with the places from locations.xml, you, and your fellows. Point the destination arrow
+    /// at a place, a spot or a fellow from the map's right-click menu or the search.
     /// </summary>
-    internal class WorldTab : IDisposable {
+    /// <remarks>The arrow window is in <c>WorldTab.Arrow.cs</c>.</remarks>
+    internal partial class WorldTab : IDisposable {
         private static readonly TimeSpan FellowshipRefresh = TimeSpan.FromSeconds(1);
         private const int SearchResults = 12;
-        private const float ArrowSize = 64;
-
-        /// <summary>Close enough to the destination (in map units, 12 meters) to call it reached.</summary>
-        private const float ArrivedDistance = 0.05f;
 
         private readonly PlayerFeed feed;
         private readonly Settings settings;
         private readonly SelfPosition self;
-        private readonly MapView map = new MapView();
-        private readonly FloatingWindow arrowWindow;
         private readonly WorldData worldData;
+
+        /// <summary>The tab's map, and the map window's, each with its own pan and zoom.</summary>
+        private readonly MapView map = new MapView();
+        private readonly MapView windowMap = new MapView();
+
+        private readonly FloatingWindow arrowWindow;
+        private readonly FloatingWindow mapWindow;
+
         private int worldDataVersion;
         private List<Location> locations;
         private string locationsSource;
@@ -40,49 +42,55 @@ namespace DaraletPlayer.Ui {
 
             self = new SelfPosition(feed);
 
-            worldData = new WorldData(WorldDataFolder(), new[] { Locations.FileName, MapView.ImageFileName }, BuiltInWorldFile, CheckWorldFile);
+            var files = new[] { Locations.FileName, MapView.ImageFileName };
+            worldData = new WorldData(DataFolder.For("world-data"), files, BuiltInWorldFile, CheckWorldFile);
             MapView.DownloadedImage = worldData.PathFor(MapView.ImageFileName);
-            locations = Locations.LoadDefault(PluginCore.AssemblyDirectory, worldData.PathFor(Locations.FileName), PluginCore.Log, out locationsSource);
+            LoadLocations();
             worldDataVersion = worldData.Version;
+
             // once each time the plugin starts; the Show... menu checks again on demand
             worldData.Start();
 
             map.DestinationChosen += SetDestination;
             map.Panned += Map_Panned;
-
-            arrowWindow = new FloatingWindow("arrow", "Destination", settings, new Vector2(500, 300), RenderArrowWindow, visibleByDefault: false, inUse: () => CurrentDestination());
-
-            // the map on its own, to keep on screen beside the rest of the plugin: its own view, so panning one leaves the other
             windowMap.DestinationChosen += SetDestination;
             windowMap.Panned += WindowMap_Panned;
-            // the map itself starts square (404 x 404), as the map is: the height adds ImGui's default title bar (19), the
-            // button row (17) and the padding above and below (16), the width only the padding at the sides
-            mapWindow = new FloatingWindow("map", "Map", settings, new Vector2(40, 80), RenderMapWindow, visibleByDefault: false, defaultSize: new Vector2(420, 456));
+
+            arrowWindow = new FloatingWindow("arrow", "Destination", settings, new Vector2(500, 300), RenderArrowWindow,
+                visibleByDefault: false, inUse: () => CurrentDestination());
+
+            // a square 404 x 404 map, plus the title bar, button row and padding
+            mapWindow = new FloatingWindow("map", "Map", settings, new Vector2(40, 80), RenderMapWindow,
+                visibleByDefault: false, defaultSize: new Vector2(420, 456));
         }
 
-        private readonly MapView windowMap = new MapView();
-        private readonly FloatingWindow mapWindow;
-
-        /// <summary>
-        /// Where downloaded map data is kept: Documents\Decal Plugins\Daralet\world-data, so every character on this computer
-        /// shares it.
-        /// </summary>
-        private static string WorldDataFolder() {
-            return DataFolder.For("world-data");
+        private void LoadLocations() {
+            var downloaded = worldData.PathFor(Locations.FileName);
+            locations = Locations.LoadDefault(PluginCore.AssemblyDirectory, downloaded, PluginCore.Log, out locationsSource);
         }
 
         private static Stream BuiltInWorldFile(string name) {
-            var resource = name == Locations.FileName ? Locations.ResourceName : name == MapView.ImageFileName ? MapView.ImageResource : null;
+            string resource = null;
+
+            if (name == Locations.FileName) {
+                resource = Locations.ResourceName;
+            }
+            else if (name == MapView.ImageFileName) {
+                resource = MapView.ImageResource;
+            }
+
             return resource == null ? null : typeof(WorldTab).Assembly.GetManifestResourceStream(resource);
         }
 
         private static string CheckWorldFile(string name, byte[] bytes) {
-            return name == Locations.FileName ? Locations.Check(bytes) : name == MapView.ImageFileName ? WorldData.CheckSquarePng(bytes) : null;
+            if (name == Locations.FileName) {
+                return Locations.Check(bytes);
+            }
+
+            return name == MapView.ImageFileName ? WorldData.CheckSquarePng(bytes) : null;
         }
 
-        /// <summary>
-        /// Loads whatever a check changed. Done on the game's thread, by whichever of the tab or the map window draws first.
-        /// </summary>
+        /// <summary>Loads whatever a world data check changed, on the game's thread.</summary>
         private void ApplyWorldData() {
             var version = worldData.Version;
 
@@ -95,7 +103,7 @@ namespace DaraletPlayer.Ui {
             map.Reload();
             windowMap.Reload();
 
-            locations = Locations.LoadDefault(PluginCore.AssemblyDirectory, worldData.PathFor(Locations.FileName), PluginCore.Log, out locationsSource);
+            LoadLocations();
             highlight = null;
         }
 
@@ -135,10 +143,7 @@ namespace DaraletPlayer.Ui {
             };
         }
 
-        /// <summary>
-        /// The map window: the World tab's map with a few of its buttons, sized however you like. What it shows (kinds of
-        /// places, names, fellows, text size) is set in the World tab.
-        /// </summary>
+        /// <summary>The tab's map in a window of its own, sized however you like. What it shows is set in the tab.</summary>
         private void RenderMapWindow() {
             ApplyWorldData();
 
@@ -152,26 +157,7 @@ namespace DaraletPlayer.Ui {
                 windowMap.Follow(new Vector2(x, y));
             }
 
-            ImGui.BeginDisabled(!hasSelf);
-            if (ImGui.SmallButton("Me##map-window")) {
-                windowMap.CenterOn(x, y);
-            }
-            ImGui.EndDisabled();
-            Widgets.Tip(hasSelf ? "Centres the map on you." : "You're in a dungeon, which isn't on the map.");
-
-            ImGui.SameLine();
-            if (ImGui.SmallButton("Whole map##map-window")) {
-                windowMap.Fit();
-                SetWindowFollow(false);
-            }
-            Widgets.Tip("Zooms out to all of Dereth.");
-
-            ImGui.SameLine();
-            var follow = settings.Data.MapWindowFollow;
-            if (ImGui.Checkbox("Follow me##map-window", ref follow)) {
-                SetWindowFollow(follow);
-            }
-            Widgets.Tip("Keeps this map centred on you as you move. Dragging the map turns it off.");
+            RenderMapButtons(windowMap, hasSelf, x, y, small: true, settings.Data.MapWindowFollow, SetWindowFollow);
 
             var destination = CurrentDestination();
 
@@ -183,17 +169,32 @@ namespace DaraletPlayer.Ui {
             windowMap.Render(ImGui.GetContentRegionAvail(), Scene(hasSelf, x, y));
         }
 
-        private void SetWindowFollow(bool follow) {
-            if (settings.Data.MapWindowFollow == follow) {
-                return;
+        /// <summary>Me, Whole map and Follow me, for one of the maps.</summary>
+        private static void RenderMapButtons(MapView view, bool hasSelf, float x, float y, bool small, bool following,
+            Action<bool> setFollow) {
+            var id = small ? "##map-window" : "";
+            bool Button(string label) => small ? ImGui.SmallButton(label + id) : ImGui.Button(label + id);
+
+            ImGui.BeginDisabled(!hasSelf);
+            if (Button("Me")) {
+                view.CenterOn(x, y);
             }
+            ImGui.EndDisabled();
+            Widgets.Tip(hasSelf ? "Centres the map on you." : "You're in a dungeon, which isn't on the map.");
 
-            settings.Data.MapWindowFollow = follow;
-            settings.Changed();
-        }
+            ImGui.SameLine();
+            if (Button("Whole map")) {
+                view.Fit();
+                setFollow(false);
+            }
+            Widgets.Tip("Zooms out to all of Dereth.");
 
-        private void WindowMap_Panned() {
-            SetWindowFollow(false);
+            ImGui.SameLine();
+            var follow = following;
+            if (ImGui.Checkbox("Follow me" + id, ref follow)) {
+                setFollow(follow);
+            }
+            Widgets.Tip("Keeps the map centred on you as you move. Dragging the map turns it off.");
         }
 
         private void RenderToolbar(bool hasSelf, float x, float y) {
@@ -202,26 +203,7 @@ namespace DaraletPlayer.Ui {
             Widgets.Tip($"Finds places by name ({locations.Count} of them, from {locationsSource}), or type coordinates the way the game writes them.");
 
             ImGui.SameLine();
-            ImGui.BeginDisabled(!hasSelf);
-            if (ImGui.Button("Me")) {
-                map.CenterOn(x, y);
-            }
-            ImGui.EndDisabled();
-            Widgets.Tip(hasSelf ? "Centres the map on you." : "You're in a dungeon, which isn't on the map.");
-
-            ImGui.SameLine();
-            if (ImGui.Button("Whole map")) {
-                map.Fit();
-                SetFollow(false);
-            }
-            Widgets.Tip("Zooms out to all of Dereth.");
-
-            ImGui.SameLine();
-            var follow = settings.Data.MapFollow;
-            if (ImGui.Checkbox("Follow me", ref follow)) {
-                SetFollow(follow);
-            }
-            Widgets.Tip("Keeps the map centred on you as you move. Dragging the map turns it off.");
+            RenderMapButtons(map, hasSelf, x, y, small: false, settings.Data.MapFollow, SetFollow);
 
             ImGui.SameLine();
             if (ImGui.Button("Show...")) {
@@ -325,11 +307,14 @@ namespace DaraletPlayer.Ui {
             }
 
             if (MapProjection.TryParse(search, out var cx, out var cy)) {
-                if (ImGui.Selectable($"{MapProjection.Format(cx, cy)}##coords")) {
+                var coordinates = MapProjection.Format(cx, cy);
+
+                if (ImGui.Selectable($"{coordinates}##coords")) {
                     map.CenterOn(cx, cy);
                     SetFollow(false);
                 }
-                SearchResultMenu("coords", MapProjection.Format(cx, cy), cx, cy);
+
+                SearchResultMenu("coords", coordinates, cx, cy);
                 return;
             }
 
@@ -340,7 +325,9 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
-            if (!ImGui.BeginChild("world-search-results", new Vector2(0, Math.Min(results.Count, 6) * ImGui.GetTextLineHeightWithSpacing() + 6), true)) {
+            var height = Math.Min(results.Count, 6) * ImGui.GetTextLineHeightWithSpacing() + 6;
+
+            if (!ImGui.BeginChild("world-search-results", new Vector2(0, height), true)) {
                 ImGui.EndChild();
                 return;
             }
@@ -361,9 +348,7 @@ namespace DaraletPlayer.Ui {
             ImGui.EndChild();
         }
 
-        /// <summary>
-        /// The right-click menu on a search result (the item just drawn).
-        /// </summary>
+        /// <summary>The right-click menu on the search result just drawn.</summary>
         private void SearchResultMenu(string id, string name, float x, float y) {
             Widgets.Tip("Click to show it on the map. Right-click to point the arrow at it.");
 
@@ -378,113 +363,6 @@ namespace DaraletPlayer.Ui {
             ImGui.EndPopup();
         }
 
-        private void RenderArrowWindow() {
-            var destination = CurrentDestination();
-
-            if (destination == null) {
-                Widgets.TextDisabled("No destination");
-                return;
-            }
-
-            var details = settings.Data.ArrowShowDetails;
-
-            if (details) {
-                Widgets.Text(destination.Name);
-            }
-
-            if (destination.FellowGuid.HasValue) {
-                // following a fellow needs their position, even with the World tab closed
-                feed.Refresh(PlayerFeed.KindFellowship, FellowshipRefresh);
-            }
-
-            if (!self.TryGet(out var x, out var y, out _)) {
-                Widgets.TextDisabled("You're in a dungeon, so there's no map position to point from.");
-                return;
-            }
-
-            var scale = arrowWindow.Scale;
-            var distance = Navigation.Distance(x, y, destination.X, destination.Y);
-            var bearing = Navigation.Bearing(x, y, destination.X, destination.Y);
-
-            if (distance < ArrivedDistance) {
-                Widgets.TextColored(Colors.Good, "You're there.");
-                return;
-            }
-
-            DrawArrow(ArrowSize * scale, Navigation.Relative(bearing, self.Heading));
-            Widgets.Tip($"{destination.Name}: {Navigation.DistanceText(distance)}, {Navigation.Compass(bearing)}.");
-
-            if (!details) {
-                return;
-            }
-
-            ImGui.SameLine();
-            ImGui.BeginGroup();
-            Widgets.Text(Navigation.DistanceText(distance));
-            Widgets.TextDisabled($"{Navigation.Compass(bearing)}  {bearing:0}°");
-            Widgets.TextDisabled(MapProjection.Format(destination.X, destination.Y));
-            ImGui.EndGroup();
-        }
-
-        /// <summary>
-        /// An arrow in a square box, turned the way to go: straight up is ahead of you, right is to your right.
-        /// </summary>
-        private static void DrawArrow(float size, double turn) {
-            var drawList = ImGui.GetWindowDrawList();
-            var corner = ImGui.GetCursorScreenPos();
-            var centre = corner + new Vector2(size / 2, size / 2);
-            var angle = turn * Math.PI / 180;
-            var r = size / 2 * 0.9f;
-
-            Vector2 Point(double along, double across) => centre + new Vector2(
-                (float)(Math.Sin(angle) * along + Math.Cos(angle) * across) * r,
-                (float)(-Math.Cos(angle) * along + Math.Sin(angle) * across) * r);
-
-            var color = MapView.Col(1f, 0.35f, 0.3f, 1f);
-            var outline = MapView.Col(0f, 0f, 0f, 0.8f);
-
-            drawList.AddCircleFilled(centre, size / 2, MapView.Col(0f, 0f, 0f, 0.25f));
-
-            // the head, then the shaft
-            drawList.AddTriangleFilled(Point(1, 0), Point(0.15, -0.55), Point(0.15, 0.55), color);
-            drawList.AddTriangle(Point(1, 0), Point(0.15, -0.55), Point(0.15, 0.55), outline, 1.5f);
-            drawList.AddQuadFilled(Point(0.2, -0.2), Point(0.2, 0.2), Point(-0.85, 0.2), Point(-0.85, -0.2), color);
-
-            ImGui.Dummy(new Vector2(size, size));
-        }
-
-        /// <summary>
-        /// The destination, moved to where the fellow it follows is now, when it follows one who's on the map.
-        /// </summary>
-        private Destination CurrentDestination() {
-            var destination = settings.Data.Destination;
-
-            if (destination?.FellowGuid == null) {
-                return destination;
-            }
-
-            var fellow = feed.Fellowship?.Members?.FirstOrDefault(m => m.Guid == destination.FellowGuid.Value);
-
-            // not saved for each step they take: Changed() here would write the file every couple of seconds
-            if (fellow != null && fellow.IsOnMap) {
-                destination.X = fellow.MapX.Value;
-                destination.Y = fellow.MapY.Value;
-            }
-
-            return destination;
-        }
-
-        /// <summary>Makes a spot on the map the destination, for other tabs (a quest's NPC): the arrow window shows the way.</summary>
-        public void GoTo(string name, float x, float y) {
-            SetDestination(new Destination { Name = name, X = x, Y = y });
-        }
-
-        private void SetDestination(Destination destination) {
-            settings.Data.Destination = destination;
-            settings.Changed();
-            arrowWindow.Visible = true;
-        }
-
         private void SetFollow(bool follow) {
             if (settings.Data.MapFollow == follow) {
                 return;
@@ -492,6 +370,24 @@ namespace DaraletPlayer.Ui {
 
             settings.Data.MapFollow = follow;
             settings.Changed();
+        }
+
+        private void SetWindowFollow(bool follow) {
+            if (settings.Data.MapWindowFollow == follow) {
+                return;
+            }
+
+            settings.Data.MapWindowFollow = follow;
+            settings.Changed();
+        }
+
+        /// <summary>Dragging a map means you want to look somewhere else, so it stops following you.</summary>
+        private void Map_Panned() {
+            SetFollow(false);
+        }
+
+        private void WindowMap_Panned() {
+            SetWindowFollow(false);
         }
 
         private bool IsShown(string type) {
@@ -506,13 +402,6 @@ namespace DaraletPlayer.Ui {
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// Dragging the map means you want to look somewhere else, so it stops following you.
-        /// </summary>
-        private void Map_Panned() {
-            SetFollow(false);
         }
 
         public void Dispose() {

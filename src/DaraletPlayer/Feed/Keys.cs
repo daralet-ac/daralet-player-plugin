@@ -123,11 +123,16 @@ namespace DaraletPlayer.Feed {
         }
 
         /// <summary>"Ctrl+Shift+F1"</summary>
-        public string Label => IsSet ? $"{(Ctrl ? "Ctrl+" : "")}{(Alt ? "Alt+" : "")}{(Shift ? "Shift+" : "")}{Keys.Name(Key)}" : "";
+        public string Label => IsSet ? Modifiers("Ctrl+", "Alt+", "Shift+") + Keys.Name(Key) : "";
 
         /// <summary>"CS1" for Ctrl+Shift+1: what fits in a slot's corner.</summary>
-        public string ShortLabel => IsSet ? $"{(Ctrl ? "C" : "")}{(Alt ? "A" : "")}{(Shift ? "S" : "")}{Keys.ShortName(Key)}" : "";
+        public string ShortLabel => IsSet ? Modifiers("C", "A", "S") + Keys.ShortName(Key) : "";
 
         public HotkeyBinding Copy() => new HotkeyBinding(Key, Ctrl, Shift, Alt);
+
+        /// <summary>The modifiers held, in the order Ctrl, Alt, Shift, each written as given.</summary>
+        private string Modifiers(string ctrl, string alt, string shift) {
+            return (Ctrl ? ctrl : "") + (Alt ? alt : "") + (Shift ? shift : "");
+        }
     }
 }

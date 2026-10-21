@@ -1,170 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Runtime.Serialization;
 
 namespace DaraletPlayer.Feed {
-    /// <summary>What a tool used on something (a healing kit, a mana stone) is used on when its hotbar slot is used.</summary>
-    public static class HotbarUseOn {
-        /// <summary>Yourself if it works on you, else what you have selected, else the mouse becomes a target to pick one.</summary>
-        public const string Auto = "auto";
-        public const string Self = "self";
-        public const string Selection = "selection";
-        /// <summary>The mouse becomes a target, as double-clicking it in the inventory does.</summary>
-        public const string Pick = "pick";
-
-        public static readonly (string Value, string Label)[] Options = {
-            (Auto, "Yourself, else your selection"),
-            (Self, "Yourself"),
-            (Selection, "Your selection"),
-            (Pick, "Pick each time"),
-        };
-    }
-
-    /// <summary>How a slot shows the time left on its item's cooldown.</summary>
-    public static class CooldownStyle {
-        /// <summary>A dark wedge that shrinks clockwise from the top, as a clock hand sweeps.</summary>
-        public const string Sweep = "sweep";
-        /// <summary>The icon lights up from the bottom: a shade over the top that shrinks upward.</summary>
-        public const string FillUp = "fillUp";
-        /// <summary>The icon lights up from the top: a shade over the bottom that shrinks downward.</summary>
-        public const string FillDown = "fillDown";
-        /// <summary>The whole icon shaded until it's ready.</summary>
-        public const string Dim = "dim";
-        /// <summary>A thin bar across the top that shrinks as the time runs out.</summary>
-        public const string Bar = "bar";
-        public const string None = "none";
-
-        public static readonly (string Value, string Label)[] Options = {
-            (Sweep, "Clock sweep"),
-            (FillUp, "Fill up"),
-            (FillDown, "Fill down"),
-            (Dim, "Dim"),
-            (Bar, "Bar"),
-            (None, "None"),
-        };
-    }
-
-    /// <summary>A side of a slot, for its structure bar.</summary>
-    public static class SlotSide {
-        public const string Bottom = "bottom";
-        public const string Top = "top";
-        public const string Left = "left";
-        public const string Right = "right";
-
-        public static readonly (string Value, string Label)[] Options = { (Bottom, "Bottom"), (Top, "Top"), (Left, "Left"), (Right, "Right") };
-    }
-
-    /// <summary>A corner of a slot, for its hotkey's label.</summary>
-    public static class SlotCorner {
-        public const string TopLeft = "topLeft";
-        public const string TopRight = "topRight";
-        public const string BottomLeft = "bottomLeft";
-
-        public static readonly (string Value, string Label)[] Options = { (TopLeft, "Top left"), (TopRight, "Top right"), (BottomLeft, "Bottom left") };
-    }
-
     /// <summary>
-    /// Ready-made looks for a bar: every colour and the border at once, so a bar can be made to look right without
-    /// picking twelve colours. Changing a colour by hand makes the bar's style Custom.
-    /// </summary>
-    public static class HotbarStyles {
-        public const string Classic = "classic";
-        public const string Dark = "dark";
-        public const string Minimal = "minimal";
-        public const string Gold = "gold";
-        public const string Custom = "custom";
-
-        /// <summary>The styles to pick from, in order (not Custom: that's what hand-picked colours make).</summary>
-        public static readonly (string Value, string Label)[] Options = {
-            (Classic, "Classic"),
-            (Dark, "Dark"),
-            (Minimal, "Minimal"),
-            (Gold, "Gold"),
-        };
-
-        /// <summary>Sets the bar's colours and border to a style's.</summary>
-        public static void Apply(HotbarBar bar, string style) {
-            // every style starts from Classic, and changes what makes it different
-            bar.ResetColors();
-
-            switch (style) {
-                case Dark:
-                    bar.SlotBackground = PackedColor.Pack(10, 10, 13, 235);
-                    bar.SlotBorder = PackedColor.Pack(42, 42, 48);
-                    bar.KeyColor = PackedColor.Pack(200, 200, 205);
-                    bar.PagerColor = PackedColor.Pack(190, 190, 195);
-                    break;
-                case Minimal:
-                    // no box round the slots: the icons alone, and a faint square where a slot is empty
-                    bar.SlotBackground = PackedColor.Pack(0, 0, 0, 70);
-                    bar.SlotBorder = PackedColor.Pack(0, 0, 0, 0);
-                    bar.BorderThickness = 0;
-                    bar.PagerColor = PackedColor.Pack(230, 230, 230);
-                    break;
-                case Gold:
-                    bar.SlotBackground = PackedColor.Pack(27, 21, 10, 230);
-                    bar.SlotBorder = PackedColor.Pack(176, 138, 60);
-                    bar.KeyColor = PackedColor.Pack(240, 200, 106);
-                    bar.PagerColor = PackedColor.Pack(240, 200, 106);
-                    bar.HoverColor = PackedColor.Pack(255, 220, 140, 50);
-                    break;
-                default:
-                    style = Classic;
-                    break;
-            }
-
-            bar.Style = style;
-        }
-
-        /// <summary>A bar with only a style's looks, to draw a sample of it.</summary>
-        public static HotbarBar Sample(string style) {
-            var bar = new HotbarBar();
-            Apply(bar, style);
-            return bar;
-        }
-    }
-
-    /// <summary>
-    /// Colours as ImGui packs them, (a &lt;&lt; 24) | (b &lt;&lt; 16) | (g &lt;&lt; 8) | r, worked out by hand: ImGui's own
-    /// conversion crashes before it has a context, and the settings are made before then.
-    /// </summary>
-    public static class PackedColor {
-        public static uint Pack(byte r, byte g, byte b, byte a = 255) {
-            return ((uint)a << 24) | ((uint)b << 16) | ((uint)g << 8) | r;
-        }
-
-        public static (float R, float G, float B, float A) Unpack(uint color) {
-            return ((color & 0xFF) / 255f, ((color >> 8) & 0xFF) / 255f, ((color >> 16) & 0xFF) / 255f, (color >> 24) / 255f);
-        }
-
-        public static uint Pack(float r, float g, float b, float a) {
-            return Pack(Byte(r), Byte(g), Byte(b), Byte(a));
-        }
-
-        /// <summary>Part way from one colour to the other: 0 is the first, 1 the second.</summary>
-        public static uint Lerp(uint from, uint to, float t) {
-            t = Math.Max(0, Math.Min(1, t));
-            var a = Unpack(from);
-            var b = Unpack(to);
-            return Pack(a.R + (b.R - a.R) * t, a.G + (b.G - a.G) * t, a.B + (b.B - a.B) * t, a.A + (b.A - a.A) * t);
-        }
-
-        /// <summary>The colour with its alpha multiplied, for one that fades.</summary>
-        public static uint Fade(uint color, float alpha) {
-            var a = (color >> 24) * Math.Max(0, Math.Min(1, alpha));
-            return (color & 0x00FFFFFF) | ((uint)Math.Round(a) << 24);
-        }
-
-        private static byte Byte(float value) {
-            return (byte)Math.Round(Math.Max(0, Math.Min(1, value)) * 255);
-        }
-    }
-
-    /// <summary>
-    /// An item on a hotbar: which one (its guid), and what it is (its weenie class, name and icon), so when that one's gone
-    /// (a stack used up, a kit worn out) the slot can use the next one like it, and shows what it was while there's none.
+    /// An item on a hotbar: which one (its guid) and what it is (weenie class, name, icon), so when it's used up the slot
+    /// takes the next one like it, and shows what it was meanwhile.
     /// </summary>
     [DataContract]
     public class HotbarSlot {
@@ -230,10 +72,7 @@ namespace DaraletPlayer.Feed {
         [DataMember(Name = "showCounts")] public bool ShowCounts;
         /// <summary>Text in the slots (hotkeys, counts, cooldown times) as a share of the window's font.</summary>
         [DataMember(Name = "textScale")] public float TextScale;
-        /// <summary>
-        /// The hotkeys on the slots, as a share of the window's font, apart from the rest of the slots' text; 0 or less
-        /// (a bar saved before it had one) follows TextScale.
-        /// </summary>
+        /// <summary>The hotkeys' own size, as a share of the window's font; 0 or less follows TextScale.</summary>
         [DataMember(Name = "keyTextScale")] public float KeyTextScale;
 
         [DataMember(Name = "cooldownStyle")] public string Cooldown;
@@ -426,11 +265,10 @@ namespace DaraletPlayer.Feed {
             SlotsFor(character).Add(slot);
         }
 
-        /// <summary>
-        /// Swaps what's in two places, on this bar or between it and another: moving an item onto an empty place moves it,
-        /// onto another item swaps the two.
-        /// </summary>
-        public static void Exchange(string character, HotbarBar fromBar, (int Page, int Row, int Col) from, HotbarBar toBar, (int Page, int Row, int Col) to) {
+        /// <summary>Swaps what's in two places, on one bar or two. Onto an empty place, that's a move.</summary>
+        public static void Exchange(string character,
+            HotbarBar fromBar, (int Page, int Row, int Col) from,
+            HotbarBar toBar, (int Page, int Row, int Col) to) {
             if (fromBar == toBar && from == to) {
                 return;
             }
@@ -541,63 +379,6 @@ namespace DaraletPlayer.Feed {
             }
 
             NextId = Math.Max(NextId, seen.DefaultIfEmpty(0).Max() + 1);
-        }
-    }
-
-    /// <summary>The shapes a slot's cooldown is drawn with, worked out in a square one unit across.</summary>
-    public static class CooldownShape {
-        /// <summary>
-        /// The edge of the clock sweep's dark wedge: the part of the square from the hand (elapsed of the way round,
-        /// clockwise from the top) on round to the top again, as points along the square's edge in order. Each pair of
-        /// points makes a triangle with the centre. Nothing once it's all elapsed.
-        /// </summary>
-        public static List<(float X, float Y)> Sweep(float elapsed) {
-            var points = new List<(float, float)>();
-            elapsed = Math.Max(0, Math.Min(1, elapsed));
-
-            if (elapsed >= 1) {
-                return points;
-            }
-
-            var start = elapsed * Math.PI * 2;
-            points.Add(Edge(start));
-
-            // the square's corners the wedge reaches round, then the top again
-            foreach (var corner in new[] { 0.25, 0.75, 1.25, 1.75 }) {
-                var angle = corner * Math.PI;
-
-                if (angle > start) {
-                    points.Add(Edge(angle));
-                }
-            }
-
-            points.Add(Edge(Math.PI * 2));
-            return points;
-        }
-
-        /// <summary>Where a line from the centre at an angle (0 straight up, clockwise) meets the square's edge.</summary>
-        private static (float X, float Y) Edge(double angle) {
-            var x = Math.Sin(angle);
-            var y = -Math.Cos(angle);
-            var far = Math.Max(Math.Abs(x), Math.Abs(y));
-            return ((float)(0.5 + 0.5 * x / far), (float)(0.5 + 0.5 * y / far));
-        }
-
-        /// <summary>A cooldown's time left in a few characters: "1h", "3m", "12", "4.5" (or "5", without decimals).</summary>
-        public static string TimeLeft(double seconds, bool decimals = true) {
-            if (seconds >= 3600) {
-                return $"{Math.Ceiling(seconds / 3600)}h";
-            }
-
-            if (seconds >= 60) {
-                return $"{Math.Ceiling(seconds / 60)}m";
-            }
-
-            if (seconds >= 10 || !decimals) {
-                return $"{Math.Ceiling(seconds)}";
-            }
-
-            return (Math.Ceiling(seconds * 10) / 10).ToString("0.0", CultureInfo.InvariantCulture);
         }
     }
 }
