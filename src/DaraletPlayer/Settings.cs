@@ -149,7 +149,13 @@ namespace DaraletPlayer {
         /// <summary>The Carried and Bank views mark items the way the active loot list's rules do (LootMarks).</summary>
         [DataMember(Name = "bankLootMarks")] public bool BankLootMarks;
 
+        /// <summary>A healing, stamina or mana kit on a hotbar is used on you at once, with no target to pick.</summary>
+        [DataMember(Name = "oneClickHeal")] public bool OneClickHeal;
+
         [DataMember(Name = "loot")] public LootData Loot;
+
+        /// <summary>The hotbars (the Combat tab's Hotbars): their layout, looks and hotkeys, and each character's items.</summary>
+        [DataMember(Name = "hotbars")] public HotbarData Hotbars;
 
         public SettingsData() {
             SetDefaults();
@@ -212,6 +218,8 @@ namespace DaraletPlayer {
             BankShowWorn = true;
             CarriedRetail = true;
             Loot = new LootData();
+            Hotbars = new HotbarData();
+            OneClickHeal = true;
         }
     }
 
@@ -309,6 +317,8 @@ namespace DaraletPlayer {
                 Data.MapTypes = Data.MapTypes ?? new Dictionary<string, bool>();
                 Data.FellowVitals = new Dictionary<string, FellowVitals>(Data.FellowVitals ?? new Dictionary<string, FellowVitals>(), StringComparer.OrdinalIgnoreCase);
                 Data.Loot = Data.Loot ?? new LootData();
+                Data.Hotbars = Data.Hotbars ?? new HotbarData();
+                Data.Hotbars.Clamp();
             }
             catch (Exception ex) {
                 log($"Couldn't read the settings from {filePath}: {ex.Message}");

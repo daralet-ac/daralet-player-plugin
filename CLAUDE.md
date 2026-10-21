@@ -71,6 +71,13 @@ dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj
   opened (a `/bank deposit`) didn't show in GetByContainer until the bank was reopened, though the client and the item's
   own `LongValueKey.Container` had it. The bank tab groups `WorldFilter.GetAll()` by each object's Container instead
   (`BankBrowser.Snapshot`, twice a second, and the frame after Decal hears any object change, `InventoryChanges`, so a move shows the moment the server answers).
+- **The game drops an item dragged from its pack and let go over a plugin window.** ImGui windows aren't game panels, so
+  to the game the button came up over the world. `GameDrag` eats that WM_LBUTTONUP (Decal's `WindowMessage`, `e.Eat`)
+  when it's over a window the drag was held over last frame (`GameDrag.Cover`, from `FloatingWindow` and `PlayerHud`) and
+  the selection is something you carry, and posts the game one where the drag began, over the item's own place. ImGui
+  may not hear the eaten release either, so a hotbar also takes it from `GameDrag.CaughtOverLastItem`. If the game drops
+  the item anyway within three seconds, it's moved back to the container and slot it came from (`WatchDropped`).
+  `[drag-in]` lines in log.txt.
 - **Every Decal event handler and render callback is wrapped in try/catch.** An exception escaping into Decal can crash the
   client.
 - **JSON:** System.Text.Json writes dictionaries as objects; `DataContractJsonSerializer` only reads them with
@@ -284,6 +291,80 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   filter keys exist. **To file / From file** save and load profiles as `.json` in `Documents\Decal Plugins\Daralet\Loot
   Profiles` (`LootFiles`).
 
+- **Combat tab** (`Ui/CombatTab.cs`): the Target tab it used to be (`Ui/TargetTab.cs`, still its own sub tab) and
+  **Hotbars** (`Ui/Hotbars.cs`, `Ui/HotbarWindow.cs`, `Ui/HotbarItems.cs`, `Ui/Hotkeys.cs`, `Feed/Hotbar.cs`,
+  `Feed/Keys.cs`). Each bar (`HotbarBar`, in `SettingsData.Hotbars`) is a `FloatingWindow` (`hotbar-<id>`, titled
+  `Hotbar <id>`, since UtilityBelt knows a window by its title) of columns by rows on up to ten pages, with its layout,
+  looks and hotkeys shared by every character and its items per character (`Slots`, by name). The first bar is there from
+  the start, hidden. Colours are packed as ImGui's u32 by hand (`PackedColor`). A slot keeps the item's guid and what it
+  is (weenie class, `WorldObject.Type`, and name, and its icon layers): when that one's gone (a stack used up) it takes
+  the fullest one like it you carry (`HotbarItems.Resolve`), and meanwhile shows the saved icon, shaded. Items go on by
+  dropping them from the inventory's lists (`BankBrowser.DragType`, the item in `BankBrowser.DraggedItem`) or from the
+  game's own pack (`GameDrag`); only what you carry or wear. While one's held over a slot, the slot shows its icon at half
+  opacity (`HotbarWindow.DrawDropPreview`, `ItemIcons.DrawAt`'s tint), drawn after the slot itself, or the slot's
+  background covers it; the red circle where it can't go. Slots only move in **Edit mode** (dragged, onto another
+  slot on any bar to swap, or off every window to empty it) or from their right-click menu (Move..., which picks it up
+  for the next slot clicked, and Move to); outside Edit mode a click uses the slot, on the press. Using is
+  `ItemUser.UseFromBar`: `ItemUser.Use`, except a tool used on something goes straight onto yourself or your selection
+  (`HotbarSlot.UseOn`, `HotbarUseOn`: Auto is yourself if it works on you, else the selection, else the pick cursor).
+  A kit's use flags name only a target that isn't you (in the game you select or pick yourself), so Auto never puts one
+  on you; **One-click Heal** (`SettingsData.OneClickHeal`, on by default) sends any kit (`ItemUser.IsKit`: Decal's
+  `HealingKit`, the server's Healer, whichever vital) to you at once, unless its slot says Your selection or Pick.
+  `ItemUser.RenderCursor`, from every bar, keeps a wield's steps and the reticle going with the inventory closed. A
+  slot's right-click menu also carries the window's Lock, size, background and Hide (`FloatingWindow.RenderMenuItems`),
+  since a bar is all items and the window's own menu doesn't open over items. Bars use less window padding
+  (`FloatingWindow`'s `padding`, set and put back like the border).
+  **Hotkeys** are a key per place (row and column, whichever page shows), page keys, and Bind keys (hover and press).
+  They're read from Windows (`GetAsyncKeyState`, every bindable key, once a frame from `Hotbars.Frame`), not ImGui, which
+  only hears keys while it wants them; they fire only with the game's window in front, the chat bar not active
+  (`Actions.ChatState`) and no ImGui text box typed in, and a hidden bar's keys do nothing. A plugin can't keep a key from
+  the game, so the tooltips say to pick keys it doesn't use. One key does one thing (`HotbarData.Forget`).
+  **Cooldowns:** an item's cooldown group and length are `SharedCooldown` (PropertyInt 280) and `CooldownDuration`
+  (PropertyFloat 167), which only an appraisal sends (the first look asks, `Actions.RequestId`); Decal keeps them by
+  number. A running cooldown is an enchantment on the player whose spell id is `0x8000 | group`
+  (`EnchantmentManager.StartCooldown` in daralet-ACE). Decal's `CharacterFilter.Enchantments` doesn't pass those on, so
+  `HotbarItems` reads them from the server's own messages (`EchoFilter.ServerDispatch`, game events 0x02C2 to 0x02C8,
+  parsed from `Message.RawData` by `Feed/CooldownMessages.cs` in `Enchantment.Write`'s order; time left is the
+  duration less the start time's size, the server's own sum), and those come first. Everything is by cooldown group,
+  so one use shows on every slot sharing it (the combat ability gems, potions of a kind). `[cooldown]` lines in
+  log.txt. A cooldown already running at login isn't seen until it's next started. Decal's list is still read after. In case Decal doesn't
+  list those, a use from a bar starts one of its own (`HotbarItems.Used`), but only once the use shows it worked (`Confirm`: a
+  use gone, fewer of its kind, or the item gone, within 3 seconds), as the server's does: a kit at full health starts none. Shown as a clock sweep
+  (`CooldownShape.Sweep`, drawn as triangles with anti-aliased fill off, or the seams show), fill, dim or bar.
+  **Structure** is Decal's `UsesRemaining` / `UsesTotal`.
+  **Spells** (`HotbarSlot.SpellId`, `Ui/Spells.cs`, `Ui/SpellDrag.cs`): a slot can hold a spell instead of an item, put
+  there by dragging it from the game's spellbook or spell bar, or from a slot's right-click menu (Put a spell here, the
+  spells you know by part of their name). A plugin can't see the game's drags, and `GameDrag` takes the selection for what's
+  dragged, which put the last selected item on the bar; so `SpellDrag` listens where the game says a drag began,
+  `CM_Item::SendNotice_BeginDrag(itemId, spellId, flag)` (static, cdecl, entrypoint 0x6A9640): its three calls in the client
+  are pointed at the plugin with UtilityBelt.Service's `AcClient.Hook(entrypoint, callLocation)`, the plugin notes a known
+  spell's id (under 0x10000, `IsSpellKnown`) and calls the game's function on unchanged, and `Stop` puts the calls back
+  (a hook left in after the plugin's gone would crash the game). `[spell-drag]` lines in log.txt. UtilityBelt.Service
+  ships the client's own types and addresses as `AcClient` (`UIElementManager.s_pInstance`, `ClientMagicSystem`,
+  `Entrypoint`, `Call`), which is where to look for anything else of the client's. A spell let go over a plugin window is
+  kept from the game like an item (`GameDrag`), or the game takes it off its spell bar. What a spell is (name,
+  description, school, icon, flags, target type, mana) is the portal dat's spell table, `UBService.PortalDat.SpellTable.
+  Spells`, by reflection; Decal's `Decal.FileService.dll` has a spell table too, but it's built against Decal.Adapter
+  2.9.8.3 and won't link against the 2.9.7.5 the plugin uses. Casting is Decal's `Actions.CastSpell`, which needs
+  spellcasting mode; the bar doesn't switch modes for you (the user's call): out of it, it says "You must be in
+  spellcasting mode to cast spells." and does nothing, before any word about the target. The target: none for an untargeted spell, you for a self-only one (SpellFlags.SelfTargeted
+  0x8), your selection for a harmful one (not Beneficial 0x4), and your selection or you for the rest. A spell you don't
+  know shows shaded.
+  **The settings page** (`Ui/Hotbars.Settings.cs`, the other half of `Hotbars`): the bars down the left (shown or not,
+  New hotbar) with Move slots (Edit mode) and Bind keys as lit buttons; the chosen bar on the right, under a preview of
+  made-up slots (a count, a cooldown with uses left, a worn item, empty ones), in tabs Layout, Look, Cooldowns and uses,
+  Keys and Items. Every slot anywhere (the bar, the preview, the style and cooldown pickers) is drawn by `SlotPainter`
+  from a `SlotLook`, so the preview is what the bar looks like. Look has ready-made styles (`HotbarStyles`: every colour
+  and the border at once, `HotbarBar.Style`), and the colours one by one under Custom colours, which makes the style
+  Custom. Keys is a grid of the bar's places to click and press a key in, a Key size of its own (`KeyTextScale`, 0 following
+  the Text size, `KeyScale`; the cooldown's seconds have a Number size under Cooldowns and uses, `CooldownTextScale`,
+  150% to start, and Show Decimals, off to start), with quick sets for a row (1 to 0, Shift + 1
+  to 0, F1 to F12). All slot text (hotkeys, counts, cooldown seconds, uses left) is
+  `ItemIcons.DrawLabel`: ImGui stretches one small font texture, which blurs and dims bigger text, so each label is drawn
+  by GDI+ (Segoe UI bold, white, black outline, cut close round its letters) into a texture at exactly its pixel size,
+  tinted to its colour, and kept (400 at most); ImGui's text if one can't be made. Forms are two-column tables (`BeginForm`, `Label`), and rows of checkboxes and pickers wrap to the
+  width (`Flow`) rather than running off the side.
+
 - **Character tab** (`Ui/CharacterTab.cs`): everything the Combat Focus appraisal shows under Character Stats (gear mods,
   ratings, ward, armor level, resistances, jewel effects), from `@playerui character`, every two seconds while the tab is
   open. Server side, `Player.GetStatsSheetSections` (`WorldObjects/Player_StatsSheet.cs`) builds the sections and both the
@@ -415,6 +496,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   switch their windows on, as asked for. **Background** (`WindowPlacement.Background`, null for the old 0.55 locked / 0.85
   unlocked) fades each window's box; at 0% it's `NoBackground`, and the style's `WindowBorderSize` is zeroed for that
   window's Begin and put back in `Hud_OnRender` (or the next `Core_RenderFrame`), since UB begins the window between the two.
+  Locking takes the title bar away, so `Locked` moves the window down by the title bar's height (measured while unlocked,
+  `titleBarHeight`) and back up when unlocked: what's in it stays exactly where it was. `RememberPosition` skips a frame
+  whose new position is still on its way (`positioned` false), or it would save the old one back.
   These windows have `NoFocusOnAppearing`; `BringToFront` focuses one once (Appraisal uses it, so a new appraisal isn't
   hidden behind the main window). `menuItems` adds to a window's right-click menu: the fellowship window's is the vitals of
   the fellow right-clicked (`SettingsData.FellowVitals`, by name, each vital null to follow the Stamina/Mana checkboxes).

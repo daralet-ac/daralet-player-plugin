@@ -15,7 +15,11 @@ namespace DaraletPlayer.Ui {
     /// The items are Decal's (WorldFilter); moving is the game's own move, so the server checks it like a drag in the game.
     /// </summary>
     internal class BankBrowser {
-        private const string DragType = "DAP_ITEM";
+        /// <summary>An item dragged from a list: the drag carries nothing, the item is DraggedItem.</summary>
+        internal const string DragType = "DAP_ITEM";
+
+        /// <summary>The item held in the last drag from any list, for drop spots outside the lists (the hotbars).</summary>
+        internal static int DraggedItem { get; private set; }
 
         /// <summary>A grid icon's size, in pixels: the game's own, as portal.dat has them.</summary>
         private const float GridIconSize = 32;
@@ -582,6 +586,11 @@ namespace DaraletPlayer.Ui {
         /// not a creature, player or fixture. Null otherwise.
         /// </summary>
         private static WorldObject GameDraggedGroundItem() {
+            // the game's dragging a spell, not its selection
+            if (SpellDrag.Spell != 0) {
+                return null;
+            }
+
             var id = CoreManager.Current.Actions.CurrentSelection;
             var item = id == 0 || id == CoreManager.Current.CharacterFilter.Id ? null : CoreManager.Current.WorldFilter[id];
 
@@ -1187,6 +1196,7 @@ namespace DaraletPlayer.Ui {
 
             // the payload itself carries nothing: which item is being dragged is kept here
             dragged = id;
+            DraggedItem = id;
             draggingFrame = ImGui.GetFrameCount();
             ImGui.SetDragDropPayload(DragType, IntPtr.Zero, 0);
 

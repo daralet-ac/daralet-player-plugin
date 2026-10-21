@@ -17,7 +17,7 @@ namespace DaraletPlayer.Ui {
         private readonly ItemIcons icons;
         private readonly Hud hud;
         private readonly FellowshipTab fellowshipTab;
-        private readonly TargetTab targetTab;
+        private readonly CombatTab combatTab;
         private readonly WorldTab worldTab;
         private readonly BankTab bankTab;
         private readonly MarketTab marketTab;
@@ -41,7 +41,7 @@ namespace DaraletPlayer.Ui {
             ItemUser.Icons = icons;
 
             fellowshipTab = new FellowshipTab(feed, settings);
-            targetTab = new TargetTab(feed, settings);
+            combatTab = new CombatTab(feed, settings, icons);
             worldTab = new WorldTab(feed, settings);
             bankTab = new BankTab(feed, icons, settings);
             marketTab = new MarketTab(feed, api, icons);
@@ -56,7 +56,7 @@ namespace DaraletPlayer.Ui {
             tabs = new List<(string, string, Action)> {
                 ("World", "A map of Dereth with Daralet's towns, dungeons, lifestones and portals, you and your fellowship, and an arrow to point you anywhere on it.", worldTab.Render),
                 ("Fellowship", "Your fellowship's health, stamina and mana, and a vitals window you can place anywhere on screen.", fellowshipTab.Render),
-                ("Target", "Your selected target's vitals, buffs, debuffs and threat table, and a tracked target you can watch alongside it.", targetTab.Render),
+                ("Combat", "Your selected target's vitals, buffs, debuffs and threat table, a tracked target to watch alongside it, and hotbars of items to use with a click or a hotkey.", combatTab.Render),
                 ("Character", "Your character stats, as the Combat Focus appraisal shows them: gear mods, ratings, ward, armor level, resistances and jewel effects.", characterTab.Render),
                 ("Quests", "Your quests, what the game's Contracts panel lists: their progress and timers, who gives them and who takes them back, and where, with an arrow to point you there.", questsTab.Render),
                 ("Loot","Loot rules in named loot profiles you can swap, and what happens when you open a corpse or a chest: loot, salvage, or just show what matches.", lootTab.Render),
@@ -70,6 +70,7 @@ namespace DaraletPlayer.Ui {
             hud.ShowInBar = true;
             hud.OnPreRender += Hud_OnPreRender;
             hud.OnRender += Hud_OnRender;
+            GameDrag.Start();
         }
 
         public void Toggle() {
@@ -91,6 +92,9 @@ namespace DaraletPlayer.Ui {
                 if (disposed) {
                     return;
                 }
+
+                // a drag from the game's pack let go over this window mustn't drop the item on the ground
+                GameDrag.Cover();
 
                 if (!RenderStatus()) {
                     return;
@@ -194,6 +198,7 @@ namespace DaraletPlayer.Ui {
             hud.OnRender -= Hud_OnRender;
 
             try {
+                GameDrag.Stop();
                 Appraisal.Stop();
                 ItemUser.Icons = null;
             }
@@ -201,7 +206,7 @@ namespace DaraletPlayer.Ui {
                 PluginCore.Log(ex);
             }
 
-            foreach (var piece in new IDisposable[] { hud, fellowshipTab, targetTab, worldTab, bankTab, marketTab, lootTab, api, icons }) {
+            foreach (var piece in new IDisposable[] { hud, fellowshipTab, combatTab, worldTab, bankTab, marketTab, lootTab, api, icons }) {
                 try {
                     piece.Dispose();
                 }

@@ -48,15 +48,21 @@ namespace DaraletPlayer.Ui {
         /// <summary>What the window was showing when it was closed: it stays away until it's showing something else.</summary>
         private object closedFor;
 
+        /// <summary>The room round what's in the window, for one that wants less than the style's (a hotbar), or null.</summary>
+        private readonly Vector2? padding;
+
         /// <param name="defaultSize">For a window whose contents fill it (lists that scroll, like the bank's): you size it
         /// yourself, starting at this, and its size is kept like its position. Without one, it sizes itself.</param>
         /// <param name="inUse">What the window shows now (any object that tells one thing from the next, a guid say), or null
         /// when there's nothing. With it, the window can show only while in use.</param>
         /// <param name="alwaysOnlyInUse">Only ever shown while in use, not a choice (a window about something you open).</param>
         /// <param name="onClose">What closing it does instead of hiding it for good; it then comes back for the next thing.</param>
+        /// <param name="padding">The room round what's in it, instead of the style's.</param>
         public FloatingWindow(string id, string title, Settings settings, Vector2 defaultPosition, Action render, bool visibleByDefault = true,
-            Vector2? defaultSize = null, Func<object> inUse = null, bool alwaysOnlyInUse = false, Action onClose = null, Action menuItems = null) {
+            Vector2? defaultSize = null, Func<object> inUse = null, bool alwaysOnlyInUse = false, Action onClose = null, Action menuItems = null,
+            Vector2? padding = null) {
             this.menuItems = menuItems;
+            this.padding = padding;
             this.id = id;
             this.settings = settings;
             this.defaultPosition = defaultPosition;
@@ -166,9 +172,32 @@ namespace DaraletPlayer.Ui {
                     return;
                 }
 
+                // a locked window has no title bar, and what's in it would slide up into the room the bar took: the
+                // window moves down by the bar's height when it's locked, and back up when it's unlocked, so what's in it
+                // stays exactly where it was
+                var title = TitleBarHeight();
+                Placement.Y = (Placement.Y ?? defaultPosition.Y) + (value ? title : -title);
+                positioned = false;
+
                 Placement.Locked = value;
                 settings.Changed();
             }
+        }
+
+        /// <summary>The title bar's height as it was last drawn, or 0 before it has been.</summary>
+        private float titleBarHeight;
+
+        /// <summary>
+        /// How tall the title bar is: as last drawn, or, for a window that's never been drawn unlocked, the height ImGui
+        /// gives one (a line of the window's font and the frame's padding).
+        /// </summary>
+        private float TitleBarHeight() {
+            if (titleBarHeight > 0) {
+                return titleBarHeight;
+            }
+
+            // the font's own size, not GetFontSize: that's whichever window is being drawn, at its own scale
+            return (float)Math.Round(ImGui.GetFont().FontSize * ImGui.GetIO().FontGlobalScale * Scale + ImGui.GetStyle().FramePadding.Y * 2);
         }
 
         /// <summary>
@@ -241,12 +270,7 @@ namespace DaraletPlayer.Ui {
 
             ImGui.SameLine();
             ImGui.SetNextItemWidth(110);
-            var percent = (int)Math.Round(Scale * 100);
-
-            if (ImGui.SliderInt($"Size##{id}-scale", ref percent, (int)(WindowPlacement.MinScale * 100), (int)(WindowPlacement.MaxScale * 100), "%d%%")) {
-                Scale = percent / 100f;
-            }
-            Widgets.Tip("How big the window's text and bars are drawn. Ctrl+click to type a size. You can also right-click the window for Bigger, Smaller and Normal size.");
+            ScaleSlider($"Size##{id}-scale");
 
             ImGui.SameLine();
             ImGui.SetNextItemWidth(110);
@@ -256,7 +280,24 @@ namespace DaraletPlayer.Ui {
         /// <summary>
         /// The slider for how solid the window's background is, in its tab and in its right-click menu.
         /// </summary>
-        private void BackgroundSlider(string label) {
+        /// <summary>The slider for how big the window is drawn, in its tab.</summary>
+        public void ScaleSlider(string label) {
+            var percent = (int)Math.Round(Scale * 100);
+
+            if (ImGui.SliderInt(label, ref percent, (int)(WindowPlacement.MinScale * 100), (int)(WindowPlacement.MaxScale * 100), "%d%%")) {
+                Scale = percent / 100f;
+            }
+            Widgets.Tip("How big the window's text and bars are drawn. Ctrl+click to type a size. You can also right-click the window for Bigger, Smaller and Normal size.");
+
+            ImGui.SameLine();
+
+            if (ImGui.SmallButton($"Reset##{label}-reset")) {
+                Scale = 1;
+            }
+            Widgets.Tip("Puts the size back to 100%.");
+        }
+
+        public void BackgroundSlider(string label) {
             var percent = (int)Math.Round(Placement.BackgroundAlpha * 100);
 
             if (ImGui.SliderInt(label, ref percent, 0, 100, "%d%%")) {
@@ -280,12 +321,21 @@ namespace DaraletPlayer.Ui {
         /// <summary>The border size the style had before a window with no background took it away for its Begin.</summary>
         private float? savedBorderSize;
 
-        /// <summary>Puts the style's border back, once the window it was taken away for has begun.</summary>
+        /// <summary>The style's window padding, while a window with its own has it for its Begin.</summary>
+        private Vector2? savedPadding;
+
+        /// <summary>Puts the style's border and padding back, once the window they were changed for has begun.</summary>
         private void RestoreBorder() {
             if (savedBorderSize.HasValue) {
                 var style = ImGui.GetStyle();
                 style.WindowBorderSize = savedBorderSize.Value;
                 savedBorderSize = null;
+            }
+
+            if (savedPadding.HasValue) {
+                var style = ImGui.GetStyle();
+                style.WindowPadding = savedPadding.Value;
+                savedPadding = null;
             }
         }
 
@@ -348,6 +398,13 @@ namespace DaraletPlayer.Ui {
                     ImGui.SetNextWindowBgAlpha(alpha);
                 }
 
+                if (padding.HasValue) {
+                    // the window's padding is read in Begin, like the border, and put back the same way
+                    var style = ImGui.GetStyle();
+                    savedPadding = savedPadding ?? style.WindowPadding;
+                    style.WindowPadding = padding.Value;
+                }
+
                 if (bringToFront) {
                     ImGui.SetNextWindowFocus();
                     bringToFront = false;
@@ -368,12 +425,51 @@ namespace DaraletPlayer.Ui {
                 }
 
                 ImGui.SetWindowFontScale(Scale);
+
+                // what's in the window starts below the title bar and the padding; with the padding taken off, that's the
+                // title bar's height, for Locked to move the window by
+                if (!Locked) {
+                    titleBarHeight = ImGui.GetCursorStartPos().Y - (padding ?? ImGui.GetStyle().WindowPadding).Y;
+                }
+
+
+                // a drag from the game's pack let go over this window mustn't drop the item on the ground
+                GameDrag.Cover();
                 render();
                 RenderContextMenu();
                 RememberPosition();
             }
             catch (Exception ex) {
                 PluginCore.Log(ex);
+            }
+        }
+
+        /// <summary>
+        /// Lock, size, background and Hide, as the window's own right-click menu has them: for a window that's all items
+        /// (a hotbar), whose right-click goes to the item under the mouse, to show in that item's menu instead.
+        /// </summary>
+        public void RenderMenuItems() {
+            if (ImGui.MenuItem(Locked ? "Unlock window" : "Lock window")) {
+                Locked = !Locked;
+            }
+
+            if (ImGui.MenuItem("Bigger")) {
+                Scale += 0.1f;
+            }
+
+            if (ImGui.MenuItem("Smaller")) {
+                Scale -= 0.1f;
+            }
+
+            if (ImGui.MenuItem($"Normal size ({Scale * 100:0}% now)")) {
+                Scale = 1;
+            }
+
+            ImGui.SetNextItemWidth(ImGui.GetFontSize() * 8);
+            BackgroundSlider($"Background##{id}-item-menu-background");
+
+            if (ImGui.MenuItem("Hide")) {
+                Visible = false;
             }
         }
 
@@ -418,6 +514,11 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RememberPosition() {
+            // a new position is on its way (Locked moving the window, Reset position): this frame's is the old one
+            if (!positioned) {
+                return;
+            }
+
             var position = ImGui.GetWindowPos();
 
             if (Placement.X != position.X || Placement.Y != position.Y) {

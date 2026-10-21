@@ -8,8 +8,10 @@ the game with:
   fellow. Search for a place by name, or right-click the map.
 - **Fellowship**: your fellowship's health, stamina and mana, with a small window that stays on screen while you play.
   Click a name to select that member.
-- **Target**: what you're fighting: its health, stamina and mana, every buff and debuff on it, and its threat table (who
-  it wants to attack). Has a window that stays on screen too.
+- **Combat**: what you're fighting: its health, stamina and mana, every buff and debuff on it, and its threat table (who
+  it wants to attack), with a window that stays on screen too. And hotbars: drag potions, kits, weapons or spells onto them
+  and use or cast them with a click or a hotkey. Each bar can have as many slots, rows and pages as you like, its own colours, and
+  shows cooldowns and how many uses an item has left.
 - **Loot**: a looter with loot profiles (sets of rules) you write yourself, using the same filters as the market search. Each character picks
   a loot profile, and you can swap them at any time. When you open a corpse or a chest, it can loot automatically, ask first, or just point
   out what matches. It can also salvage what you tell it to. A rule can ask for how well a stat rolled rather than the stat

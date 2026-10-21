@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Numerics;
 using System.Reflection;
@@ -82,7 +84,9 @@ namespace DaraletPlayer.Ui {
         /// Draws an item's icon at a spot on the screen, size pixels square, whatever Compact says: for views that are made
         /// of icons, like the bank's grid. Returns false when there's nothing to draw (no icon, or it isn't loaded yet).
         /// </summary>
-        public bool DrawAt(ImDrawListPtr drawList, IconLayers layers, Vector2 at, float size) {
+        /// <param name="tint">What the icon is multiplied by, as ImGui packs a colour: white for itself, half its alpha for a
+        /// see-through one (a hotbar's preview of where a held item would go).</param>
+        public bool DrawAt(ImDrawListPtr drawList, IconLayers layers, Vector2 at, float size, uint tint = 0xFFFFFFFF) {
             if (disposed || layers == null || layers.IsEmpty) {
                 return false;
             }
@@ -90,9 +94,9 @@ namespace DaraletPlayer.Ui {
             var corner = at + new Vector2(size, size);
             var icon = Texture(layers.Icon, layers.OutlineColor);
 
-            AddImage(drawList, Texture(layers.Underlay, null), at, corner);
-            AddImage(drawList, icon, at, corner);
-            AddImage(drawList, Texture(layers.Overlay, null), at, corner);
+            AddImage(drawList, Texture(layers.Underlay, null), at, corner, tint);
+            AddImage(drawList, icon, at, corner, tint);
+            AddImage(drawList, Texture(layers.Overlay, null), at, corner, tint);
             return icon != null;
         }
 
@@ -302,6 +306,134 @@ namespace DaraletPlayer.Ui {
             ImGui.SetCursorPosY(top + (size - ImGui.GetTextLineHeight()) / 2);
         }
 
+        // ---- labels: text drawn sharp at any size ----
+
+        /// <summary>Labels kept at once at most; past this they're all freed and made again as they're drawn.</summary>
+        private const int MaxLabels = 400;
+
+        private readonly Dictionary<(string Text, int Pixels), (ManagedTexture Texture, Vector2 Size)> labels =
+            new Dictionary<(string, int), (ManagedTexture, Vector2)>();
+        private readonly HashSet<(string, int)> failedLabels = new HashSet<(string, int)>();
+        private bool loggedLabelFailure;
+        private static FontFamily labelFamily;
+
+        /// <summary>
+        /// How big a label is drawn (DrawLabel), in pixels, or null if it can't be made: text a few characters long, the
+        /// hotkeys and counts over hotbar slots.
+        /// </summary>
+        public Vector2? LabelSize(string text, int pixels) {
+            return Label(text, pixels)?.Size;
+        }
+
+        /// <summary>
+        /// Short text at a spot, in a colour, sharp at any size: ImGui draws its font from one small texture and stretches
+        /// it, which blurs and dims text made bigger. So the text is drawn by Windows into a texture of its own at exactly
+        /// this many pixels, bold and white on a black outline, and tinted to the colour (the outline stays black). Returns
+        /// false if it couldn't be made, for the caller to draw ImGui's text instead.
+        /// </summary>
+        public bool DrawLabel(ImDrawListPtr drawList, string text, Vector2 at, int pixels, uint color) {
+            var label = Label(text, pixels);
+
+            if (label == null) {
+                return false;
+            }
+
+            // whole pixels, drawn at the texture's own size, so nothing is stretched
+            var spot = new Vector2((float)Math.Round(at.X), (float)Math.Round(at.Y));
+            drawList.AddImage(label.Value.Texture.TexturePtr, spot, spot + label.Value.Size, Vector2.Zero, Vector2.One, color);
+            return true;
+        }
+
+        private (ManagedTexture Texture, Vector2 Size)? Label(string text, int pixels) {
+            if (disposed || string.IsNullOrWhiteSpace(text) || pixels < 4) {
+                return null;
+            }
+
+            var key = (text, Math.Min(pixels, 200));
+
+            if (labels.TryGetValue(key, out var label)) {
+                return label;
+            }
+
+            if (failedLabels.Contains(key)) {
+                return null;
+            }
+
+            if (labels.Count >= MaxLabels) {
+                FreeLabels();
+            }
+
+            try {
+                using (var bitmap = RenderLabel(key.Item1, key.Item2)) {
+                    // the texture takes a copy of the bitmap
+                    label = (new ManagedTexture(bitmap), new Vector2(bitmap.Width, bitmap.Height));
+                }
+
+                labels[key] = label;
+                return label;
+            }
+            catch (Exception ex) {
+                PluginCore.LogFile(loggedLabelFailure ? $"Couldn't make the label \"{text}\": {ex.Message}" : $"Couldn't make the label \"{text}\": {ex}");
+                loggedLabelFailure = true;
+                failedLabels.Add(key);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The text, bold, filled white and outlined in black, cut close round its letters (so a corner's label sits in the
+        /// corner whatever its letters are), on a transparent background.
+        /// </summary>
+        private static Bitmap RenderLabel(string text, int pixels) {
+            labelFamily = labelFamily ?? LabelFamily();
+
+            using (var path = new GraphicsPath())
+            using (var format = (StringFormat)StringFormat.GenericTypographic.Clone()) {
+                path.AddString(text, labelFamily, (int)FontStyle.Bold, pixels, new PointF(0, 0), format);
+
+                var outline = Math.Max(2f, pixels * 0.2f);
+                var pad = (float)Math.Ceiling(outline / 2) + 1;
+                var bounds = path.GetBounds();
+
+                using (var move = new Matrix()) {
+                    move.Translate(pad - bounds.Left, pad - bounds.Top);
+                    path.Transform(move);
+                }
+
+                var bitmap = new Bitmap(Math.Max(1, (int)Math.Ceiling(bounds.Width + pad * 2)), Math.Max(1, (int)Math.Ceiling(bounds.Height + pad * 2)),
+                    PixelFormat.Format32bppArgb);
+
+                using (var graphics = Graphics.FromImage(bitmap))
+                using (var pen = new Pen(Color.FromArgb(235, 0, 0, 0), outline) { LineJoin = LineJoin.Round }) {
+                    graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                    graphics.Clear(Color.Transparent);
+                    graphics.DrawPath(pen, path);
+                    graphics.FillPath(Brushes.White, path);
+                }
+
+                return bitmap;
+            }
+        }
+
+        /// <summary>Segoe UI, Windows' own, or whatever sans serif there is.</summary>
+        private static FontFamily LabelFamily() {
+            try {
+                return new FontFamily("Segoe UI");
+            }
+            catch (ArgumentException) {
+                return FontFamily.GenericSansSerif;
+            }
+        }
+
+        private void FreeLabels() {
+            foreach (var label in labels.Values) {
+                label.Texture.Dispose();
+            }
+
+            labels.Clear();
+        }
+
         private static ManagedTexture LoadArt(string name) {
             try {
                 using (var stream = typeof(ItemIcons).Assembly.GetManifestResourceStream($"DaraletPlayer.Resources.ui.{name}.png")) {
@@ -320,9 +452,9 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        private static void AddImage(ImDrawListPtr drawList, ManagedTexture texture, Vector2 at, Vector2 corner) {
+        private static void AddImage(ImDrawListPtr drawList, ManagedTexture texture, Vector2 at, Vector2 corner, uint tint = 0xFFFFFFFF) {
             if (texture != null) {
-                drawList.AddImage(texture.TexturePtr, at, corner);
+                drawList.AddImage(texture.TexturePtr, at, corner, Vector2.Zero, Vector2.One, tint);
             }
         }
 
@@ -508,6 +640,8 @@ namespace DaraletPlayer.Ui {
             }
 
             recolored.Clear();
+
+            FreeLabels();
 
             foreach (var texture in art.Values) {
                 texture?.Dispose();

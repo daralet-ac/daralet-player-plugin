@@ -111,6 +111,121 @@ namespace DaraletPlayer.Ui {
             tool = 0;
         }
 
+        /// <summary>Whether using the item turns the mouse into a target: a tool used on something.</summary>
+        public static bool IsTool(int id) {
+            var item = CoreManager.Current.WorldFilter[id];
+            return item != null && KindOf(item) == UseKind.Target;
+        }
+
+        /// <summary>
+        /// Uses the item from a hotbar slot: as Use, except that a tool used on something goes straight onto what the slot
+        /// says (HotbarUseOn) instead of waiting for a target to be picked, unless picking is what it says.
+        /// </summary>
+        /// <param name="oneClickHeal">A kit goes on you at once (One-click Heal), unless the slot says your selection or
+        /// picking.</param>
+        public static void UseFromBar(int id, string useOn, bool oneClickHeal = false) {
+            var item = CoreManager.Current.WorldFilter[id];
+
+            if (item == null) {
+                return;
+            }
+
+            // a kit's use flags only name a target that isn't you (in the game you select yourself, or pick yourself), so
+            // "yourself" in Auto never takes it; One-click Heal sends it to you all the same, and the server heals you
+            if (oneClickHeal && IsKit(item) && useOn != HotbarUseOn.Selection && useOn != HotbarUseOn.Pick) {
+                PluginCore.LogFile($"[use] {item.Name} ({id:X8}) from a hotbar: One-click Heal, on yourself");
+                Apply(id, CoreManager.Current.CharacterFilter.Id);
+                return;
+            }
+
+            if (KindOf(item) != UseKind.Target || useOn == HotbarUseOn.Pick) {
+                Use(id);
+                return;
+            }
+
+            var usable = Usable(item);
+            var me = CoreManager.Current.CharacterFilter.Id;
+            var onSelf = UseRules.Targets(usable, UsePlace.Self) && (TargetType(item) & UseRules.CreatureType) != 0;
+            var selection = SelectionFor(item);
+            PluginCore.LogFile($"[use] {item.Name} ({id:X8}) from a hotbar, on {useOn ?? HotbarUseOn.Auto}: yourself {(onSelf ? "allowed" : "not allowed")}, selection 0x{selection:X8}");
+
+            switch (useOn) {
+                case HotbarUseOn.Self:
+                    if (onSelf) {
+                        Apply(id, me);
+                    }
+                    else {
+                        Chat($"The {item.Name} can't be used on you.");
+                    }
+
+                    break;
+                case HotbarUseOn.Selection:
+                    if (selection != 0) {
+                        Apply(id, selection);
+                    }
+                    else {
+                        Chat($"Select something the {item.Name} works on first.");
+                    }
+
+                    break;
+                default:
+                    if (onSelf) {
+                        Apply(id, me);
+                    }
+                    else if (selection != 0) {
+                        Apply(id, selection);
+                    }
+                    else {
+                        Use(id);
+                    }
+
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// A healing, stamina or mana kit: the server's Healer, which Decal calls a HealingKit, whichever vital it restores.
+        /// A kit Decal doesn't know as one is still a used-on-a-creature tool with Kit in its name.
+        /// </summary>
+        public static bool IsKit(WorldObject item) {
+            if (item == null) {
+                return false;
+            }
+
+            if (item.ObjectClass == ObjectClass.HealingKit) {
+                return true;
+            }
+
+            return KindOf(item) == UseKind.Target && (TargetType(item) & UseRules.CreatureType) != 0
+                && (item.Name ?? "").IndexOf("Kit", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>What you have selected, if the tool works on it where it is; 0 otherwise.</summary>
+        private static int SelectionFor(WorldObject tool) {
+            var id = CoreManager.Current.Actions.CurrentSelection;
+            var me = CoreManager.Current.CharacterFilter.Id;
+            var target = id == 0 || id == tool.Id || id == me ? null : CoreManager.Current.WorldFilter[id];
+
+            if (target == null) {
+                return 0;
+            }
+
+            var usable = Usable(tool);
+            var targetType = TargetType(tool);
+            var container = target.Values(LongValueKey.Container, 0);
+            var inPack = container == me || CoreManager.Current.WorldFilter[container]?.Values(LongValueKey.Container, 0) == me;
+            var place = target.Values(LongValueKey.Wielder, 0) == me ? UsePlace.Wielded : inPack ? UsePlace.Contained : UsePlace.Remote;
+
+            var valid = UseRules.CanTarget(usable, targetType, ItemType(target), place)
+                || (place == UsePlace.Remote && UseRules.CanTarget(usable, targetType, ItemType(target), UsePlace.Viewed));
+            return valid ? id : 0;
+        }
+
+        private static void Apply(int tool, int target) {
+            PluginCore.LogFile($"[use] {CoreManager.Current.WorldFilter[tool]?.Name} ({tool:X8}) on 0x{target:X8}");
+            CoreManager.Current.Actions.ApplyItem(tool, target);
+        }
+
         /// <summary>Takes a worn item off, into your main pack.</summary>
         public static void TakeOff(int id) {
             CoreManager.Current.Actions.MoveItem(id, CoreManager.Current.CharacterFilter.Id, 0, false);
@@ -265,26 +380,46 @@ namespace DaraletPlayer.Ui {
         /// over the list says what's being used, with buttons for yourself and your world selection when the tool allows.
         /// </summary>
         public static void Render() {
-            Step();
-
-            if (!Targeting) {
-                return;
-            }
-
-            // gone (used up, dropped, banked): nothing left to use
-            if (CoreManager.Current.WorldFilter[tool] == null) {
-                Cancel();
-                return;
-            }
-
-            if (ImGui.IsKeyPressed(ImGuiKey.Escape) || ImGui.IsMouseClicked(ImGuiMouseButton.Right)) {
-                Cancel();
-                cancelledFrame = ImGui.GetFrameCount();
+            if (!Frame()) {
                 return;
             }
 
             RenderBar();
             DrawReticle();
+        }
+
+        /// <summary>
+        /// Once a frame from a window that isn't a list (a hotbar): a wield's next step, and while a tool is up, Escape or a
+        /// right-click putting it down and the reticle following the mouse. A wield or a tool started from a hotbar goes on
+        /// with the inventory closed.
+        /// </summary>
+        public static void RenderCursor() {
+            if (Frame()) {
+                DrawReticle();
+            }
+        }
+
+        /// <summary>A wield's next step, and whether a tool is still up after Escape, a right-click or its going.</summary>
+        private static bool Frame() {
+            Step();
+
+            if (!Targeting) {
+                return false;
+            }
+
+            // gone (used up, dropped, banked): nothing left to use
+            if (CoreManager.Current.WorldFilter[tool] == null) {
+                Cancel();
+                return false;
+            }
+
+            if (ImGui.IsKeyPressed(ImGuiKey.Escape) || ImGui.IsMouseClicked(ImGuiMouseButton.Right)) {
+                Cancel();
+                cancelledFrame = ImGui.GetFrameCount();
+                return false;
+            }
+
+            return true;
         }
 
         private static void RenderBar() {
