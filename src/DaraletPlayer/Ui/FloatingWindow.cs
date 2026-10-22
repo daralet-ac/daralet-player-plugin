@@ -18,6 +18,7 @@ namespace DaraletPlayer.Ui {
         private readonly string id;
         private readonly Vector2 defaultPosition;
         private readonly Action render;
+        private readonly bool visibleByDefault;
 
         /// <summary>The size a window you size yourself starts at, or null for one that sizes itself.</summary>
         private readonly Vector2? defaultSize;
@@ -77,9 +78,11 @@ namespace DaraletPlayer.Ui {
             this.onClose = onClose;
             this.menuItems = menuItems;
             this.padding = padding;
+            this.visibleByDefault = visibleByDefault;
 
             // made here so a window that starts hidden is saved that way
             settings.Window(id, visibleByDefault);
+            settings.Swapped += Settings_Swapped;
 
             hud = UBService.Huds.CreateHud(title);
             hud.ShowInBar = false;
@@ -550,8 +553,19 @@ namespace DaraletPlayer.Ui {
             }
         }
 
+        /// <summary>Another settings profile: the window goes where that one has it, and starts hidden there if it should.</summary>
+        private void Settings_Swapped() {
+            if (disposed) {
+                return;
+            }
+
+            settings.Window(id, visibleByDefault);
+            positioned = false;
+        }
+
         public void Dispose() {
             disposed = true;
+            settings.Swapped -= Settings_Swapped;
             CoreManager.Current.RenderFrame -= Core_RenderFrame;
             hud.OnPreRender -= Hud_OnPreRender;
             hud.OnRender -= Hud_OnRender;

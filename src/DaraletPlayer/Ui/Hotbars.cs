@@ -32,10 +32,26 @@ namespace DaraletPlayer.Ui {
             HotbarItems.Start();
             SpellDrag.Start();
 
+            MakeWindows();
+            settings.Swapped += Settings_Swapped;
+        }
+
+        private void MakeWindows() {
             // the first bar, there from the start, stays hidden until it's asked for
             foreach (var bar in Data.Bars) {
                 windows.Add(new HotbarWindow(this, bar, feed, settings, icons, visibleByDefault: false));
             }
+        }
+
+        /// <summary>Another settings profile, with bars of its own: a window for each of those instead.</summary>
+        private void Settings_Swapped() {
+            editMode = false;
+            bindMode = false;
+            moving = null;
+            dragged = null;
+            captureInto = null;
+            DisposeWindows();
+            MakeWindows();
         }
 
         private bool editMode;
@@ -303,6 +319,8 @@ namespace DaraletPlayer.Ui {
         }
 
         public void Dispose() {
+            settings.Swapped -= Settings_Swapped;
+
             try {
                 SpellDrag.Stop();
             }
@@ -317,6 +335,10 @@ namespace DaraletPlayer.Ui {
                 PluginCore.Log(ex);
             }
 
+            DisposeWindows();
+        }
+
+        private void DisposeWindows() {
             foreach (var window in windows) {
                 try {
                     window.Dispose();

@@ -22,6 +22,11 @@ namespace DaraletPlayer.Ui {
 
         private readonly List<Item> worn = new List<Item>();
 
+        /// <summary>For another settings profile, whose windows are already the size it saved them at.</summary>
+        public static void ForgetWornSizes() {
+            wornShownAs.Clear();
+        }
+
         private static float WornPanelWidth() {
             var style = ImGui.GetStyle();
             return EquipSlots.Columns * GridIconSize + (EquipSlots.Columns - 1) * WornGap

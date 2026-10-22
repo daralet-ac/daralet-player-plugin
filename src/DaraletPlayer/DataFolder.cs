@@ -3,8 +3,8 @@ using System.IO;
 
 namespace DaraletPlayer {
     /// <summary>
-    /// Documents\Decal Plugins\Daralet Toolkit: where everything the plugin writes is kept (settings.json, log.txt, Loot
-    /// Profiles, world-data), shared by every character on this computer.
+    /// Documents\Decal Plugins\Daralet Toolkit: where everything the plugin writes is kept (settings.json and the other
+    /// settings profiles, log.txt, Loot Profiles, world-data), for every character on this computer.
     /// </summary>
     public static class DataFolder {
         private static readonly string Plugins =

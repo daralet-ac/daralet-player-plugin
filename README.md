@@ -3,6 +3,10 @@
 Daralet Toolkit is the official [Decal](https://www.decaldev.com/) plugin for players on the Daralet server. It opens a window in
 the game with:
 
+- **Config**: settings profiles. Every setting the plugin has (its windows and where they are, every tab's options,
+  your loot profiles and hotbars) is kept in a profile, and each character picks its own, so your main and your mule
+  can each have their own set up, or share one. Save a profile to a file to keep it or give it to a friend, and add one
+  from a file.
 - **World**: a map of Dereth with Daralet's towns, dungeons, lifestones, portals and more. It shows where you are, where
   your fellowship is (unless they're in a dungeon), and an arrow window that points you anywhere on the map, or follows a
   fellow. Search for a place by name, or right-click the map. Inside, the Dungeon window maps the dungeon you're in,
@@ -95,9 +99,11 @@ Everything the plugin keeps is in
 
     Documents\Decal Plugins\Daralet Toolkit
 
-and shared by every character on your computer: window positions, display options and loot profiles in
-`settings.json`, loot profile files in `Loot Profiles`, the downloaded map and places in `world-data`, and
-`log.txt`. To start fresh, close the game and delete `settings.json`.
+on your computer: window positions, display options and loot profiles in `settings.json` (the Default settings
+profile), other settings profiles in `Settings Profiles`, which character uses which in `profiles.json`, profiles saved
+with To file in `Settings Exports`, loot profile files in `Loot Profiles`, the downloaded map and places in
+`world-data`, and `log.txt`. To start fresh, close the game and delete `settings.json`, or make a New profile on the
+Config tab.
 
 To move your loot profiles to another computer, or share them with a friend, use **Export** on the Loot tab and **Import**
 on the other end.

@@ -16,6 +16,7 @@ namespace DaraletPlayer.Ui {
         private readonly UpdateCheck updates;
         private readonly ItemIcons icons;
         private readonly Hud hud;
+        private readonly ConfigTab configTab;
         private readonly FellowshipTab fellowshipTab;
         private readonly CombatTab combatTab;
         private readonly WorldTab worldTab;
@@ -43,6 +44,7 @@ namespace DaraletPlayer.Ui {
             icons = new ItemIcons(settings);
             ItemUser.Icons = icons;
 
+            configTab = new ConfigTab(settings);
             fellowshipTab = new FellowshipTab(feed, settings);
             combatTab = new CombatTab(feed, settings, icons);
             worldTab = new WorldTab(feed, settings);
@@ -59,6 +61,8 @@ namespace DaraletPlayer.Ui {
             Appraisal.Start(feed, settings, icons);
 
             tabs = new List<(string, string, Action)> {
+                ("Config", "Settings profiles: every setting of the plugin's as a set each character picks from, saved to "
+                    + "and added from files to keep or share.", configTab.Render),
                 ("World", "A map of Dereth with Daralet's towns, dungeons, lifestones and portals, you and your fellowship, "
                     + "and an arrow to point you anywhere on it.", worldTab.Render),
                 ("Fellowship", "Your fellowship's health, stamina and mana, a vitals window you can place anywhere on "
@@ -86,7 +90,14 @@ namespace DaraletPlayer.Ui {
             hud.ShowInBar = true;
             hud.OnPreRender += Hud_OnPreRender;
             hud.OnRender += Hud_OnRender;
+            settings.Swapped += Settings_Swapped;
             GameDrag.Start();
+        }
+
+        /// <summary>Another settings profile: what was worked out from the old one's starts again.</summary>
+        private void Settings_Swapped() {
+            InventoryBrowser.ForgetWornSizes();
+            lootTab.SettingsSwapped();
         }
 
         public void Toggle() {
@@ -218,6 +229,7 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         public void Dispose() {
             disposed = true;
+            settings.Swapped -= Settings_Swapped;
             hud.OnPreRender -= Hud_OnPreRender;
             hud.OnRender -= Hud_OnRender;
 

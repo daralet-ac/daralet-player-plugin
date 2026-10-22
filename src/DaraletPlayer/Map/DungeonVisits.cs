@@ -68,6 +68,28 @@ namespace DaraletPlayer.Map {
             return set;
         }
 
+        /// <summary>
+        /// Adds every room another set has, for a settings profile swapped in: the rooms you've been in aren't a setting,
+        /// so they go with you. True when any was new.
+        /// </summary>
+        public bool Merge(DungeonVisits other) {
+            var added = false;
+
+            foreach (var character in other?.Cells ?? new Dictionary<string, Dictionary<string, List<int>>>()) {
+                foreach (var landblock in character.Value ?? new Dictionary<string, List<int>>()) {
+                    if (!uint.TryParse(landblock.Key, System.Globalization.NumberStyles.HexNumber, null, out var number)) {
+                        continue;
+                    }
+
+                    foreach (var cell in landblock.Value ?? new List<int>()) {
+                        added |= Add(character.Key, (number << 16) | (uint)(cell & 0xFFFF));
+                    }
+                }
+            }
+
+            return added;
+        }
+
         /// <summary>Forgets every room a character has been in in a landblock.</summary>
         public void Forget(string character, uint landblock) {
             if (character == null || !Cells.TryGetValue(character, out var landblocks)) {

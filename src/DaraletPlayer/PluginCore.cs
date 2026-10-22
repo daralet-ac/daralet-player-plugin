@@ -25,6 +25,9 @@ namespace DaraletPlayer {
         private LfgChatLinks lfgLinks;
         private bool updateAnnounced;
 
+        /// <summary>The character whose settings profile is in use, or null before login.</summary>
+        private string profileCharacter;
+
         /// <summary>
         /// The folder the dll is in, for files a player drops in by hand. Set by the loader, since a plugin loaded from bytes
         /// has no location. Everything the plugin writes goes in DataFolder.
@@ -51,6 +54,9 @@ namespace DaraletPlayer {
             try {
                 DataFolder.MoveOldFolder();
                 settings = new Settings(log: Log);
+
+                // a hot reload starts after login: the character's own profile is in use from the first frame
+                UseCharacterProfile();
                 Loot.KnowsScrollSpell = KnowsScrollSpell;
                 feed = new PlayerFeed();
                 updates = new UpdateCheck(typeof(PluginCore).Assembly.GetName().Version);
@@ -108,12 +114,28 @@ namespace DaraletPlayer {
 
         private void Core_RenderFrame(object sender, EventArgs e) {
             try {
+                UseCharacterProfile();
                 settings.SaveIfDue();
                 AnnounceUpdate();
             }
             catch (Exception ex) {
                 Log(ex);
             }
+        }
+
+        /// <summary>
+        /// Swaps in the settings profile the character picked (the Config tab), once it's logged in: until then the
+        /// plugin doesn't know who it is, and uses Default.
+        /// </summary>
+        private void UseCharacterProfile() {
+            var character = CoreManager.Current.CharacterFilter;
+
+            if (character.LoginStatus != 3 || string.IsNullOrEmpty(character.Name) || character.Name == profileCharacter) {
+                return;
+            }
+
+            profileCharacter = character.Name;
+            settings.UseFor(character.Name);
         }
 
         /// <summary>Says once in chat that a newer version is out, after login: a line added before then never shows.</summary>

@@ -493,6 +493,14 @@ namespace DaraletPlayer.Ui {
             return ItemTooltip.OutcomeColor(outcome);
         }
 
+        /// <summary>Another settings profile, with loot profiles of its own: the editor starts at the first rule.</summary>
+        public void SettingsSwapped() {
+            selectedRule = 0;
+            listName = "";
+            importProblem = null;
+            listMessage = null;
+        }
+
         public void Dispose() {
             looter.Dispose();
             corpseWindow.Dispose();

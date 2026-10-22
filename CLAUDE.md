@@ -695,18 +695,29 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   their Update link falls back to their own `LatestPageUrl`, since a release page under the new name isn't one of theirs. No Decal plugin known (October 2026) downloads and installs its own updates; UtilityBelt's
   is a notice like this one, and the loader updating the plugin itself was left for later.
 - **Everything the plugin writes** goes in `Documents\Decal Plugins\Daralet Toolkit` (`DataFolder`): `settings.json`,
-  `log.txt`, `Loot Profiles`, `world-data`. It was `Decal Plugins\Daralet` before the rename: `PluginCore.Startup` moves
+  `profiles.json`, `Settings Profiles`, `Settings Exports`, `log.txt`, `Loot Profiles`, `world-data`. It was `Decal Plugins\Daralet` before the rename: `PluginCore.Startup` moves
   that folder over first thing (`DataFolder.MoveOldFolder`, `FolderMove.Once`, copying instead if a file's held open),
   unless the new one is already there. Only startup does it, so a test that asks `DataFolder` for a path doesn't move
   the developer's real folder. Only files a player drops in by hand (`dereth-map.png`, `locations.xml`) are looked for
   next to the dll (`PluginCore.AssemblyDirectory`).
 - **Settings** (`Settings.cs`, what the file holds in `SettingsData.cs`, each window's in `WindowPlacement.cs`) live in
-  `settings.json` there, shared by every character:
-  window positions and visibility, and display options. A DataContract reader skips field initialisers, so new settings
+  `settings.json` there: window positions and visibility, and display options. A DataContract reader skips field initialisers, so new settings
   get their defaults in `SetDefaults`, which runs before a file is read as well. Saved two seconds after the last change.
   A renamed setting keeps its old `DataMember` name, or players lose it: the Inventory tab was the Bank tab, so
   `InventoryGrid`, `InventoryShowWorn` and `InventoryLootMarks` are still `bankGrid`, `bankShowWorn` and `bankLootMarks`
   in the file.
+- **Settings profiles** (`Settings.Profiles.cs`, `ProfileChoices.cs`, `Ui/ConfigTab.cs`, the **Config** tab, first):
+  a profile is a whole `SettingsData`. Default is `settings.json` itself (so a plugin from before profiles still finds
+  its settings), the rest `Settings Profiles\<name>.json`, named by file (`Settings.CleanName`), and which character uses
+  which is `profiles.json` (`characters`, case-blind; one not there uses Default). The plugin starts on Default and
+  swaps to the character's profile once logged in (`PluginCore.UseCharacterProfile`, also at a hot reload's start).
+  A swap saves the old profile, replaces `Settings.Data` and raises `Settings.Swapped`: everything reads
+  `settings.Data` afresh each frame, so only what keeps something from it listens: `FloatingWindow` (placed again from
+  the new profile's placement, made hidden if it starts so), `Hotbars` (a window per bar, made again), `PlayerHud`
+  (`InventoryBrowser.ForgetWornSizes`, `LootTab.SettingsSwapped`). Anything new that holds a piece of `Data` across
+  frames must do the same. The rooms you've been in (`DungeonVisits`) aren't a setting: a swap adds them to the new
+  profile's (`DungeonVisits.Merge`), and To file (`Settings.Export`, into `Settings Exports`) leaves them out. From
+  file (`Settings.Import`) adds any settings file as a new profile named after the file.
 
 `@playerui` only ever sends a player data about themselves, their fellowship and what they're fighting (for a monster
 they've selected: its vitals, every buff and debuff on it, and its threat table). The one exception is `lfg`, whose lists
