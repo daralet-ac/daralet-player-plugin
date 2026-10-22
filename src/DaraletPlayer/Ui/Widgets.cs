@@ -164,6 +164,23 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
+        /// The same, made the open tab when select is true. ImGui.NET only takes flags with a close button's bool, so this
+        /// calls ImGui itself, with no bool and so no close button.
+        /// </summary>
+        public static unsafe bool TabItem(string label, string tip, bool select) {
+            var bytes = System.Text.Encoding.UTF8.GetBytes(label + "\0");
+            var flags = select ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
+            bool open;
+
+            fixed (byte* text = bytes) {
+                open = ImGuiNative.igBeginTabItem(text, null, flags) != 0;
+            }
+
+            Tip(tip);
+            return open;
+        }
+
+        /// <summary>
         /// A combo box over (value, label) choices, showing the chosen one's label (the first one's, when the value isn't one
         /// of them). Returns true when the choice changed.
         /// </summary>

@@ -61,8 +61,8 @@ namespace DaraletPlayer.Ui {
             tabs = new List<(string, string, Action)> {
                 ("World", "A map of Dereth with Daralet's towns, dungeons, lifestones and portals, you and your fellowship, "
                     + "and an arrow to point you anywhere on it.", worldTab.Render),
-                ("Fellowship", "Your fellowship's health, stamina and mana, and a vitals window you can place anywhere on "
-                    + "screen.", fellowshipTab.Render),
+                ("Fellowship", "Your fellowship's health, stamina and mana, a vitals window you can place anywhere on "
+                    + "screen, and Find a group: look for a group, or for more players, with /lfgroup and /lfmore.", fellowshipTab.Render),
                 ("Combat", "Your selected target's vitals, buffs, debuffs and threat table, a tracked target to watch "
                     + "alongside it, and hotbars of items to use with a click or a hotkey.", combatTab.Render),
                 ("Character", "What the game's Character Information panel says (age, deaths, innate attributes, "

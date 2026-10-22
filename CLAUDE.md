@@ -163,7 +163,7 @@ second at most, with every window open: keep it inside those limits, or its wind
 comes (`PlayerFeed.RequestTimeout`). Polling goes through `PlayerFeed.Refresh`. `bankwindow` and `lootwindow`
 (`on|off`, answering `{"on":...}`) are described below. `rollranges` sends the ranges loot rolls each filter stat in (`{"ranges":[{"category","stat","tier","min","max"}]}`), for
 the loot rules' tooltips. `character` sends your character stats (`{"sections":[{"title",
-"lines"}]}`), for the Character tab. The server can also send a reply unasked (`PlayerUiProtocol.Send`),
+"lines"}]}`), for the Character tab. `lfg` sends looking for group, for Find a group (see the Fellowship tab). The server can also send a reply unasked (`PlayerUiProtocol.Send`),
 which the plugin reads the same as one it asked for.
 
 **Map places indoors:** the game's `GetMapCoords` gives nothing for any indoor cell (0x0100 and up), buildings included.
@@ -333,6 +333,30 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   To file saves one: to change it, save one and copy it over) after "My loot"; the Example button adds it again, and a test checks its
   filter keys exist. **To file / From file** save and load profiles as `.json` in `Documents\Decal Plugins\Daralet Toolkit\Loot
   Profiles` (`LootFiles`).
+
+- **Fellowship tab** (`Ui/FellowshipTab.cs`): sub tabs Members (the members and their vitals, and the fellowship window)
+  and **Find a group** (`Ui/FindGroupTab.cs`, `Feed/LfgChoice.cs`, `Feed/LfgCommands.cs`, `Feed/LfgInfo.cs`), looking for
+  group, whose server side came first so it works without Decal (daralet-ACE `docs/lfg.md`, `apps/server/Lfg/`):
+  `/lfgroup <activity>` (join the first fellowship looking for more for it), `/lfgroup join <name>`, `/lfmore
+  <activity> [manual]` (leaders: players looking for it join, or with manual the leader's asked about each), `/lfmore
+  invite <name>` (the same as `/invite`), and `list` and `stop` on each. Not `/lfg`, `/group` or `/fellow`: the client
+  keeps `/lfg` and `/clfg` for the LFG channel, and `/party`, `/g`, `/group`, `/fellow`, `/fellows` and `/fellowship`
+  for fellowship chat (the command words in `acclient.exe`), so a server command by those names is never reached. The server posts each new lfg or lfm in the LFG channel under the player's
+  name. The tab is a form that builds the words a player would type (`LfgChoice.Words`, which `LfgParser` in daralet-ACE reads) and shows the
+  commands, then the fellowships and players looking (`@playerui lfg`, every 2 seconds while you're looking, 4
+  otherwise), green where they fit you, with Join (Ask for a manual lfm) and Invite. Whether they fit, and why a button
+  can't be used (`cantSeek`, `cantList`), is the server's say, from its own matching. Members' "You aren't in a
+  fellowship" has a Find a group button, which opens that tab (`Widgets.TabItem(..., select)`: ImGui.NET only takes
+  tab flags with a close button's bool, so it calls `ImGuiNative.igBeginTabItem` with none).
+  **LFG chat links** (`Ui/LfgChatLinks.cs`, `Feed/LfgChatLine.cs`, `SettingsData.LfgChatLinks`, on to start, under Find a
+  group's Settings): each line the server posts ends with what to type to answer it (`- to join: /lfgroup join Arwen`,
+  `- to invite: /lfmore invite Holmez`), so the plugin finds those in `ChatBoxMessage`, keeps the line from the chat window
+  (`e.Eat`) and adds it again to the same window in the same colour (`AddChatText(text, e.Color, e.Target)`) with a
+  `[Join Arwen]` or `[Invite Holmez]` link on the end. Only players with the plugin see the links. A re-added line comes
+  back through `ChatBoxMessage`, so a line already carrying one of the plugin's links is left alone, and your own lines get
+  none. Links use `PluginCore.ChatLinkId` like the update notice's, but carry only a number the plugin handed out (the last
+  100 are kept), never the command: anyone can put that id in a tell, and a made-up link must send nothing. The first line
+  linked each session is logged (`[lfg-chat]` in log.txt), with its colour and window.
 
 - **Combat tab** (`Ui/CombatTab.cs`): the Target tab it used to be (`Ui/TargetTab.cs`, still its own sub tab) and
   **Hotbars** (`Ui/Hotbars.cs`, `Ui/HotbarWindow.cs`, `Ui/HotbarItems.cs`, `Ui/Hotkeys.cs`, `Feed/Hotbar.cs`,
@@ -633,7 +657,9 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   in the file.
 
 `@playerui` only ever sends a player data about themselves, their fellowship and what they're fighting (for a monster
-they've selected: its vitals, every buff and debuff on it, and its threat table). The server is the
+they've selected: its vitals, every buff and debuff on it, and its threat table). The one exception is `lfg`, whose lists
+name the players and fellowships looking for group, with only what their own lines already told the LFG channel (the
+user's call, October 2026). The server is the
 only thing that can be trusted: never let the plugin's request decide what it's allowed to see. Anything that changes the
 game (banking, listing, queueing) goes through the existing player commands, which check everything again; the plugin's own
 checks (greying out market buttons away from a broker, say) are only there to be helpful.
@@ -662,9 +688,3 @@ checks (greying out market buttons away from a broker, say) are only there to be
   sends.
 - The user commits and pushes with GitHub Desktop: leave changes staged (`git add`), don't commit. New branches with
   `git switch -c <name> --no-track origin/main`.
-
-## Planned tabs (to talk through before building)
-
-- **LFG:** looking for group, for leveling, capstones, raids, quests and PvP, with the same system available in the
-  `/lfg` channel. The server has only the client's built-in LFG chat channel today (a Turbine chat room,
-  `TurbineChatChannel`, heard with the `ListenToLFGChat` character option): plain chat, nothing structured behind it.

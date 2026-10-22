@@ -8,8 +8,8 @@ using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// The Fellowship tab, and the fellowship vitals window it controls. Both show what @playerui fellowship sends, asked for
-    /// once a second while either is on screen.
+    /// The Fellowship tab: Members, with the fellowship vitals window it controls (both show what @playerui fellowship sends,
+    /// asked for once a second while either is on screen), and Find a group (FindGroupTab).
     /// </summary>
     internal class FellowshipTab : IDisposable {
         private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(1);
@@ -19,6 +19,10 @@ namespace DaraletPlayer.Ui {
         private readonly PlayerFeed feed;
         private readonly Settings settings;
         private readonly FloatingWindow window;
+        private readonly FindGroupTab findGroup;
+
+        /// <summary>Set by Members' Find a group button: Find a group is the open tab next frame.</summary>
+        private bool openFindGroup;
 
         /// <summary>The fellow right-clicked in the window, whose vitals its menu offers; null when it wasn't on a fellow.</summary>
         private string menuMember;
@@ -29,6 +33,7 @@ namespace DaraletPlayer.Ui {
 
             window = new FloatingWindow("fellowship", "Fellowship", settings, new Vector2(20, 200), RenderWindow,
                 inUse: FellowshipInUse, menuItems: RenderMenuMember);
+            findGroup = new FindGroupTab(feed, settings);
         }
 
         /// <summary>The window's right-click menu, over a fellow: which of their vitals it shows, for them alone.</summary>
@@ -75,6 +80,28 @@ namespace DaraletPlayer.Ui {
         }
 
         public void Render() {
+            if (!ImGui.BeginTabBar("fellowship-tabs")) {
+                return;
+            }
+
+            if (Widgets.TabItem("Members", "Your fellowship's members and their vitals, and the fellowship window.")) {
+                RenderMembers();
+                ImGui.EndTabItem();
+            }
+
+            var select = openFindGroup;
+            openFindGroup = false;
+
+            if (Widgets.TabItem("Find a group", "Look for a group, or for more players for your fellowship, and see who else "
+                + "is looking: /lfgroup and /lfmore as a form.", select)) {
+                findGroup.Render();
+                ImGui.EndTabItem();
+            }
+
+            ImGui.EndTabBar();
+        }
+
+        private void RenderMembers() {
             Refresh();
 
             if (!feed.Supports(PlayerFeed.KindFellowship)) {
@@ -88,7 +115,18 @@ namespace DaraletPlayer.Ui {
             var fellowship = feed.Fellowship;
 
             if (fellowship == null) {
-                Widgets.TextDisabled(feed.FellowshipUpdatedAt == DateTime.MinValue ? "Loading..." : "You aren't in a fellowship.");
+                if (feed.FellowshipUpdatedAt == DateTime.MinValue) {
+                    Widgets.TextDisabled("Loading...");
+                    return;
+                }
+
+                Widgets.TextDisabled("You aren't in a fellowship.");
+                ImGui.SameLine();
+
+                if (Widgets.Button("Find a group", true, "Opens Find a group, to look for a fellowship to join.")) {
+                    openFindGroup = true;
+                }
+
                 return;
             }
 

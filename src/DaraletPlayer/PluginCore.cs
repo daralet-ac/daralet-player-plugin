@@ -22,6 +22,7 @@ namespace DaraletPlayer {
         private PlayerFeed feed;
         private PlayerHud hud;
         private UpdateCheck updates;
+        private LfgChatLinks lfgLinks;
         private bool updateAnnounced;
 
         /// <summary>
@@ -55,6 +56,7 @@ namespace DaraletPlayer {
                 updates = new UpdateCheck(typeof(PluginCore).Assembly.GetName().Version);
                 updates.Start();
                 hud = new PlayerHud(feed, settings, updates);
+                lfgLinks = new LfgChatLinks(feed, settings, ChatLinkId);
 
                 CoreManager.Current.CommandLineText += Core_CommandLineText;
                 CoreManager.Current.RenderFrame += Core_RenderFrame;
@@ -75,6 +77,7 @@ namespace DaraletPlayer {
                 CoreManager.Current.RenderFrame -= Core_RenderFrame;
                 CoreManager.Current.ChatNameClicked -= Core_ChatNameClicked;
             });
+            ShutdownStep(() => lfgLinks?.Dispose());
             ShutdownStep(() => hud?.Dispose());
             ShutdownStep(() => feed?.Dispose());
             ShutdownStep(() => updates?.Dispose());
@@ -133,7 +136,10 @@ namespace DaraletPlayer {
             }
         }
 
-        /// <summary>A click on one of the plugin's chat links. Only its release pages open: anyone can put this id in a tell.</summary>
+        /// <summary>
+        /// A click on one of the plugin's chat links. Anyone can put this id in a tell, so only its release pages open, and an
+        /// LFG link only does something if the plugin made it (LfgChatLinks.Click).
+        /// </summary>
         private void Core_ChatNameClicked(object sender, ChatClickInterceptEventArgs e) {
             try {
                 if (e.Id != ChatLinkId) {
@@ -145,6 +151,9 @@ namespace DaraletPlayer {
 
                 if (parts.Length == 2 && parts[0] == "openurl" && UpdateCheck.IsReleasePage(parts[1])) {
                     System.Diagnostics.Process.Start(parts[1]);
+                }
+                else if (parts.Length == 2 && parts[0] == LfgChatLinks.Kind) {
+                    lfgLinks?.Click(parts[1]);
                 }
             }
             catch (Exception ex) {

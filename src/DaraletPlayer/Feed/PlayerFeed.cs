@@ -34,6 +34,7 @@ namespace DaraletPlayer.Feed {
         public const string KindQuests = "quests";
         public const string KindAbandon = "abandon";
         public const string KindRollRanges = "rollranges";
+        public const string KindLfg = "lfg";
 
         // chat types, which Decal passes as the colour
         private const int TellChat = 3;
@@ -116,6 +117,10 @@ namespace DaraletPlayer.Feed {
         /// <summary>Your contracts, as the Quests tab shows them, or null before the first reply.</summary>
         public QuestsInfo Quests { get; private set; }
         public DateTime QuestsUpdatedAt { get; private set; } = DateTime.MinValue;
+
+        /// <summary>Looking for group, as the Find a group tab shows it, or null before the first reply.</summary>
+        public LfgInfo Lfg { get; private set; }
+        public DateTime LfgUpdatedAt { get; private set; } = DateTime.MinValue;
 
         /// <summary>The last corpse the server described, or null.</summary>
         public CorpseInfo Corpse { get; private set; }
@@ -395,6 +400,10 @@ namespace DaraletPlayer.Feed {
                 case KindQuests:
                     Quests = Json.Read<QuestsInfo>(json);
                     QuestsUpdatedAt = DateTime.UtcNow;
+                    break;
+                case KindLfg:
+                    Lfg = Json.Read<LfgInfo>(json);
+                    LfgUpdatedAt = DateTime.UtcNow;
                     break;
                 case KindMarket:
                     Market = Json.Read<MarketInfo>(json);

@@ -89,6 +89,9 @@ namespace DaraletPlayer {
         /// <summary>A healing, stamina or mana kit on a hotbar is used on you at once, with no target to pick.</summary>
         [DataMember(Name = "oneClickHeal")] public bool OneClickHeal;
 
+        /// <summary>Join and Invite links on the lines /lfgroup and /lfmore post in the LFG channel (LfgChatLinks).</summary>
+        [DataMember(Name = "lfgChatLinks")] public bool LfgChatLinks;
+
         // The game toolbar's buttons drawn again over its own, opening the plugin's window instead (ToolbarButtons).
 
         /// <summary>The backpack opens the Inventory window.</summary>
@@ -175,6 +178,7 @@ namespace DaraletPlayer {
             Loot = new LootData();
             Hotbars = new HotbarData();
             OneClickHeal = true;
+            LfgChatLinks = true;
         }
     }
 }
