@@ -80,6 +80,9 @@ namespace DaraletPlayer {
         /// <summary>The Corpse window shows its items as a grid of icons, as the game's does, rather than a list.</summary>
         [DataMember(Name = "lootGrid")] public bool LootGrid;
 
+        /// <summary>The Loot tab's rule list width, dragged with the bar beside it; 0 for the default.</summary>
+        [DataMember(Name = "lootRuleListWidth")] public float LootRuleListWidth;
+
         /// <summary>The Carried and Bank views mark items the way the active loot list's rules do (LootMarks).</summary>
         [DataMember(Name = "bankLootMarks")] public bool InventoryLootMarks;
 

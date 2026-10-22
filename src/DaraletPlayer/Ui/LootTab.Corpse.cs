@@ -177,7 +177,8 @@ namespace DaraletPlayer.Ui {
                     looter.Loot(shown.ToList(), salvage: false);
                 }
                 ImGui.EndDisabled();
-                Widgets.Tip("Loots everything in it into your main pack, one item at a time. Click an item to loot just that one.");
+                Widgets.Tip("Loots every item in it into your main pack, one at a time, whatever your loot rules say about "
+                    + "it, ticked or not. Salvages nothing. Click an item to loot just that one.");
 
                 if (confirm) {
                     ImGui.SameLine();
@@ -186,21 +187,38 @@ namespace DaraletPlayer.Ui {
 
             if (confirm) {
                 var chosen = looter.Decisions.Where(d => d.Loots && !unticked.Contains(d.Item.Guid)).ToList();
+                var keeps = chosen.Where(d => d.Outcome == LootOutcome.Keep).ToList();
 
-                ImGui.BeginDisabled(chosen.Count == 0 || looter.Busy);
-                if (ImGui.Button("Loot")) {
-                    looter.Loot(chosen, salvage: false);
+                ImGui.BeginDisabled(keeps.Count == 0 || looter.Busy);
+                if (ImGui.Button("Loot keeps")) {
+                    looter.Loot(keeps, salvage: false);
                 }
+                ImGui.EndDisabled();
+                Widgets.Tip(LootButtonTip(keeps.Count, "Loots only the ticked items your rules said to Keep into your main "
+                    + "pack, one at a time. The ones they said to Salvage are left in the corpse.", "Keep"));
+
                 ImGui.SameLine();
+                ImGui.BeginDisabled(chosen.Count == 0 || looter.Busy);
                 if (ImGui.Button("Loot and salvage")) {
                     looter.Loot(chosen, salvage: true);
                 }
                 ImGui.EndDisabled();
-                Widgets.Tip("Loots the ticked items; Loot and salvage then salvages the ones the rules said to salvage (needs an Ust).");
+                Widgets.Tip(LootButtonTip(chosen.Count, "Loots every ticked item your rules said to Keep or Salvage, then "
+                    + "salvages the Salvage ones with the Ust in your packs. The Keep ones stay in your pack.", "Keep or Salvage"));
             }
             else if (mode == CorpseMode.HighlightPopup && !everything) {
                 Widgets.TextDisabled("Click an item to loot it.");
             }
+        }
+
+        /// <summary>A Loot button's tip, saying why it's greyed out when there's nothing ticked.</summary>
+        /// <param name="outcomes">What the button takes, for that: "Keep".</param>
+        private string LootButtonTip(int ticked, string tip, string outcomes) {
+            if (looter.Busy) {
+                return tip + "\nLooting now: wait for it to finish, or Cancel.";
+            }
+
+            return ticked == 0 ? tip + $"\nNothing ticked that your rules said to {outcomes}." : tip;
         }
 
         private void SetTicked(uint guid, bool ticked) {

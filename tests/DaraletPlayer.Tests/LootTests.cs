@@ -65,7 +65,7 @@ namespace DaraletPlayer.Tests {
                 var loaded = LootFiles.Load(path, out var problem);
                 Assert.IsNull(problem);
                 Assert.AreEqual(ExampleLoot.Make().Rules.Count, loaded.Rules.Count);
-                Assert.IsTrue(loaded.Rules[0].UnlearnedSpellsOnly);
+                Assert.AreEqual(ExampleLoot.Make().Rules[0].Name, loaded.Rules[0].Name);
 
                 Assert.AreEqual("a_b_.json", LootFiles.FileName("a/b?"));
                 Assert.AreEqual("Loot profile.json", LootFiles.FileName("  "));
@@ -163,6 +163,169 @@ namespace DaraletPlayer.Tests {
             var missile = new CorpseItemInfo { Name = "Bow", Item = new MarketListing { ItemCategory = "Weapon", WeaponClass = "Missile", DamageMod = 1.2 } };
             Assert.IsTrue(Loot.Matches(new LootRule { Category = "Weapon", Values = { [subtype] = "Missile", [Key("Weapon", "minDamageMod")] = "20" } }, missile));
             Assert.IsFalse(Loot.Matches(new LootRule { Category = "Weapon", Values = { [subtype] = "Missile", [Key("Weapon", "minDamageMod")] = "21" } }, missile));
+        }
+
+        [TestMethod]
+        public void WeaponTypesShowAndMatchTheirSpecialProperty() {
+            var type = Key("Weapon", "weaponType");
+            var biting = Key("Weapon", "minBitingStrike");
+            var axe = new CorpseItemInfo {
+                Name = "Axe",
+                Item = new MarketListing {
+                    ItemCategory = "Weapon", WeaponClass = "Martial", WeaponType = "Axe",
+                    PropertyValues = new Dictionary<string, double> { ["Biting Strike"] = 4 },
+                },
+            };
+
+            Assert.IsTrue(Loot.Matches(new LootRule { Category = "Weapon", Values = { [type] = "Axe", [biting] = "4" } }, axe));
+            Assert.IsFalse(Loot.Matches(new LootRule { Category = "Weapon", Values = { [type] = "Axe", [biting] = "5" } }, axe));
+            Assert.IsFalse(Loot.Matches(new LootRule { Category = "Weapon", Values = { [type] = "Sword" } }, axe));
+            Assert.IsFalse(Loot.Matches(new LootRule { Category = "Weapon", Values = { [type] = "Axe" } }, Sword()), "no type from an older server");
+
+            // a sword never rolls Biting Strike, so its rule hides the box and doesn't count it
+            var sword = new LootRule { Category = "Weapon", Values = { [type] = "Sword", [biting] = "4" } };
+            var filter = MarketSearch.Filters.Single(f => f.Key == biting);
+            Assert.IsFalse(Loot.Shows(sword, filter));
+            Assert.IsTrue(Loot.Shows(new LootRule { Category = "Weapon", Values = { [type] = "Scepter" } }, filter));
+            Assert.IsFalse(Loot.Shows(new LootRule { Category = "Weapon", Values = { [Key("Weapon", "weaponSubtype")] = "Missile" } },
+                MarketSearch.Filters.Single(f => f.Key == Key("Weapon", "minWardCleaving"))), "no missile weapon has ward cleaving");
+
+            // a type decides the subtype: a caster's damage filter, not a melee one's
+            var orb = new LootRule { Category = "Weapon", Values = { [type] = "Orb" } };
+            Assert.IsTrue(Loot.Shows(orb, MarketSearch.Filters.Single(f => f.Key == Key("Weapon", "minElementalDamageMod"))));
+            Assert.IsFalse(Loot.Shows(orb, MarketSearch.Filters.Single(f => f.Key == Key("Weapon", "minBaseDamage"))));
+            Assert.IsFalse(Loot.Shows(orb, MarketSearch.Filters.Single(f => f.Key == Key("Weapon", "weaponClass"))));
+
+            foreach (var special in MarketSearch.SpecialProperties) {
+                Assert.IsTrue(special.Types.All(t => MarketSearch.SubtypeOfType(t) != null), $"{special.Name} names a type that isn't one");
+            }
+        }
+
+        [TestMethod]
+        public void SpeedIsTheWeaponsOwnLowerIsFaster() {
+            var speed = Key("Weapon", "maxWeaponTime");
+            var fast = new CorpseItemInfo { Name = "Dagger", Item = new MarketListing { ItemCategory = "Weapon", WeaponClass = "Dagger", WeaponTime = 40 } };
+            var slow = new CorpseItemInfo { Name = "Axe", Item = new MarketListing { ItemCategory = "Weapon", WeaponClass = "Martial", WeaponTime = 75 } };
+            var rule = new LootRule { Category = "Weapon", Values = { [speed] = "50" } };
+
+            Assert.IsTrue(Loot.Matches(rule, fast));
+            Assert.IsFalse(Loot.Matches(rule, slow));
+
+            // the market search sends it as the API's Speed: WeaponTime 50 is Speed 1.5 and up
+            var query = MarketSearch.Query("", "Weapon", "", "", new Dictionary<string, string> { [speed] = "50" }, "", false, 1);
+            StringAssert.Contains(query, "minSpeed=1.5");
+            Assert.IsFalse(query.Contains("WeaponTime"));
+        }
+
+        [TestMethod]
+        public void FiltersSitUnderTheirHeadings() {
+            FilterGroup GroupOf(string category, string param) => MarketSearch.Filters.Single(f => f.Key == Key(category, param)).Group;
+
+            Assert.AreEqual(FilterGroup.Types, GroupOf("Weapon", "weaponType"));
+            Assert.AreEqual(FilterGroup.Types, GroupOf("Armor", "armorWeightClass"));
+            Assert.AreEqual(FilterGroup.Damage, GroupOf("Weapon", "minDamageVariance"));
+            Assert.AreEqual(FilterGroup.Damage, GroupOf("Weapon", "maxWeaponTime"));
+            Assert.AreEqual(FilterGroup.Protection, GroupOf("Armor", "minWardLevel"));
+            Assert.AreEqual(FilterGroup.Protection, GroupOf("Armor", "minArmorModVsFire"));
+            Assert.AreEqual(FilterGroup.Mods, GroupOf("Armor", "minArmorWarMagicMod"));
+            Assert.AreEqual(FilterGroup.Mods, GroupOf("Weapon", "minBitingStrike"));
+            Assert.AreEqual(FilterGroup.Mods, GroupOf("Jewelry", "minGearCritDamage"));
+            Assert.AreEqual(FilterGroup.Magic, GroupOf("Weapon", "minSpellcraft"));
+            Assert.AreEqual(FilterGroup.Magic, GroupOf("Weapon", "spellName"));
+            Assert.AreEqual(FilterGroup.Misc, GroupOf(null, "minPrice"));
+            Assert.AreEqual(FilterGroup.Misc, GroupOf(null, "maxBurden"));
+        }
+
+        [TestMethod]
+        public void SpellsCanBeSeveralCommaSeparated() {
+            var spell = Key("Weapon", "spellName");
+            LootRule Rule(string spells) => new LootRule { Category = "Weapon", Values = { [spell] = spells } };
+
+            // the sword has Minor Swift Hunter
+            Assert.IsTrue(Loot.Matches(Rule("swift"), Sword()));
+            Assert.IsTrue(Loot.Matches(Rule("blood drinker, SwiftHunter"), Sword()), "any one");
+            Assert.IsFalse(Loot.Matches(Rule("blood drinker, heart seeker"), Sword()));
+            Assert.IsTrue(Loot.Matches(Rule(" , "), Sword()), "only commas is nothing to look for");
+
+            var query = MarketSearch.Query("", "Weapon", "", "", new Dictionary<string, string> { [spell] = " swift hunter , blood" }, "", false, 1);
+            StringAssert.Contains(query, "spellName=swift%20hunter&");
+        }
+
+        [TestMethod]
+        public void WeaponsFilterOnProcChance() {
+            var proc = Key("Weapon", "minWeaponProcChance");
+            CorpseItemInfo Weapon(double? chance) => new CorpseItemInfo {
+                Name = "Sword", Item = new MarketListing { ItemCategory = "Weapon", WeaponClass = "Martial", ProcChance = chance },
+            };
+            var rule = new LootRule { Category = "Weapon", Values = { [proc] = "10" } };
+
+            Assert.IsTrue(Loot.Matches(rule, Weapon(0.12)));
+            Assert.IsFalse(Loot.Matches(rule, Weapon(0.08)));
+            Assert.IsFalse(Loot.Matches(rule, Weapon(null)), "no proc spell");
+            Assert.AreEqual(FilterGroup.Magic, MarketSearch.Filters.Single(f => f.Key == proc).Group);
+            Assert.IsFalse(MarketSearch.Query("", "Weapon", "", "", rule.Values, "", false, 1).Contains("Proc"), "the Market API has none");
+        }
+
+        [TestMethod]
+        public void ModsCanBeAnyOne() {
+            var war = Key("Armor", "minArmorWarMagicMod");
+            var attack = Key("Armor", "minArmorAttackMod");
+            var ward = Key("Armor", "minWardLevel");
+
+            // the helm has attack 6% over 2 slots (3% a slot, as the filter counts it) and no war magic
+            var rule = new LootRule { Category = "Armor", Values = { [war] = "5", [attack] = "2" } };
+            Assert.IsFalse(Loot.Matches(rule, Helm()), "both, by default");
+
+            rule.ModsAny = true;
+            Assert.IsTrue(Loot.Matches(rule, Helm()), "attack is enough");
+
+            rule.Values[attack] = "4";
+            Assert.IsFalse(Loot.Matches(rule, Helm()), "neither holds");
+
+            // other groups still all have to hold
+            rule.Values[attack] = "2";
+            rule.Values[ward] = "999";
+            Assert.IsFalse(Loot.Matches(rule, Helm()));
+
+            // with no mods filled in, OR doesn't stop a match
+            Assert.IsTrue(Loot.Matches(new LootRule { Category = "Armor", ModsAny = true }, Helm()));
+            Assert.IsTrue(Loot.Matches(new LootRule { Category = "Armor", ModsAny = true, Values = { [war] = "" } }, Helm()));
+        }
+
+        [TestMethod]
+        public void JewelrySlotsShowTheirOwnRatings() {
+            var slot = Key("Jewelry", "jewelrySlot");
+            MarketFilter Filter(string param) => MarketSearch.Filters.Single(f => f.Key == Key("Jewelry", param));
+            LootRule Rule(string picked) => new LootRule { Category = "Jewelry", Values = { [slot] = picked } };
+
+            Assert.IsTrue(Loot.Shows(Rule("Ring"), Filter("minGearCritDamage")));
+            Assert.IsFalse(Loot.Shows(Rule("Ring"), Filter("minGearDamage")));
+            Assert.IsTrue(Loot.Shows(Rule("Bracelet"), Filter("minGearDamageResist")));
+            Assert.IsFalse(Loot.Shows(Rule("Bracelet"), Filter("minGearMaxHealth")));
+            Assert.IsTrue(Loot.Shows(Rule("Amulet"), Filter("minGearHealingBoost")));
+            Assert.IsFalse(Loot.Shows(Rule("Amulet"), Filter("minGearCritDamageResist")));
+
+            foreach (var picked in new[] { "Amulet", "Bracelet", "Ring", "" }) {
+                Assert.IsTrue(Loot.Shows(Rule(picked), Filter("minWardLevel")), $"{picked} rolls ward");
+            }
+
+            Assert.IsTrue(Loot.Shows(new LootRule { Category = "Jewelry" }, Filter("minGearDamage")), "no slot picked shows every rating");
+        }
+
+        [TestMethod]
+        public void ArmorWeightClassesShowTheirOwnMods() {
+            var weight = Key("Armor", "armorWeightClass");
+            var war = MarketSearch.Filters.Single(f => f.Key == Key("Armor", "minArmorWarMagicMod"));
+            var attack = MarketSearch.Filters.Single(f => f.Key == Key("Armor", "minArmorAttackMod"));
+
+            Assert.IsTrue(Loot.Shows(new LootRule { Category = "Armor", Values = { [weight] = "Cloth" } }, war));
+            Assert.IsFalse(Loot.Shows(new LootRule { Category = "Armor", Values = { [weight] = "Heavy" } }, war));
+            Assert.IsTrue(Loot.Shows(new LootRule { Category = "Armor" }, war), "no weight picked shows every mod");
+            Assert.IsFalse(Loot.Shows(new LootRule { Category = "Armor", Values = { [weight] = "Cloth" } }, attack));
+
+            // the helm is heavy: a cloth-only box left filled in doesn't count
+            var heavy = new LootRule { Category = "Armor", Values = { [weight] = "Heavy", [Key("Armor", "minArmorWarMagicMod")] = "50" } };
+            Assert.IsTrue(Loot.Matches(heavy, Helm()));
         }
 
         [TestMethod]

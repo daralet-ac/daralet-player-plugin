@@ -21,7 +21,7 @@ namespace DaraletPlayer.Feed {
                 ["DamageMod"] = (i => i.Item?.DamageMod, false),
                 ["ElementalDamageMod"] = (i => i.Item?.ElementalDamageMod, false),
                 ["RestorationMod"] = (i => i.Item?.RestorationMod, false),
-                ["Speed"] = (i => i.Item?.Speed, false),
+                ["WeaponTime"] = (i => i.Item == null ? null : i.Item.WeaponTime ?? ItemLines.WeaponTimeFromSpeed(i.Item.Speed), false),
                 ["AttackMod"] = (i => i.Item?.WeaponOffense, false),
                 ["PhysDefMod"] = (i => i.Item?.WeaponPhysicalDefense, false),
                 ["MagicDefMod"] = (i => i.Item?.WeaponMagicalDefense, false),
@@ -64,6 +64,8 @@ namespace DaraletPlayer.Feed {
                 ["GearHealingBoost"] = (i => i.Item?.GearHealingBoost, false),
                 ["GearMaxHealth"] = (i => i.Item?.GearMaxHealth, false),
                 ["ProcChance"] = (i => i.Item?.SigilTriggerChance, false),
+                // a weapon's: the sigil trinkets' has the Market API's name
+                ["WeaponProcChance"] = (i => i.Item?.ProcChance, false),
                 ["Cooldown"] = (i => i.Item?.SigilCooldown, false),
                 ["HealthReserved"] = (i => i.Item?.SigilHealthReserved, false),
                 ["StaminaReserved"] = (i => i.Item?.SigilStaminaReserved, false),
@@ -73,7 +75,18 @@ namespace DaraletPlayer.Feed {
                 ["PricePerUnit"] = (PricePerUnit, false),
                 ["GemQuality"] = (i => i.Item?.GemQuality, false),
                 ["TrophyQuality"] = (i => i.Item?.TrophyQuality, false),
+                ["BitingStrike"] = (i => Property(i, "Biting Strike"), false),
+                ["CrushingBlow"] = (i => Property(i, "Crushing Blow"), false),
+                ["ArmorCleaving"] = (i => Property(i, "Armor Cleaving"), false),
+                ["WardCleaving"] = (i => Property(i, "Ward Cleaving"), false),
+                ["StaminaCostReduction"] = (i => Property(i, "Stamina Cost Reduction"), false),
             };
+
+        /// <summary>A rolled property's amount, in whole percents as appraisal shows it, or null for none.</summary>
+        private static double? Property(CorpseItemInfo item, string name) {
+            var values = item.Item?.PropertyValues;
+            return values != null && values.TryGetValue(name, out var value) ? value : (double?)null;
+        }
 
         private static double? PricePerUnit(CorpseItemInfo item) {
             var units = item.Item?.SalvageUnits;
@@ -88,6 +101,7 @@ namespace DaraletPlayer.Feed {
             new Dictionary<string, (Func<MarketListing, IEnumerable<string>>, bool)>(StringComparer.OrdinalIgnoreCase) {
                 ["weaponClass"] = (l => One(l.WeaponClass), false),
                 ["weaponSubtype"] = (l => One(MarketSearch.SubtypeOf(l.WeaponClass)), false),
+                ["weaponType"] = (l => One(l.WeaponType), false),
                 ["damageType"] = (l => (l.DamageType ?? "").Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries), false),
                 ["armorWeightClass"] = (l => One(l.ArmorWeightClass), false),
                 ["jewelrySlot"] = (l => One(l.JewelrySlot), false),
@@ -145,6 +159,11 @@ namespace DaraletPlayer.Feed {
             ["GearDamageResist"] = new[] { "Damage Resist Rating" },
             ["GearHealingBoost"] = new[] { "Healing Boost Rating" },
             ["GearMaxHealth"] = new[] { "Max Health Rating" },
+            ["BitingStrike"] = new[] { "Biting Strike" },
+            ["CrushingBlow"] = new[] { "Crushing Blow" },
+            ["ArmorCleaving"] = new[] { "Armor Cleaving" },
+            ["WardCleaving"] = new[] { "Ward Cleaving" },
+            ["StaminaCostReduction"] = new[] { "Stamina Cost Reduction" },
         };
 
         /// <summary>The roll quality names a filter can switch to, or null: only a "min" filter for a stat loot rolls.</summary>
@@ -226,34 +245,49 @@ namespace DaraletPlayer.Feed {
                 return false;
             }
 
-            var subtype = SubtypeOf(rule);
+            // with ModsAny, the Mods filters filled in need only one of them to hold
+            var modsFilled = false;
+            var modHeld = false;
 
             foreach (var filter in MarketSearch.Filters) {
                 // a hidden filter doesn't count, though its box may still be filled in
-                if ((filter.Category != null && filter.Category != category) || !filter.ForSubtype(subtype)) {
+                if (!Shows(rule, filter)) {
                     continue;
                 }
 
-                if (rule.Values == null || !rule.Values.TryGetValue(filter.Key, out var raw)) {
+                if (rule.Values == null || !rule.Values.TryGetValue(filter.Key, out var raw) || string.IsNullOrWhiteSpace(raw)) {
                     continue;
                 }
+
+                bool holds;
 
                 if (UsesRoll(rule, filter)) {
-                    if (!RollHolds(RollStatsFor(filter), raw, item)) {
-                        return false;
+                    if (!TryNumber(raw.Trim(), out _)) {
+                        continue;
                     }
 
-                    continue;
+                    holds = RollHolds(RollStatsFor(filter), raw, item);
+                }
+                else {
+                    var value = MarketSearch.Convert(filter, raw);
+
+                    if (value == null) {
+                        continue;
+                    }
+
+                    holds = FilterHolds(filter, value, item);
                 }
 
-                var value = MarketSearch.Convert(filter, raw);
-
-                if (value != null && !FilterHolds(filter, value, item)) {
+                if (rule.ModsAny && filter.Group == FilterGroup.Mods) {
+                    modsFilled = true;
+                    modHeld |= holds;
+                }
+                else if (!holds) {
                     return false;
                 }
             }
 
-            return true;
+            return !modsFilled || modHeld;
         }
 
         /// <summary>Tiers as the Search tab shows them (0-7); the description counts from 1, like the market's.</summary>
@@ -272,16 +306,43 @@ namespace DaraletPlayer.Feed {
             return (!hasMin || tier.Value >= min + 1) && (!hasMax || tier.Value <= max + 1);
         }
 
+        /// <summary>
+        /// Whether a filter is the rule's: for its category, and for the weapon subtype and type or armor weight it
+        /// picked. The editor shows only these, and only these count.
+        /// </summary>
+        public static bool Shows(LootRule rule, MarketFilter filter) {
+            var category = rule.Category ?? "";
+
+            if (filter.Category != null && filter.Category != category) {
+                return false;
+            }
+
+            return filter.ShownFor(Pick(rule, "Weapon", SubtypeKey), Pick(rule, "Weapon", WeaponTypeKey), KindOf(rule));
+        }
+
+        /// <summary>The kind of item the rule picked, for MarketFilter.Kinds: an armor weight or jewelry slot, or "".</summary>
+        private static string KindOf(LootRule rule) {
+            return rule.Category == "Jewelry" ? Pick(rule, "Jewelry", SlotKey) : Pick(rule, "Armor", WeightKey);
+        }
+
         /// <summary>The weapon subtype a Weapon rule picked (MarketSearch.WeaponSubtypes), or "" for any.</summary>
         public static string SubtypeOf(LootRule rule) {
-            if (rule.Category != "Weapon" || rule.Values == null) {
+            return Pick(rule, "Weapon", SubtypeKey);
+        }
+
+        /// <summary>A rule's choice in one of its category's filters, or "" for none.</summary>
+        private static string Pick(LootRule rule, string category, string key) {
+            if (rule.Category != category || rule.Values == null) {
                 return "";
             }
 
-            return rule.Values.TryGetValue(SubtypeKey, out var subtype) ? subtype ?? "" : "";
+            return rule.Values.TryGetValue(key, out var value) ? value ?? "" : "";
         }
 
         public static readonly string SubtypeKey = MarketSearch.Filters.Single(f => f.Param == "weaponSubtype").Key;
+        public static readonly string WeaponTypeKey = MarketSearch.Filters.Single(f => f.Param == "weaponType").Key;
+        public static readonly string WeightKey = MarketSearch.Filters.Single(f => f.Param == "armorWeightClass").Key;
+        public static readonly string SlotKey = MarketSearch.Filters.Single(f => f.Param == "jewelrySlot").Key;
 
         private static bool FilterHolds(MarketFilter filter, string value, CorpseItemInfo item) {
             var param = filter.Param;
@@ -317,8 +378,12 @@ namespace DaraletPlayer.Feed {
                 return false;
             }
 
-            // a multi-choice is several values, comma-separated, any one of which will do
-            var wanted = filter.Kind == FilterKind.Multi ? SplitList(value) : new List<string> { Squash(value) };
+            // a multi-choice, or a name to look for (a spell's), can be several, comma-separated: any one will do
+            var wanted = filter.Kind == FilterKind.Multi || words.Contains ? SplitList(value) : new List<string> { Squash(value) };
+
+            if (wanted.Count == 0) {
+                return true;
+            }
 
             return words.Get(item.Item)
                 .Select(Squash)

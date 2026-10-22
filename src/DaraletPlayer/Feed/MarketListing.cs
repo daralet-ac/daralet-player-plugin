@@ -28,6 +28,8 @@ namespace DaraletPlayer.Feed {
         [DataMember(Name = "iconEffect")] public string IconEffect;
         [DataMember(Name = "itemCategory")] public string ItemCategory;
         [DataMember(Name = "weaponClass")] public string WeaponClass;
+        /// <summary>Sword, Atlatl, Orb... (MarketSearch.WeaponTypes): only @playerui's descriptions have it, from a newer server.</summary>
+        [DataMember(Name = "weaponType")] public string WeaponType;
         [DataMember(Name = "levelReq")] public int? LevelReq;
         [DataMember(Name = "reqAttribute")] public string ReqAttribute;
         [DataMember(Name = "reqAttributeAmount")] public int? ReqAttributeAmount;

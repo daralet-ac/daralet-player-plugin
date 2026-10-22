@@ -250,7 +250,18 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
 - **Loot tab** (`Ui/LootTab.cs`, `Ui/Looter.cs`, `Feed/Loot.cs`): named lists (players see them as "loot profiles"; the code
   still says `LootList`) in `SettingsData.Loot`, each character
   picking one (`LootData.ActiveFor`). A rule is a category, tiers, name words and any of `MarketSearch.Filters`, plus an
-  outcome (Keep, Salvage, Notify, Ignore); the first enabled rule that matches decides. `Loot.Matches` compares each filter
+  outcome (Keep, Salvage, Notify, Ignore); the first enabled rule that matches decides. The rule list is widened by
+  dragging the bar between it and the editor (`SettingsData.LootRuleListWidth`, 0 for the default); a long rule name
+  is cut short of its mark, which stays at the row's right end. **Folders** (`LootRule.Folder`, `Feed/LootFolders.cs`,
+  `Ui/LootTab.RuleList.cs`) are only a name on rules, and a folder's rules are always kept together where its first one
+  is (`LootFolders.Gather`), so the list's order is still the order rules are checked in. Ctrl/Shift+click picks several
+  rules (`chosenRules`) for a folder or a drag; rules and whole folders drag to a new place (dropped on a rule: above it,
+  in its folder, so on a folder's first rule at its top; on a folder itself: at its end, framed while held there; below the list: the end, out of any folder). Folded folders are
+  `LootList.ClosedFolders`. Held near the list's top or bottom
+  edge, a drag scrolls the list (`ScrollWhileDragging`). Right-click Duplicate copies a rule (or every picked one) just below itself, or a folder and its rules
+  just below it as "Name copy" (`LootFolders.Duplicate`, `DuplicateFolder`). **Add folder** makes an empty one at the top
+  (`LootList.EmptyFolders`, since a folder is otherwise only a name on its rules); a rule dropped in goes to the top of the
+  list, and the folder leaves `EmptyFolders` once it has one (`LootFolders.Tidy`, after every change to the list). The list's changes wait until it's drawn (`pendingRuleMove`). `Loot.Matches` compares each filter
   with the same field the API's SQL does, per armor slot where the API is (ward level, armor and clothing mods), with
   "price" as the item's vendor value. A filter it doesn't know leaves the rule alone. Some filters are the loot rules' alone
   (`MarketFilter.LootOnly`, which the market search leaves out: the Market API has no such parameter): burden and value
@@ -258,7 +269,24 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   **Subtype** (Melee / Thrown, Missile, Caster, from the class, `MarketSearch.SubtypeOf`), the damage stat for each
   (base damage, a launcher's `DamageMod`, a caster's `ElementalDamageMod` and `RestorationMod`) and **Damage element**,
   a multi-choice (`FilterKind.Multi`, comma-separated, any one matches). With a subtype picked only its filters show
-  (`MarketFilter.Subtypes`), the Class list only its classes, and a hidden box doesn't count. Each filter's tooltip says
+  (`MarketFilter.Subtypes`), the Class list only its classes, and a hidden box doesn't count. Under it a weapon
+  **Type** (`MarketSearch.WeaponTypes`: Sword, Atlatl, Orb...), which decides the subtype and shows its special
+  property's filter (`MarketSearch.SpecialProperties`: Biting Strike, Crushing Blow, Armor and Ward Cleaving, Stamina Cost
+  Reduction, `MarketFilter.WeaponTypes`), matched against `MarketListing.PropertyValues`. The type comes only from the
+  server (`weaponType`, `PlayerUiWeaponType` in daralet-ACE, by the weapon's skill and its loot tables' caster and thrown
+  rows, as `TryMutateWeaponSubtypeBonuses` picks the property), so a rule with a type matches nothing on an older one.
+  Note the server's Sceptres roll Biting Strike and its Wands and Batons Crushing Blow. Armor's **Weight** shows only the
+  mods that weight class rolls, and jewelry's **Slot** only the two ratings that slot rolls (rings crit damage and its
+  resist, bracelets damage and its resist, amulets healing boost and max health; ward on all), both by `MarketFilter.Kinds`
+  (from `TryMutateGearRating` and `LootGenerationFactory_Jewelry`; `Loot.KindOf` says which filter picks the kind). `Loot.Shows` decides what's
+  shown, and so what counts. The editor shows the filters under headings, Types, Damage, Protection, Mods, Magic and Misc
+  (`MarketFilter.Group`, set by `MarketSearch.GroupOf` from the parameter), leaving out a heading with nothing shown.
+  **Spell** and **Scroll spell** take several names, comma-separated, any one matching (part of a name, case and spaces
+  ignored, `Loot.WordsHold`); the Market API takes one, so the search sends the first (`MarketSearch.FirstSpell`).
+  The Mods heading has an **OR** box (`LootRule.ModsAny`): on, any one Mods filter filled in that holds is enough, while
+  every other filter still has to.
+  **Max speed** (`maxWeaponTime`) is the weapon's own Speed, its WeaponTime, lower being faster; the Market API only filters
+  its Speed (2 - WeaponTime / 100, held between 1 and 2.5), so the search sends it as that (`MarketSearch.AddSpeed`). Each filter's tooltip says
   the range loot rolls it in at the rule's tiers (`RollRangesInfo.Describe`), from `@playerui rollranges`
   (`LootGenerationFactory.GetLootFilterRanges` in daralet-ACE, worked out once from the loot formulas: by category and
   Market API parameter without min/max, in the filter's own units, the lowest to the highest any item of the kind rolls).
@@ -294,7 +322,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   **Unlearned spells only** (`LootRule.UnlearnedSpellsOnly`, Misc) takes scrolls whose spell the character doesn't know:
   `Loot.KnowsScrollSpell` is set by `PluginCore` from Decal (`LongValueKey.AssociatedSpell`,
   `CharacterFilter.IsSpellKnown`), and a scroll whose spell can't be told counts as unlearned. New settings get the
-  **Example Loot Profile** (`Feed/ExampleLoot.cs`) after "My loot"; the Example button adds it again, and a test checks its
+  **Example Loot Profile** (`Feed/ExampleLoot.cs`, read from `Resources/example-loot-profile.json`, a profile as
+  To file saves one: to change it, save one and copy it over) after "My loot"; the Example button adds it again, and a test checks its
   filter keys exist. **To file / From file** save and load profiles as `.json` in `Documents\Decal Plugins\Daralet Toolkit\Loot
   Profiles` (`LootFiles`).
 

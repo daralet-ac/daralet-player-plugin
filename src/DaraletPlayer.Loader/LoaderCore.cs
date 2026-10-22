@@ -128,7 +128,7 @@ namespace DaraletPlayer.Loader {
             try {
                 if (IsPluginLoaded) {
                     UnloadPluginAssembly();
-                    CoreManager.Current.Actions.AddChatText($"[Daralet] Reloading {PluginAssemblyName}", 1);
+                    CoreManager.Current.Actions.AddChatText($"[Daralet Toolkit] Reloading {PluginAssemblyName}", 1);
                 }
 
                 // loaded from bytes so the dll file isn't locked and can be rebuilt while the game is running
@@ -168,10 +168,10 @@ namespace DaraletPlayer.Loader {
         private void Log(string message) {
             try {
                 // the plugin's log.txt (DaraletPlayer.DataFolder, which the loader can't reference)
-                var folder = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Decal Plugins", "Daralet");
+                var folder = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Decal Plugins", "Daralet Toolkit");
                 Directory.CreateDirectory(folder);
                 File.AppendAllText(System.IO.Path.Combine(folder, "log.txt"), $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
-                CoreManager.Current.Actions.AddChatText($"[Daralet Loader] {message}", 1);
+                CoreManager.Current.Actions.AddChatText($"[Daralet Toolkit Loader] {message}", 1);
             }
             catch {
             }

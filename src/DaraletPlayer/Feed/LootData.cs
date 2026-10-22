@@ -23,7 +23,7 @@ namespace DaraletPlayer.Feed {
         AutoLootAutoSalvage,
         /// <summary>Loots, then the Corpse window asks before salvaging.</summary>
         AutoLootConfirmSalvage,
-        /// <summary>The Corpse window lists the matches with Loot and Loot and salvage buttons.</summary>
+        /// <summary>The Corpse window lists the matches with Loot keeps and Loot and salvage buttons.</summary>
         ConfirmBoth,
         /// <summary>Moves nothing; lists the matches in chat.</summary>
         ChatHighlights,
@@ -61,6 +61,13 @@ namespace DaraletPlayer.Feed {
         /// Only a "min" filter for a stat that rolls can be (Loot.RollStatsFor).
         /// </summary>
         [DataMember(Name = "rollFilters")] public List<string> RollFilters;
+        /// <summary>The folder it's in, in the rule list, or "" for none. A folder's rules stay together (LootFolders).</summary>
+        [DataMember(Name = "folder")] public string Folder;
+        /// <summary>
+        /// The Mods filters are OR'd: any one filled in that holds is enough (the rest of the rule must still hold). Off,
+        /// every one has to, like every other filter.
+        /// </summary>
+        [DataMember(Name = "modsAny")] public bool ModsAny;
 
         public LootRule() {
             SetDefaults();
@@ -87,6 +94,7 @@ namespace DaraletPlayer.Feed {
             Highlight = "";
             Icon = "";
             RollFilters = new List<string>();
+            Folder = "";
         }
     }
 
@@ -95,6 +103,13 @@ namespace DaraletPlayer.Feed {
     public class LootList {
         [DataMember(Name = "name")] public string Name;
         [DataMember(Name = "rules")] public List<LootRule> Rules;
+        /// <summary>The folders folded shut in the rule list, by name.</summary>
+        [DataMember(Name = "closedFolders")] public List<string> ClosedFolders;
+        /// <summary>
+        /// Folders with no rules yet (Add folder), shown at the top of the list. A folder is otherwise only a name on its
+        /// rules, so one leaves here as soon as a rule goes in (LootFolders.Tidy).
+        /// </summary>
+        [DataMember(Name = "emptyFolders")] public List<string> EmptyFolders;
 
         public LootList() {
             SetDefaults();
@@ -108,6 +123,8 @@ namespace DaraletPlayer.Feed {
         private void SetDefaults() {
             Name = "My loot";
             Rules = new List<LootRule>();
+            ClosedFolders = new List<string>();
+            EmptyFolders = new List<string>();
         }
     }
 

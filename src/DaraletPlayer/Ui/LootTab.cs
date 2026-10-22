@@ -18,7 +18,7 @@ namespace DaraletPlayer.Ui {
         private static readonly (CorpseMode Mode, string Label, string Tip)[] Modes = {
             (CorpseMode.AutoLootAutoSalvage, "Auto loot, auto salvage", "Loots what the rules keep or salvage, and salvages the salvage, without asking."),
             (CorpseMode.AutoLootConfirmSalvage, "Auto loot, confirm salvage", "Loots what the rules keep or salvage, then the Corpse window asks before salvaging."),
-            (CorpseMode.ConfirmBoth, "Confirm loot and salvage", "The Corpse window lists the matches, with Loot and Loot and salvage buttons."),
+            (CorpseMode.ConfirmBoth, "Confirm loot and salvage", "The Corpse window lists the matches, with Loot keeps (what your rules Keep) and Loot and salvage buttons."),
             (CorpseMode.ChatHighlights, "Manual, chat highlights", "Moves nothing; says in chat what on the corpse or chest matches."),
             (CorpseMode.HighlightPopup, "Manual, highlight popup", "Moves nothing; the Corpse window lists the matches, and clicking one loots it."),
         };

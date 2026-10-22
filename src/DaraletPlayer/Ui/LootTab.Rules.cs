@@ -19,14 +19,20 @@ namespace DaraletPlayer.Ui {
 
         private void RenderRules() {
             var rules = looter.ActiveList.Rules;
-            var width = Math.Min(260, ImGui.GetContentRegionAvail().X * 0.38f);
+            var avail = ImGui.GetContentRegionAvail().X;
+            var saved = settings.Data.LootRuleListWidth;
+            var width = saved > 0 ? saved : Math.Min(260, avail * 0.38f);
+            // keep the editor usable however far the bar was dragged, or the window shrunk since
+            width = Math.Max(120, Math.Min(width, avail - 200));
 
             if (ImGui.BeginChild("loot-rules", new Vector2(width, 0), true)) {
-                RenderRuleList(rules);
+                RenderRuleList(looter.ActiveList);
             }
             ImGui.EndChild();
 
-            ImGui.SameLine();
+            ImGui.SameLine(0, 0);
+            RenderRuleListSplitter(width, avail);
+            ImGui.SameLine(0, 0);
 
             if (ImGui.BeginChild("loot-rule-editor", new Vector2(0, 0), true)) {
                 if (selectedRule >= 0 && selectedRule < rules.Count) {
@@ -39,40 +45,30 @@ namespace DaraletPlayer.Ui {
             ImGui.EndChild();
         }
 
-        private void RenderRuleList(List<LootRule> rules) {
-            if (ImGui.SmallButton("Add rule")) {
-                rules.Add(new LootRule { Name = $"Rule {rules.Count + 1}" });
-                selectedRule = rules.Count - 1;
+        /// <summary>The bar between the rule list and the editor, dragged to widen or narrow the list.</summary>
+        private void RenderRuleListSplitter(float width, float avail) {
+            var height = ImGui.GetContentRegionAvail().Y;
+            var barWidth = ImGui.GetStyle().ItemSpacing.X;
+            ImGui.InvisibleButton("##rule-list-splitter", new Vector2(barWidth, Math.Max(1, height)));
+            var active = ImGui.IsItemActive();
+
+            if (active || ImGui.IsItemHovered()) {
+                ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeEW);
+                var min = ImGui.GetItemRectMin();
+                var max = ImGui.GetItemRectMax();
+                var x = (min.X + max.X) / 2;
+                ImGui.GetWindowDrawList().AddLine(new Vector2(x, min.Y), new Vector2(x, max.Y),
+                    ImGui.GetColorU32(active ? ImGuiCol.SeparatorActive : ImGuiCol.SeparatorHovered), 2);
+            }
+            Widgets.Tip("Drag to widen or narrow the rule list. Double-click for its usual width.");
+
+            if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left)) {
+                settings.Data.LootRuleListWidth = 0;
                 settings.Changed();
             }
-            Widgets.Tip("Adds a rule at the end. Rules are checked top to bottom.");
-
-            for (var i = 0; i < rules.Count; i++) {
-                var rule = rules[i];
-                ImGui.PushID(i);
-
-                if (ImGui.Checkbox("##on", ref rule.Enabled)) {
-                    settings.Changed();
-                }
-                Widgets.Tip("Whether this rule is checked.");
-
-                ImGui.SameLine();
-                ImGui.PushStyleColor(ImGuiCol.Text, OutcomeColor(rule.Outcome));
-
-                if (ImGui.Selectable($"{i + 1}. {rule.Name}", i == selectedRule)) {
-                    selectedRule = i;
-                }
-
-                ImGui.PopStyleColor();
-                Widgets.Tip($"{rule.Outcome}. Click to edit it.");
-
-                // the rule's mark at the row's right end, to tell the rules apart at a glance
-                if (LootMarks.Marks(rule)) {
-                    var size = ImGui.GetItemRectSize().Y;
-                    DrawMarkSample(rule, new Vector2(ImGui.GetItemRectMax().X - size, ImGui.GetItemRectMin().Y), size);
-                }
-
-                ImGui.PopID();
+            else if (active && ImGui.GetIO().MouseDelta.X != 0) {
+                settings.Data.LootRuleListWidth = Math.Max(120, Math.Min(width + ImGui.GetIO().MouseDelta.X, avail - 200));
+                settings.Changed();
             }
         }
 
@@ -126,7 +122,7 @@ namespace DaraletPlayer.Ui {
             // the list is changed after EndDisabled, so the disabled stack stays balanced
             var first = false;
             ImGui.BeginDisabled(index == 0);
-            var up = Form.FlowSmallButton(ref first, "Up", "Moves the rule up. The first rule that matches an item decides.");
+            var up = Form.FlowSmallButton(ref first, "Up", "Moves the rule up (or drag it in the list). The first rule that matches an item decides.");
             ImGui.EndDisabled();
 
             ImGui.BeginDisabled(index == rules.Count - 1);
@@ -135,9 +131,7 @@ namespace DaraletPlayer.Ui {
             ImGui.EndDisabled();
 
             if (up || down) {
-                var other = up ? index - 1 : index + 1;
-                (rules[index], rules[other]) = (rules[other], rules[index]);
-                selectedRule = other;
+                MoveRule(rules, index, up ? -1 : 1);
                 return true;
             }
 
@@ -154,6 +148,25 @@ namespace DaraletPlayer.Ui {
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// One step up or down. At a folder's edge the first step only takes the rule out of it, or into the next folder,
+        /// without moving it: a folder's rules have to stay together.
+        /// </summary>
+        private void MoveRule(List<LootRule> rules, int index, int step) {
+            var rule = rules[index];
+            var neighbour = rules[index + step];
+
+            if (neighbour.Folder != rule.Folder) {
+                rule.Folder = string.IsNullOrEmpty(rule.Folder) ? neighbour.Folder : "";
+            }
+            else {
+                (rules[index], rules[index + step]) = (neighbour, rule);
+            }
+
+            LootFolders.Gather(rules);
+            selectedRule = rules.IndexOf(rule);
         }
 
         private static bool RenderOutcomeChoices(LootRule rule) {
@@ -231,36 +244,60 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// The Search tab's filters for the rule's category, two to a row. "Price" is the item's vendor value here. A
-        /// weapon subtype shows only its own filters.
+        /// The Search tab's filters for the rule's category, two to a row under a heading for each group
+        /// (MarketFilter.Group); a group with none shown is left out. "Price" is the item's vendor value here. A weapon
+        /// subtype or type, or an armor weight, shows only its own filters.
         /// </summary>
         private static bool RenderFilters(LootRule rule, RollRangesInfo rollRanges) {
             var changed = false;
             var subtype = Loot.SubtypeOf(rule);
-            var shown = MarketSearch.Filters
-                .Where(f => (f.Category == null || f.Category == rule.Category) && f.ForSubtype(subtype))
-                .ToList();
+            var shown = MarketSearch.Filters.Where(f => Loot.Shows(rule, f)).ToList();
 
-            if (!ImGui.BeginTable("rule-filters", 2, ImGuiTableFlags.SizingStretchSame)) {
-                return false;
+            foreach (FilterGroup group in Enum.GetValues(typeof(FilterGroup))) {
+                var inGroup = shown.Where(f => f.Group == group).ToList();
+                var misc = group == FilterGroup.Types && rule.Category == "Misc";
+
+                if (inGroup.Count == 0 && !misc) {
+                    continue;
+                }
+
+                ImGui.Spacing();
+                Widgets.TextDisabled(group.ToString());
+
+                if (group == FilterGroup.Mods) {
+                    ImGui.SameLine();
+                    ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(1, 0));
+                    changed |= ImGui.Checkbox("OR##mods-any", ref rule.ModsAny);
+                    ImGui.PopStyleVar();
+                    Widgets.Tip("On, an item needs only one of the mods filled in below (any one is enough); the rule's "
+                        + "other filters still all have to hold. Off, it needs every one.");
+                }
+
+                ImGui.Separator();
+
+                if (!ImGui.BeginTable($"rule-filters-{group}", 2, ImGuiTableFlags.SizingStretchSame)) {
+                    continue;
+                }
+
+                foreach (var filter in inGroup) {
+                    ImGui.TableNextColumn();
+                    changed |= RenderFilter(rule, filter, subtype, rollRanges);
+                }
+
+                if (misc) {
+                    ImGui.TableNextColumn();
+                    changed |= ImGui.Checkbox("Carved jewels only", ref rule.CarvedJewelOnly);
+                    Widgets.Tip("Only carved jewels.");
+
+                    ImGui.TableNextColumn();
+                    changed |= ImGui.Checkbox("Unlearned spells only", ref rule.UnlearnedSpellsOnly);
+                    Widgets.Tip("Only scrolls of spells the character opening the corpse hasn't learned yet. A scroll whose spell the game hasn't told the client counts as unlearned.");
+                }
+
+                ImGui.EndTable();
             }
 
-            foreach (var filter in shown) {
-                ImGui.TableNextColumn();
-                changed |= RenderFilter(rule, filter, subtype, rollRanges);
-            }
-
-            if (rule.Category == "Misc") {
-                ImGui.TableNextColumn();
-                changed |= ImGui.Checkbox("Carved jewels only", ref rule.CarvedJewelOnly);
-                Widgets.Tip("Only carved jewels.");
-
-                ImGui.TableNextColumn();
-                changed |= ImGui.Checkbox("Unlearned spells only", ref rule.UnlearnedSpellsOnly);
-                Widgets.Tip("Only scrolls of spells the character opening the corpse hasn't learned yet. A scroll whose spell the game hasn't told the client counts as unlearned.");
-            }
-
-            ImGui.EndTable();
+            ImGui.Spacing();
 
             if (ImGui.SmallButton("Clear filters##rule")) {
                 rule.Values.Clear();
@@ -322,10 +359,15 @@ namespace DaraletPlayer.Ui {
                     return Widgets.MultiChoice(id, filter.Options, ref value);
 
                 case FilterKind.Choice:
-                    // with a subtype picked, Class offers only that subtype's classes
-                    var options = filter.Key == ClassKey && subtype.Length > 0
-                        ? filter.Options.Where(o => o.Value == "" || MarketSearch.SubtypeOf(o.Value) == subtype).ToArray()
-                        : filter.Options;
+                    // with a subtype picked, Class and Type offer only that subtype's
+                    var options = filter.Options;
+
+                    if (subtype.Length > 0 && filter.Key == ClassKey) {
+                        options = options.Where(o => o.Value == "" || MarketSearch.SubtypeOf(o.Value) == subtype).ToArray();
+                    }
+                    else if (subtype.Length > 0 && filter.Key == Loot.WeaponTypeKey) {
+                        options = options.Where(o => o.Value == "" || MarketSearch.SubtypeOfType(o.Value) == subtype).ToArray();
+                    }
                     return Widgets.Choice(id, options, ref value);
 
                 case FilterKind.Text:
@@ -336,13 +378,22 @@ namespace DaraletPlayer.Ui {
             }
         }
 
-        /// <summary>A class from another subtype would match nothing, and its box wouldn't show it.</summary>
+        /// <summary>A class or type from another subtype would match nothing, and its box wouldn't show it.</summary>
         private static void DropClassFromOtherSubtype(LootRule rule, string subtype) {
-            if (subtype.Length > 0
-                && rule.Values.TryGetValue(ClassKey, out var weaponClass)
+            if (subtype.Length == 0) {
+                return;
+            }
+
+            if (rule.Values.TryGetValue(ClassKey, out var weaponClass)
                 && !string.IsNullOrEmpty(weaponClass)
                 && MarketSearch.SubtypeOf(weaponClass) != subtype) {
                 rule.Values.Remove(ClassKey);
+            }
+
+            if (rule.Values.TryGetValue(Loot.WeaponTypeKey, out var weaponType)
+                && !string.IsNullOrEmpty(weaponType)
+                && MarketSearch.SubtypeOfType(weaponType) != subtype) {
+                rule.Values.Remove(Loot.WeaponTypeKey);
             }
         }
 
