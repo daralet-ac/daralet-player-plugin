@@ -5,7 +5,10 @@ the game with:
 
 - **World**: a map of Dereth with Daralet's towns, dungeons, lifestones, portals and more. It shows where you are, where
   your fellowship is (unless they're in a dungeon), and an arrow window that points you anywhere on the map, or follows a
-  fellow. Search for a place by name, or right-click the map.
+  fellow. Search for a place by name, or right-click the map. Inside, the Dungeon window maps the dungeon you're in,
+  drawn from the game's own files: your floor bright and the others dimmed, following you and turning as you turn. It
+  greys out the rooms you've been in (remembered for each character), marks the portals, corpses, chests, NPCs and
+  monsters on your floor in those rooms, and draws the way out, or the way to anything you right-click.
 - **Fellowship**: your fellowship's health, stamina and mana, with a small window that stays on screen while you play.
   Click a name to select that member.
 - **Combat**: what you're fighting: its health, stamina and mana, every buff and debuff on it, and its threat table (who

@@ -491,7 +491,7 @@ namespace DaraletPlayer.Map {
         /// <summary>
         /// You, as an arrowhead pointing the way you face (degrees clockwise from north; the screen's up is north).
         /// </summary>
-        private static void SelfMarker(ImDrawListPtr drawList, Vector2 p, double heading) {
+        internal static void SelfMarker(ImDrawListPtr drawList, Vector2 p, double heading) {
             var angle = heading * Math.PI / 180;
             Vector2 Point(double along, double across) => p + new Vector2(
                 (float)(Math.Sin(angle) * along + Math.Cos(angle) * across),

@@ -332,7 +332,7 @@ namespace DaraletPlayer.Ui {
         /// Opens the portal dat for UtilityBelt if it hasn't. UtilityBelt gives up on it when a fresh cell dat fails to
         /// open first (ShadowLauncher's per-game folders), so it's opened from the same folder, still that server's dats.
         /// </summary>
-        private static void EnsurePortalDat() {
+        internal static void EnsurePortalDat() {
             try {
                 var property = typeof(UtilityBelt.Service.UBService).GetProperty("PortalDat", BindingFlags.Public | BindingFlags.Static);
 

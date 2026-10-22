@@ -32,6 +32,7 @@ namespace DaraletPlayer.Ui {
 
         private readonly FloatingWindow arrowWindow;
         private readonly FloatingWindow mapWindow;
+        private readonly DungeonWindow dungeonWindow;
 
         private int worldDataVersion;
         private List<Location> locations;
@@ -68,6 +69,8 @@ namespace DaraletPlayer.Ui {
             // a square 404 x 404 map, plus the title bar, button row and padding
             mapWindow = new FloatingWindow("map", "Map", settings, new Vector2(40, 80), RenderMapWindow,
                 visibleByDefault: false, defaultSize: new Vector2(420, 456));
+
+            dungeonWindow = new DungeonWindow(settings);
 
             CoreManager.Current.RenderFrame += Core_RenderFrame;
         }
@@ -239,6 +242,14 @@ namespace DaraletPlayer.Ui {
             }
             Widgets.Tip("Which kinds of places are on the map, and whether names and fellows are.");
 
+            ImGui.SameLine();
+            var dungeon = dungeonWindow.Window.Visible;
+            if (ImGui.Checkbox("Dungeon map", ref dungeon)) {
+                dungeonWindow.Window.Visible = dungeon;
+            }
+            Widgets.Tip("Shows the Dungeon window: a map of the dungeon you're in, which this map can't show. Its settings "
+                + "are under Settings.");
+
             RenderFilters();
         }
 
@@ -333,7 +344,7 @@ namespace DaraletPlayer.Ui {
             }
 
             Form.Columns("world-settings-grid", RenderMapSettings, RenderWorldDataStatus, RenderMapWindowSettings,
-                RenderArrowSettings);
+                RenderArrowSettings, RenderDungeonWindowSettings);
             ImGui.Spacing();
         }
 
@@ -378,6 +389,11 @@ namespace DaraletPlayer.Ui {
                 + "the window's Background at 0% and Locked on, only the arrow is left on screen.")) {
                 settings.Changed();
             }
+        }
+
+        private void RenderDungeonWindowSettings() {
+            Form.Section("Dungeon window");
+            dungeonWindow.RenderControls();
         }
 
         private void RenderSearchResults() {
@@ -491,6 +507,7 @@ namespace DaraletPlayer.Ui {
             windowMap.DestinationChosen -= SetDestination;
             windowMap.Panned -= WindowMap_Panned;
             mapWindow.Dispose();
+            dungeonWindow.Dispose();
             mapImage.Dispose();
             worldData.Dispose();
         }

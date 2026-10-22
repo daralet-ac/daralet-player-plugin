@@ -17,7 +17,11 @@ up to date.
   README links the 2.2.12 installer. 3.x is out but untested here. Windows are
   `UBService.Huds.CreateHud(name)` with `OnRender`, drawn with ImGui (`ImGuiNET`). Images use `ManagedTexture`, made
   lazily the first time it's drawn, once the game's graphics device exists.
-- `deps/` holds `Decal.Adapter.dll` and `Decal.Interop.Core.dll` from Decal 2.9.8.3, referenced with `Private=False`.
+- `deps/` holds `Decal.Adapter.dll` and `Decal.Interop.Core.dll` from Decal 2.9.8.3, and `UtilityBelt.Common.dll` from
+  UtilityBelt.Service 2.2.12 (installed beside it, with ACE's dat readers in it, `ACE.DatLoader`), all referenced with
+  `Private=False`. The dungeon map uses `UtilityBelt.Common` directly; `ItemIcons.EnsurePortalDat` and `Spells` still reach
+  it by reflection, from before it was referenced. It's a .NET Standard dll, so a throwaway console app (net48, x86) can
+  reference it and open a game folder's dats to try dat code outside the game.
 - `Microsoft.DirectX.Direct3D` is referenced from `$(WINDIR)\Microsoft.NET\DirectX for Managed Code\1.0.2902.0\` only so the
   compiler can tell `ManagedTexture`'s constructors apart. UtilityBelt installs it.
 - MSB3277 is suppressed: UtilityBelt.Service was built against Decal.Adapter 2.9.8.0 and Decal installs 2.9.7.5 (assembly
@@ -606,6 +610,44 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `HasIdData`), and the game's panel stays shut. Market search tooltips have none: those items aren't in Decal. Off, right-click just selects the item, for the
   game's appraise key.
 
+- **Dungeon window** (`Ui/DungeonWindow.cs`, `Map/Dungeon*.cs`, `dungeon`, hidden to start, its switch beside the
+  World tab's Show... and its settings under the tab's Settings): a map of the landblock you're in while indoors, drawn
+  from the dats, with no help from the server. A landblock's `LandblockInfo` (`0xXXYYFFFE` in the cell dat) says how many
+  cells it has; each `EnvCell` (`0xXXYY0100` on) names its piece (an `Environment`, `0x0D000000 |` its id, in the portal
+  dat, and which `CellStruct`) and where it goes (`Position`, in landblock meters, the same frame as Decal's
+  `LocationX/Y/Z`); the piece has the polygons (`PhysicsPolygons`, or the drawn ones when it has none). `DungeonDat`
+  reads them; `DungeonLayout` keeps the walkable ones (normal Z at least 0.66, the game's FloorZ; under 0.97 a ramp), and
+  the walls are the floors' outline, edges no other floor shares (matched to 5cm, height included), so doorways stay
+  open: the game's wall polygons were never needed. `DungeonLoader` reads 60 cells a frame on the game's thread (the dat
+  readers aren't safe on another, and UtilityBelt uses them on this one; 750 cells take about 0.1 seconds) and keeps the
+  last six landblocks. It uses `UBService.CellDat` and `PortalDat`, opening the cell dat itself off the game's thread if
+  UtilityBelt hasn't (about a second and 55 MB) and handing it over, as `EnsurePortalDat` does. `DungeonView` draws each
+  floor from yours (`DungeonGeometry.FloorFrom`, 6 meters a floor, from your `LocationZ`): four below darker the deeper,
+  one above as a faint fill and outline, yours last and brightest, with anti-aliased fill off for the floors (seams).
+  **Turn with me** turns it by your heading, with a compass needle; **Follow me**, dragging turning it off, as the maps.
+  The window's Only when needed shows it only indoors. Inside a building it maps every building's rooms in the landblock.
+  **Rooms you've been in** are grey (`DungeonVisits`, in settings.json as `dungeonVisits`: by character name, then
+  landblock as four hex digits, then cell numbers), noted from every frame's `Landcell` whether the window's open or not,
+  in a colour of your own under Show... (`DungeonVisitedColor`; ramps lean 30% towards the ramp colour, lower floors
+  darker).
+  **Markers** (`DungeonMarker`, `DungeonView.MarkerKinds`, each kind shown or hidden by name in `DungeonMarkers`) are
+  Decal's `WorldFilter.GetLandscape()`, four times a second, by `ObjectClass` (your corpse by its name, "Corpse of" you):
+  where each is is `RawCoordinates()`, landblock meters like `LocationX/Y/Z`, and its cell `LongValueKey.Landblock`, or
+  the floor under it (`DungeonLayout.CellAt`) when Decal doesn't say. Only those on your floor, in your room or one
+  you've been in, are kept (`DungeonMarker.MayShow`): the server sends what's in every room in sight of yours, through
+  walls and floors, and the map is meant to show what you'd have seen, not be a radar (the user's call, October 2026).
+  Way out and the route only use those too. Anything truly secret needs the server's own hiding, `PropertyBool.Visibility`
+  with `ResistPerception` and a `Tier`: such an object is sent only to a player who has passed a Perception roll for it
+  (`WorldObject_Awareness.cs` in daralet-ACE), so no plugin sees it before then. The first five of each dungeon go in
+  log.txt. Clicking one selects it. **The way** (`DungeonRoute`, Dijkstra over the rooms, each entered at the doorway it was reached
+  by) goes room to room through the doorways, which are each `EnvCell`'s `CellPortals` (the portal polygon's middle, at
+  its foot; `OtherCellId` 0xFFFF leads outside and is left out). Way out is the nearest portal by the route: the client
+  can't tell which portal leads out. Right-click for the way to a marker (followed as it moves) or a spot. It's worked
+  out again in each new room, or twice a second. While the game runs, a dat it has open can't be opened by anyone else
+  (a sharing violation), which is likely what leaves UtilityBelt without a dat in ShadowLauncher's folders: the
+  plugin's own try then fails the same way, and says so.
+  UtilityBelt's own dungeon maps paste one of 614 hand-drawn 10-meter tiles per piece instead, so pieces without a tile
+  (Daralet's own) and cells off its grid go missing; this draws whatever the dats have.
 - **Floating windows** (`Ui/FloatingWindow.cs`): small auto-sized UB huds that stay on screen (fellowship vitals, target,
   tracked target). Locked means no title bar and no dragging; right-click one to lock, unlock or hide it. Two things decide
   whether one is drawn, worked out every frame (`Core_RenderFrame`): `Visible`, the saved setting its tab's checkbox and

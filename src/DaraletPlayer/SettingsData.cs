@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 using DaraletPlayer.Feed;
+using DaraletPlayer.Map;
 
 namespace DaraletPlayer {
     /// <summary>
@@ -37,6 +38,20 @@ namespace DaraletPlayer {
         /// The arrow window shows the destination's name, distance and direction beside the arrow, not the arrow alone.
         /// </summary>
         [DataMember(Name = "arrowShowDetails")] public bool ArrowShowDetails;
+        /// <summary>The Dungeon window keeps centred on you.</summary>
+        [DataMember(Name = "dungeonFollow")] public bool DungeonFollow;
+        /// <summary>The Dungeon window turns with you, so the way you face is always up.</summary>
+        [DataMember(Name = "dungeonTurn")] public bool DungeonTurn;
+        /// <summary>The Dungeon window draws every floor, not only those near yours.</summary>
+        [DataMember(Name = "dungeonAllFloors")] public bool DungeonAllFloors;
+        /// <summary>The Dungeon window greys out the rooms you've been in.</summary>
+        [DataMember(Name = "dungeonShowVisited")] public bool DungeonShowVisited;
+        /// <summary>What the rooms you've been in are drawn in, packed as ImGui has it (PackedColor).</summary>
+        [DataMember(Name = "dungeonVisitedColor")] public uint DungeonVisitedColor;
+        /// <summary>The rooms each character has been in, for the Dungeon window.</summary>
+        [DataMember(Name = "dungeonVisits")] public DungeonVisits DungeonVisits;
+        /// <summary>Kinds of marker (DungeonMarkerKind) shown or hidden by hand; one that isn't here is shown.</summary>
+        [DataMember(Name = "dungeonMarkers")] public Dictionary<string, bool> DungeonMarkers;
         /// <summary>Where the arrow points, or null.</summary>
         [DataMember(Name = "destination")] public Destination Destination;
 
@@ -172,6 +187,12 @@ namespace DaraletPlayer {
             MapTextScale = 1;
             MapWindowFollow = true;
             ArrowShowDetails = true;
+            DungeonFollow = true;
+            DungeonTurn = true;
+            DungeonShowVisited = true;
+            DungeonVisitedColor = DungeonVisits.DefaultColor;
+            DungeonVisits = new DungeonVisits();
+            DungeonMarkers = new Dictionary<string, bool>();
             AppraiseInPlugin = true;
             InventoryShowWorn = true;
             CarriedRetail = true;

@@ -28,6 +28,8 @@ These are in this repository, or built into or shipped with the plugin, but aren
 keep their own owners' terms:
 
 - deps/Decal.Adapter.dll and deps/Decal.Interop.Core.dll: from Decal 2.9.8.3.
+- deps/UtilityBelt.Common.dll: from UtilityBelt.Service 2.2.12, under the MIT License
+  (installer/UtilityBelt.Service-LICENSE.txt). Only compiled against; the copy installed with UtilityBelt.Service is used.
 - src/DaraletPlayer/Resources/ui/*.png: pictures taken from the Asheron's Call client.
 - src/DaraletPlayer/Resources/dereth-map.png and dereth-map.PSD: drawn from the game's dat files.
 - src/DaraletPlayer/Resources/locations.xml: GoArrow's locations, in Daralet edition.
