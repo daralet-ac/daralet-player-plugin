@@ -192,7 +192,7 @@ namespace DaraletPlayer.Ui {
         /// <summary>How the rule marks what it decides (LootMarks), with a sample: two rows of the rule's form.</summary>
         private static bool RenderMarkChoices(LootRule rule) {
             Form.Label("Highlight", "A coloured frame round the icon of what this rule decides: in the Corpse window, the "
-                + "Test tab, and the Inventory tab with Loot marks on.");
+                + "Test tab, and the Inventory tab with Loot highlights on.");
             ImGui.SetNextItemWidth(Form.ControlWidth);
             var changed = Widgets.Choice("##rule-highlight", LootMarks.HighlightChoices, ref rule.Highlight);
 
@@ -212,7 +212,7 @@ namespace DaraletPlayer.Ui {
             return changed;
         }
 
-        /// <summary>Category, tiers, name words and Salvageable only: rows of the rule's form.</summary>
+        /// <summary>Category, tiers, name words, and Salvageable and Sellable only: rows of the rule's form.</summary>
         private static bool RenderRuleBasics(LootRule rule) {
             Form.Label("Category", "The kind of item, as the market sorts them. Each kind has its own filters below.");
             ImGui.SetNextItemWidth(Form.ControlWidth);
@@ -237,8 +237,14 @@ namespace DaraletPlayer.Ui {
             changed |= ImGui.InputTextWithHint("##rule-name-has", "any name", ref rule.NameContains, 60);
 
             Form.Label("Only", "Narrows the rule further.");
-            changed |= Form.Check("Salvageable only", ref rule.SalvageableOnly,
+            var first = true;
+            changed |= Form.FlowCheck(ref first, "Salvageable only", ref rule.SalvageableOnly,
                 "Only items salvaging could turn into salvage (not retained, not unstable, with a material).");
+            changed |= Form.FlowCheck(ref first, "Sellable only", ref rule.SellableOnly,
+                "Only items a Market Broker would list: not attuned, bound to a character or unstable, and a kind the "
+                + "market takes (weapons, armor, clothing, jewelry, casters, gems, scrolls, components, mana stones, "
+                + "salvage, trophies and consumables). Anything else falls to the rules after this one. An older server "
+                + "doesn't say, and then every item counts as sellable.");
 
             return changed;
         }

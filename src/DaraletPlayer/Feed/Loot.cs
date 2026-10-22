@@ -110,13 +110,26 @@ namespace DaraletPlayer.Feed {
                 ["salvageTargetType"] = (l => l.SalvageTargetTypes ?? new List<string>(), false),
                 ["salvageMaterial"] = (l => One(l.SalvageMaterial), false),
                 ["consumableType"] = (l => One(l.ConsumableType), false),
-                ["miscType"] = (l => One(l.MiscType), false),
+                ["miscType"] = (l => One(MiscTypeOf(l)), false),
                 ["scrollSchool"] = (l => One(l.SpellSchool), false),
                 ["gemMaterial"] = (l => One(l.GemMaterialType), false),
                 ["trophyType"] = (l => One(l.TrophyType), false),
                 ["spellName"] = (l => l.Spells ?? new List<string>(), true),
                 ["scrollSpellName"] = (l => l.Spells ?? new List<string>(), true),
             };
+
+        /// <summary>
+        /// A Misc item's type for the rules. The description calls anything of the game's Gem kind a gem, which takes in
+        /// many things that aren't material gems; only one with a material (a loose gem's, or a carved jewel's) is a gem
+        /// here, and the rest are Other.
+        /// </summary>
+        private static string MiscTypeOf(MarketListing listing) {
+            if (listing.MiscType == "Gem" && string.IsNullOrEmpty(listing.GemMaterialType)) {
+                return "Other";
+            }
+
+            return listing.MiscType;
+        }
 
         /// <summary>
         /// For the numeric filters loot rolls, the stat's name in appraisal's Roll Quality section: these filters can switch
@@ -230,6 +243,11 @@ namespace DaraletPlayer.Feed {
             }
 
             if (rule.SalvageableOnly && !item.Salvageable) {
+                return false;
+            }
+
+            // an older server doesn't say: better looted than left behind
+            if (rule.SellableOnly && item.Sellable == false) {
                 return false;
             }
 

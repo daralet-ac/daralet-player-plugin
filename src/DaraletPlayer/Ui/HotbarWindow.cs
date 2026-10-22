@@ -547,7 +547,7 @@ namespace DaraletPlayer.Ui {
 
             return ItemUse.With(new List<ItemLine> {
                 new ItemLine(item.Name, ItemLineStyle.Title),
-                new ItemLine("Getting the details...", ItemLineStyle.Detail),
+                new ItemLine(feed.DescribeWaitText(guid), ItemLineStyle.Detail),
             }, guid);
         }
 

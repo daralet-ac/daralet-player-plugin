@@ -247,7 +247,11 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (`NameWithMaterial`; `ItemLines.WithMaterial` adds it if missing), and its value, burden and stack go on the workmanship
   line.
   The bank asks for descriptions as the mouse passes over items (`PlayerFeed.Describe`, 20 a request; `@playerui describe`
-  covers your packs and your open bank). Tiers show as T0-T7 everywhere, the way the Search tab's filter has them.
+  covers your packs and your open bank). The server sends nothing for an item it won't
+  describe, nor for a request its rate limit drops, so DescribeRequests keeps track: a request with no answer in 3
+  seconds is sent again (3 tries), an item a reply left out is not yours (DescribeState.NotYours), and either is asked
+  about again after 5 seconds if something still wants it; PlayerFeed.DescribeWaitText says which in place of the
+  details. Tiers show as T0-T7 everywhere, the way the Search tab's filter has them.
   Speed is the weapon's WeaponTime (`MarketListing.WeaponTime`) with attacks a second after it, as "atk/s": 60 / WeaponTime,
   so 60 is one a second (`WeaponSpeed.GetSecondsPerHit` in daralet-ACE, at 100 Quickness). The Market API's Dps uses
   the same rule, so DPS and atk/s agree. Casters show no speed. Text is always drawn with `Widgets.Text*`
@@ -323,12 +327,18 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   lowest roll quality, 0 to 100, rounded as the tooltip shows it, and an item without that roll doesn't match. Switching
   empties the box. A rule can also mark what it decides (`LootMarks`: `LootRule.Highlight`, a frame colour, and `Icon`, a
   symbol drawn with ImGui shapes in the top left corner, in the frame's colour or gold), drawn by `ItemIcons.DrawMark` in
-  the Corpse window, the Test tab and, with **Loot marks** (`SettingsData.InventoryLootMarks`), the Inventory tab, which has
+  the Corpse window, the Test tab and, with **Loot highlights** (`SettingsData.InventoryLootMarks`), the Inventory tab, which has
   every listed item described to match it. Item tooltips (bank, packs, Loot tab, Corpse window) end with the rule that decides the item, in its outcome's colour (`ItemTooltip.Show(..., rule)`). The first rule that matches decides the mark too, so an earlier rule without
   one hides a later one's.
   **Unlearned spells only** (`LootRule.UnlearnedSpellsOnly`, Misc) takes scrolls whose spell the character doesn't know:
   `Loot.KnowsScrollSpell` is set by `PluginCore` from Decal (`LongValueKey.AssociatedSpell`,
-  `CharacterFilter.IsSpellKnown`), and a scroll whose spell can't be told counts as unlearned. New settings get the
+  `CharacterFilter.IsSpellKnown`), and a scroll whose spell can't be told counts as unlearned.
+  **Sellable only** (LootRule.SellableOnly, beside Salvageable only) takes only what a Market Broker would list: the
+  server sends sellable with each item it describes (MarketBroker.IsSellable: not attuned, character-bound or
+  unstable, and of a kind the market takes). An older server sends none, and then every item counts as sellable. Misc's
+  **Type** Gems takes only a gem with a material (Loot.MiscTypeOf): the description calls anything of the game's Gem
+  kind a gem, and those without one count as Other. The market search still goes by the Market API's word. New
+  settings get the
   **Example Loot Profile** (`Feed/ExampleLoot.cs`, read from `Resources/example-loot-profile.json`, a profile as
   To file saves one: to change it, save one and copy it over) after "My loot"; the Example button adds it again, and a test checks its
   filter keys exist. **To file / From file** save and load profiles as `.json` in `Documents\Decal Plugins\Daralet Toolkit\Loot
@@ -525,7 +535,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   (`InventoryBrowser.RenderRetail`): the paperdoll at the top left (shown whatever Worn says) and the packs beside it on the
   right, the two as tall as each other so their bottoms line up: the row is the pack column's height (from last frame, `packsHeight`), and the paperdoll closes up the space under its trinket and sigils' row to fit (`RenderPaperdoll(sigilGap)`, the empty row 1 and its gaps in the game's layout), and
   the chosen pack's items as the grid across the whole width below. The packs are icons only, each with a fill bar down its right side, over the icon, filling from the bottom (`LongValueKey.ItemSlots`; 102 for the main
-  pack when the client isn't told) and its name on hover, then an empty square for each side pack slot left (`LongValueKey.PackSlots`, 7 when the client isn't told; drop a pack on one to put it there), with a burden bar down its right (`CharacterFilter.Burden`; hover it for the percent and `BurdenUnits`, full at 300%, the most you can carry, and yellow past 100%, with faint lines at 100% and 200%). The pop-out's **Reset width** makes it just wide enough, in Retail, for the paperdoll (with a little room) and the packs beside it, leaving the grid a little over seven columns (`RetailWidthShort`); in the plain view, for six columns of items (`InventoryBrowser.RetailColumns`, `GridWidthShort`). `FloatingWindow.SetWidth` sizes the window. No `/bank` bar in Retail: its top line has Loot marks and Sort (`/sort`) instead, and the chosen pack is framed with the selection frame and a light brown arrow on its left edge, pointing in (`DrawChosenPack`). Packs (not the main pack) are dragged onto another pack, in any pack list, to take its place (`MoveItem` to that pack's container and slot, `Holder.Parent`/`Slot`): packs can't go inside packs, so that's how they're reordered, or moved between yours and the bank's at a place.
+  pack when the client isn't told) and its name on hover, then an empty square for each side pack slot left (`LongValueKey.PackSlots`, 7 when the client isn't told; drop a pack on one to put it there), with a burden bar down its right (`CharacterFilter.Burden`; hover it for the percent and `BurdenUnits`, full at 300%, the most you can carry, and yellow past 100%, with faint lines at 100% and 200%). The pop-out's **Reset width** makes it just wide enough, in Retail, for the paperdoll (with a little room) and the packs beside it, leaving the grid a little over seven columns (`RetailWidthShort`); in the plain view, for six columns of items (`InventoryBrowser.RetailColumns`, `GridWidthShort`). `FloatingWindow.SetWidth` sizes the window. No `/bank` bar in Retail: its top line has Loot highlights and Sort (`/sort`) instead, and the chosen pack is framed with the selection frame and a light brown arrow on its left edge, pointing in (`DrawChosenPack`). Packs (not the main pack) are dragged onto another pack, in any pack list, to take its place (`MoveItem` to that pack's container and slot, `Holder.Parent`/`Slot`): packs can't go inside packs, so that's how they're reordered, or moved between yours and the bank's at a place.
   `PlayerFeed.SendCommand` keeps the System and Help chat (types 5 and 15, Decal's `e.Color`) that comes back within three
   seconds as the command's reply. The items show as a list or, with **Grid** (`SettingsData.InventoryGrid`), as icons only, as
   many to a row as fit, each with the list's hover, drag and right-click; a stack shows its size in the corner. A drag shows

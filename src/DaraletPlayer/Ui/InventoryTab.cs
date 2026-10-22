@@ -261,7 +261,7 @@ namespace DaraletPlayer.Ui {
             ImGui.SameLine();
             RenderResetWidth();
 
-            // the game's inventory has no /bank buttons; the plain view keeps them, and has Loot marks over its items
+            // the game's inventory has no /bank buttons; the plain view keeps them, and has Loot highlights over its items
             if (settings.Data.CarriedRetail) {
                 RenderRetailBar();
             }
@@ -294,14 +294,14 @@ namespace DaraletPlayer.Ui {
                     + "before the scrollbar. Its height stays. Needs the items as a grid (Grid).");
         }
 
-        /// <summary>Retail's top line, in place of the /bank buttons: Loot marks and Sort.</summary>
+        /// <summary>Retail's top line, in place of the /bank buttons: Loot highlights and Sort.</summary>
         private void RenderRetailBar() {
             ImGui.SameLine();
 
-            if (ImGui.Checkbox("Loot marks", ref settings.Data.InventoryLootMarks)) {
+            if (ImGui.Checkbox("Loot highlights", ref settings.Data.InventoryLootMarks)) {
                 settings.Changed();
             }
-            Widgets.Tip("Marks the items your active loot profile's rules would mark, with each rule's highlight and icon "
+            Widgets.Tip("Highlights the items your active loot profile's rules would mark, with each rule's highlight and icon "
                 + "(set in the Loot tab). The server describes every item to check them, so full "
                 + "packs take a little while to fill in.");
 

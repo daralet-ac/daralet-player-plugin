@@ -3,8 +3,8 @@ using System.Linq;
 namespace DaraletPlayer.Feed {
     /// <summary>
     /// How a loot rule marks the items it decides, wherever they're listed (the Corpse window, the Loot tab's test, and the
-    /// Inventory tab with Loot marks on): a coloured frame round the icon (LootRule.Highlight) and a symbol in its top left
-    /// corner (LootRule.Icon), drawn in the frame's colour, or gold without one.
+    /// Inventory tab with Loot highlights on): a coloured frame round the icon (LootRule.Highlight) and a symbol in its top
+    /// left corner (LootRule.Icon), drawn in the frame's colour, or gold without one.
     /// </summary>
     public static class LootMarks {
         public const string Star = "Star";
@@ -12,6 +12,7 @@ namespace DaraletPlayer.Feed {
         public const string Circle = "Circle";
         public const string Triangle = "Triangle";
         public const string Exclamation = "Exclamation";
+        public const string Dollar = "Dollar";
 
         /// <summary>The frame colours a rule can pick, by the name it's saved as; "" is none.</summary>
         public static readonly (string Value, string Label, (byte R, byte G, byte B) Color)[] Highlights = {
@@ -35,6 +36,7 @@ namespace DaraletPlayer.Feed {
             (Circle, "Dot"),
             (Triangle, "Triangle"),
             (Exclamation, "Exclamation mark"),
+            (Dollar, "Dollar sign"),
         };
 
         /// <summary>The symbol's colour when the rule has no highlight: the Gold one.</summary>

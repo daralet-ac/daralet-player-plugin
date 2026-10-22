@@ -120,7 +120,7 @@ namespace DaraletPlayer.Tests {
             var loot = settings.Data.Loot;
 
             loot.Enabled = true;
-            loot.Mode = Feed.CorpseMode.ConfirmBoth;
+            loot.Mode = Feed.CorpseMode.HighlightPopup;
             var mule = new Feed.LootList { Name = "Mule" };
             mule.Rules.Add(new Feed.LootRule { Name = "gems", Outcome = Feed.LootOutcome.Keep, Category = "Misc" });
             loot.Lists.Add(mule);
@@ -130,7 +130,7 @@ namespace DaraletPlayer.Tests {
             var loaded = new Settings(path).Data.Loot;
 
             Assert.IsTrue(loaded.Enabled);
-            Assert.AreEqual(Feed.CorpseMode.ConfirmBoth, loaded.Mode);
+            Assert.AreEqual(Feed.CorpseMode.HighlightPopup, loaded.Mode);
             Assert.AreEqual("Mule", loaded.ActiveFor("Bob").Name);
             Assert.AreEqual("gems", loaded.ActiveFor("Bob").Rules[0].Name);
             Assert.AreEqual("My loot", loaded.ActiveFor("Alice").Name);
@@ -139,7 +139,7 @@ namespace DaraletPlayer.Tests {
             var older = new Settings(path).Data.Loot;
 
             Assert.IsFalse(older.Enabled, "the looter starts off");
-            Assert.AreEqual(Feed.CorpseMode.HighlightPopup, older.Mode);
+            Assert.AreEqual(Feed.CorpseMode.ConfirmBoth, older.Mode, "Confirm loot and salvage to start");
             Assert.IsNotNull(older.ActiveFor("Bob"));
         }
 

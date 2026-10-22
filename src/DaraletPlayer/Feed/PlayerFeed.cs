@@ -45,9 +45,6 @@ namespace DaraletPlayer.Feed {
         private const uint GameEventMessageType = 0xF7B0;
         private const int UpdateHealthEvent = 0x01C0;
 
-        /// <summary>The most items one @playerui describe may name (PlayerUiCorpseData.MaxDescribeItems).</summary>
-        private const int DescribeBatch = 20;
-
         /// <summary>A request with no reply after this long is sent again.</summary>
         private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(3);
 
@@ -67,9 +64,7 @@ namespace DaraletPlayer.Feed {
         /// <summary>Whether the server last said it leaves the game's window out (bankwindow, lootwindow), by kind.</summary>
         private readonly Dictionary<string, bool> windowSettings = new Dictionary<string, bool>();
 
-        private readonly List<uint> describeQueue = new List<uint>();
-        private readonly HashSet<uint> describeAsked = new HashSet<uint>();
-        private DateTime describeSentAt = DateTime.MinValue;
+        private readonly DescribeRequests describes = new DescribeRequests(RequestTimeout);
 
         private DateTime lastCommandSentAt = DateTime.MinValue;
         private bool disposed;
@@ -224,23 +219,38 @@ namespace DaraletPlayer.Feed {
         }
 
         /// <summary>
-        /// Asks the server to describe one of your items, once; requests go out 20 items at a time. The answer lands in
-        /// Described.
+        /// Asks the server to describe one of your items, unless it has; requests go out 20 items at a time. The answer
+        /// lands in Described. Safe to call every frame: one not answered is asked about again only now and then
+        /// (DescribeRequests).
         /// </summary>
         public void Describe(uint guid) {
-            if (guid == 0 || Described.ContainsKey(guid) || describeAsked.Contains(guid)) {
-                return;
+            if (guid != 0 && !Described.ContainsKey(guid)) {
+                describes.Ask(guid, DateTime.UtcNow);
             }
+        }
 
-            describeAsked.Add(guid);
-            describeQueue.Add(guid);
+        /// <summary>Where the description of an item not yet described stands.</summary>
+        public DescribeState DescribeStateOf(uint guid) {
+            return Described.ContainsKey(guid) ? DescribeState.None : describes.State(guid);
+        }
+
+        /// <summary>What to show in place of an item's details while there's no description of it.</summary>
+        public string DescribeWaitText(uint guid) {
+            switch (DescribeStateOf(guid)) {
+                case DescribeState.NotYours:
+                    return "No details: the server only describes what you carry or wear, and the bank's items while "
+                        + "it's open.";
+                case DescribeState.NoAnswer:
+                    return "The server didn't answer (it may be busy). Asking again shortly...";
+                default:
+                    return "Getting the details...";
+            }
         }
 
         /// <summary>Forgets every description, so they're asked for again (an item's stats can change: tinkering, say).</summary>
         public void ClearDescriptions() {
             Described.Clear();
-            describeAsked.Clear();
-            describeQueue.Clear();
+            describes.Clear();
         }
 
         /// <summary>What the server last said about a creature, or null if it hasn't been asked about yet.</summary>
@@ -261,17 +271,24 @@ namespace DaraletPlayer.Feed {
         }
 
         private void SendDescribeBatch() {
-            if (describeQueue.Count == 0 || Status != FeedStatus.Ready || !Supports(KindDescribe)) {
+            if (disposed || Status != FeedStatus.Ready || !Supports(KindDescribe)) {
                 return;
             }
 
-            if (IsWaitingFor(KindDescribe) || DateTime.UtcNow - describeSentAt < MinInterval) {
+            var now = DateTime.UtcNow;
+
+            if (now - describes.SentAt < MinInterval) {
                 return;
             }
 
-            var batch = describeQueue.Take(DescribeBatch).ToArray();
-            describeQueue.RemoveRange(0, batch.Length);
-            describeSentAt = DateTime.UtcNow;
+            var batch = describes.Next(now);
+
+            if (batch == null) {
+                return;
+            }
+
+            // DescribeRequests decides when one has waited long enough, so a reply never came to the last
+            waitingSince.Remove(KindDescribe);
             Request(KindDescribe, Display.TargetArguments(batch));
         }
 
@@ -379,13 +396,17 @@ namespace DaraletPlayer.Feed {
                     Corpse = Json.Read<CorpseInfo>(json);
                     CorpseUpdatedAt = DateTime.UtcNow;
                     break;
-                case KindDescribe:
-                    foreach (var item in Json.Read<List<CorpseItemInfo>>(json) ?? new List<CorpseItemInfo>()) {
+                case KindDescribe: {
+                    var items = Json.Read<List<CorpseItemInfo>>(json) ?? new List<CorpseItemInfo>();
+
+                    foreach (var item in items) {
                         Described[item.Guid] = item;
                     }
 
+                    describes.Answered(items.Select(i => i.Guid), DateTime.UtcNow);
                     DescribedUpdatedAt = DateTime.UtcNow;
                     break;
+                }
                 case KindArena:
                     Arena = Json.Read<ArenaInfo>(json);
                     ArenaUpdatedAt = DateTime.UtcNow;

@@ -15,6 +15,11 @@ namespace DaraletPlayer.Feed {
         [DataMember(Name = "burden")] public int Burden;
         /// <summary>Salvaging could turn it into salvage.</summary>
         [DataMember(Name = "salvageable")] public bool Salvageable;
+        /// <summary>
+        /// A Market Broker would list it (MarketBroker.IsSellable: not attuned, bound or unstable, and of a kind it takes);
+        /// null from a server that doesn't say.
+        /// </summary>
+        [DataMember(Name = "sellable")] public bool? Sellable;
         [DataMember(Name = "material")] public string Material;
         [DataMember(Name = "workmanship")] public double? Workmanship;
         [DataMember(Name = "item")] public MarketListing Item;

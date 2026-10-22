@@ -80,7 +80,7 @@ namespace DaraletPlayer.Ui {
             public int Slot;
             public int Container;
             public IconLayers Icon;
-            /// <summary>The loot rule that marks it, with Loot marks on, or null.</summary>
+            /// <summary>The loot rule that marks it, with Loot highlights on, or null.</summary>
             public LootRule Mark;
             /// <summary>Where it's worn (the game's equip locations), or 0.</summary>
             public uint Worn;
@@ -223,7 +223,7 @@ namespace DaraletPlayer.Ui {
 
         private void RenderItems() {
             var style = ImGui.GetStyle();
-            var switchWidth = ImGui.CalcTextSize("List").X + ImGui.CalcTextSize("Grid").X + ImGui.CalcTextSize("Loot marks").X
+            var switchWidth = ImGui.CalcTextSize("List").X + ImGui.CalcTextSize("Grid").X + ImGui.CalcTextSize("Loot highlights").X
                 + (ImGui.GetFrameHeight() + style.ItemInnerSpacing.X + style.ItemSpacing.X) * 3;
 
             var hint = carried ? "Find in your packs" : ShowsBoth ? "Find in the bank and your packs" : "Find in the bank";
@@ -279,11 +279,11 @@ namespace DaraletPlayer.Ui {
 
             ImGui.SameLine();
 
-            if (ImGui.Checkbox("Loot marks", ref settings.Data.InventoryLootMarks)) {
+            if (ImGui.Checkbox("Loot highlights", ref settings.Data.InventoryLootMarks)) {
                 settings.Changed();
                 SnapshotSoon();
             }
-            Widgets.Tip("Marks the items your active loot profile's rules would mark, with each rule's highlight and icon (set in the Loot tab). The server describes every item listed to check them, so a full bank takes a little while to fill in.");
+            Widgets.Tip("Highlights the items your active loot profile's rules would mark, with each rule's highlight and icon (set in the Loot tab). The server describes every item listed to check them, so a full bank takes a little while to fill in.");
         }
 
         /// <summary>The items as icons, as many to a row as fit, then the pack's empty slots.</summary>
@@ -566,7 +566,7 @@ namespace DaraletPlayer.Ui {
             var lines = new List<ItemLine> {
                 new ItemLine(item.Name, ItemLineStyle.Title),
                 new ItemLine($"Value: {item.Value:N0}   Burden: {item.Burden:N0}{stack}", ItemLineStyle.Detail),
-                new ItemLine("Getting the details...", ItemLineStyle.Detail),
+                new ItemLine(feed.DescribeWaitText(item.Guid), ItemLineStyle.Detail),
             };
             ItemTooltip.Show(ItemUse.With(lines, item.Guid), iconHovered);
         }

@@ -19,7 +19,7 @@ the game with:
   plugin's window instead of the game's.
 - **Inventory**: the packs you carry, anywhere, and your bank while it's open, as a list or a grid of icons. Move items
   between packs, and deposit, withdraw, sort and search without typing `/bank` commands. Bank window opens your bank in
-  the plugin's own window instead of the game's. Loot marks shows which of your items your loot rules would mark.
+  the plugin's own window instead of the game's. Loot highlights shows which of your items your loot rules would mark.
 - **Market**: your listings, sales and expired items, with buttons for the Market Broker (list, cancel, claim), plus a
   search of the whole market like the website's.
 - **Arena**: queue, challenge, leave and watch duels, with your ratings and the latest results.

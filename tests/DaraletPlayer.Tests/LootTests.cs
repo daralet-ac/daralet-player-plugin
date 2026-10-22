@@ -384,6 +384,33 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
+        public void GemsAreOnlyGemsWithAMaterial() {
+            CorpseItemInfo Gem(string material) => new CorpseItemInfo {
+                Name = "Gem", Item = new MarketListing { ItemCategory = "Misc", MiscType = "Gem", GemMaterialType = material },
+            };
+            var gems = new LootRule { Category = "Misc", Values = { [Key("Misc", "miscType")] = "Gem" } };
+            var other = new LootRule { Category = "Misc", Values = { [Key("Misc", "miscType")] = "Other" } };
+
+            Assert.IsTrue(Loot.Matches(gems, Gem("Ruby")));
+            Assert.IsFalse(Loot.Matches(gems, Gem(null)), "the game's Gem kind without a material isn't a gem");
+            Assert.IsTrue(Loot.Matches(other, Gem(null)));
+            Assert.IsFalse(Loot.Matches(other, Gem("Ruby")));
+        }
+
+        [TestMethod]
+        public void SellableOnlySkipsWhatTheMarketWontTake() {
+            var rule = new LootRule { SellableOnly = true };
+            var attuned = new CorpseItemInfo { Name = "Attuned Sword", Sellable = false };
+            var sword = new CorpseItemInfo { Name = "Sword", Sellable = true };
+            var olderServer = new CorpseItemInfo { Name = "Sword" };
+
+            Assert.IsFalse(Loot.Matches(rule, attuned));
+            Assert.IsTrue(Loot.Matches(rule, sword));
+            Assert.IsTrue(Loot.Matches(rule, olderServer), "a server that doesn't say leaves the rule alone");
+            Assert.IsTrue(Loot.Matches(new LootRule(), attuned));
+        }
+
+        [TestMethod]
         public void TheFirstEnabledRuleDecides() {
             var list = new LootList {
                 Rules = {
@@ -450,7 +477,8 @@ namespace DaraletPlayer.Tests {
         public void ReadsACorpseAsTheServerWritesIt() {
             // nulls are left out of a corpse reply (PlayerUiProtocol omitNulls)
             var json = "{\"guid\":2147500000,\"status\":\"ok\",\"name\":\"Corpse of Drudge\",\"items\":[{\"guid\":2147500001,\"name\":\"Fire Tachi\","
-                + "\"stackSize\":1,\"value\":5000,\"burden\":250,\"salvageable\":true,\"material\":\"Steel\",\"workmanship\":6.5,"
+                + "\"stackSize\":1,\"value\":5000,\"burden\":250,\"salvageable\":true,\"sellable\":false,\"material\":\"Steel\","
+                + "\"workmanship\":6.5,"
                 + "\"item\":{\"id\":0,\"itemName\":\"Fire Tachi\",\"itemCategory\":\"Weapon\",\"weaponClass\":\"Martial\",\"itemTier\":7,"
                 + "\"weaponOffense\":1.12,\"coverage\":[],\"spells\":[\"Minor Swift Hunter\"]}}]}";
 
@@ -461,6 +489,7 @@ namespace DaraletPlayer.Tests {
             Assert.AreEqual("Corpse of Drudge", corpse.Name);
             Assert.AreEqual(2147500001u, item.Guid);
             Assert.IsTrue(item.Salvageable);
+            Assert.AreEqual(false, item.Sellable);
             Assert.AreEqual(6.5, item.Workmanship);
             Assert.AreEqual("Martial", item.Item.WeaponClass);
             Assert.AreEqual(1.12, item.Item.WeaponOffense);

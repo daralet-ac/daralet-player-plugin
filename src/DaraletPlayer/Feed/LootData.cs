@@ -48,6 +48,8 @@ namespace DaraletPlayer.Feed {
         /// <summary>Words the item's name has to have, all of them.</summary>
         [DataMember(Name = "nameContains")] public string NameContains;
         [DataMember(Name = "salvageableOnly")] public bool SalvageableOnly;
+        /// <summary>Only items the market would take (CorpseItemInfo.Sellable): not attuned, bound or unstable.</summary>
+        [DataMember(Name = "sellableOnly")] public bool SellableOnly;
         [DataMember(Name = "carvedJewelOnly")] public bool CarvedJewelOnly;
         /// <summary>Misc only: scrolls of spells this character hasn't learned (Loot.KnowsScrollSpell).</summary>
         [DataMember(Name = "unlearnedSpellsOnly")] public bool UnlearnedSpellsOnly;
@@ -150,7 +152,7 @@ namespace DaraletPlayer.Feed {
         }
 
         private void SetDefaults() {
-            Mode = CorpseMode.HighlightPopup;
+            Mode = CorpseMode.ConfirmBoth;
             Lists = new List<LootList> { new LootList(), ExampleLoot.Make() };
             ActiveList = new Dictionary<string, string>();
         }

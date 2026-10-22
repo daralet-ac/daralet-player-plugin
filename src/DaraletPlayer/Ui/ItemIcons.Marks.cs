@@ -102,6 +102,10 @@ namespace DaraletPlayer.Ui {
                     break;
                 }
 
+                case LootMarks.Dollar:
+                    DrawDollar(drawList, at, size, color, black);
+                    break;
+
                 default:
                     drawList.AddCircleFilled(center, radius * 0.7f, color);
                     drawList.AddCircle(center, radius * 0.7f, black);
@@ -128,6 +132,52 @@ namespace DaraletPlayer.Ui {
             }
 
             drawList.AddPolyline(ref points[0], points.Length, outline, ImDrawFlags.Closed, 1);
+        }
+
+        /// <summary>
+        /// A $ drawn with lines, not a font (ImGui's would be stretched and blurred at these sizes): a bar down the middle,
+        /// and an S of two half-ellipses over it, black under a thinner coloured one for the outline.
+        /// </summary>
+        private static void DrawDollar(ImDrawListPtr drawList, Vector2 at, float size, uint color, uint outline) {
+            var thickness = Math.Max(1.5f, size * 0.14f);
+            var center = at + new Vector2(size / 2, size / 2);
+            var rx = size * 0.27f;
+            var ry = size * 0.19f;
+
+            var half = Math.Max(0.75f, size * 0.06f);
+            var barTop = new Vector2(center.X - half, at.Y);
+            var barBottom = new Vector2(center.X + half, at.Y + size);
+            drawList.AddRectFilled(barTop, barBottom, color);
+            drawList.AddRect(barTop - new Vector2(0.5f, 0.5f), barBottom + new Vector2(0.5f, 0.5f), outline);
+
+            // the top bowl from its upper right, over the top and down the left to the middle, then the bottom bowl from
+            // the middle, round the right and the bottom to its lower left (angles clockwise from the right, y down)
+            const int steps = 12;
+            var points = new Vector2[steps * 2 - 1];
+            var top = center - new Vector2(0, ry);
+            var bottom = center + new Vector2(0, ry);
+
+            for (var i = 0; i < steps; i++) {
+                var t = i / (float)(steps - 1);
+                var upper = (-25 - t * 245) * Math.PI / 180;
+                points[i] = top + new Vector2((float)Math.Cos(upper) * rx, (float)Math.Sin(upper) * ry);
+            }
+
+            // the bowls meet in the middle: the bottom one starts a step past it, or a point twice over pinches the line
+            for (var i = 1; i < steps; i++) {
+                var t = i / (float)(steps - 1);
+                var lower = (-90 + t * 245) * Math.PI / 180;
+                points[steps - 1 + i] = bottom + new Vector2((float)Math.Cos(lower) * rx, (float)Math.Sin(lower) * ry);
+            }
+
+            var first = points[0];
+            var last = points[points.Length - 1];
+            drawList.AddPolyline(ref points[0], points.Length, outline, ImDrawFlags.None, thickness + 2);
+            drawList.AddCircleFilled(first, thickness / 2 + 1, outline);
+            drawList.AddCircleFilled(last, thickness / 2 + 1, outline);
+            drawList.AddPolyline(ref points[0], points.Length, color, ImDrawFlags.None, thickness);
+            drawList.AddCircleFilled(first, thickness / 2, color);
+            drawList.AddCircleFilled(last, thickness / 2, color);
         }
 
         private static uint ColorU32((byte R, byte G, byte B) color) {

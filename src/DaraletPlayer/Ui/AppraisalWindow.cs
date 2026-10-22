@@ -103,7 +103,10 @@ namespace DaraletPlayer.Ui {
                 RenderHeader(item);
 
                 if (item == null) {
-                    Widgets.TextDisabled("Getting the details...");
+                    // asked every frame: one the server didn't answer, or left out (the bank was shut), is asked again
+                    // now and then, so it shows once it can
+                    feed.Describe(guid);
+                    Widgets.TextDisabled(feed.DescribeWaitText(guid));
                     return;
                 }
 
@@ -314,7 +317,10 @@ namespace DaraletPlayer.Ui {
 
             if (!feed.Described.TryGetValue(compareWith, out var worn)) {
                 feed.Describe(compareWith);
-                Widgets.TextDisabled($"Getting {WornName(compareWith)}'s details...");
+                var noAnswer = feed.DescribeStateOf(compareWith) == DescribeState.NoAnswer;
+                Widgets.TextDisabled(noAnswer
+                    ? $"The server didn't answer about {WornName(compareWith)} (it may be busy). Asking again shortly..."
+                    : $"Getting {WornName(compareWith)}'s details...");
                 return;
             }
 
