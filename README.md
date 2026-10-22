@@ -106,6 +106,10 @@ on the other end.
 - **Market:** listing, cancelling and claiming only work when you're near a Market Broker (the market stand in
   Hebian-To). Searching works from anywhere. Market search and leaderboards come from the Daralet website, so they need
   an internet connection, the same as the website.
+- **Toolbar buttons:** tick **Toolbar button** under the Inventory, Map, Quests or Character window's settings, and the
+  game toolbar's backpack, Map (compass) or Contracts (quill) button, or the Character Information pack beside it (yellow
+  or red when you're overburdened), opens the plugin's window instead of the game's panel. The plugin draws its own copy of the button over the game's, lit while its window is open. The
+  game's own keys for those panels still open the game's.
 - **Map:** the map and its places update themselves: each time the plugin starts it checks GitHub for a newer map
   image and `locations.xml`, and downloads them if they've changed (into `Documents\Decal Plugins\Daralet Toolkit\world-data`).
   **Show...** on the World tab says what it found and has a **Check for map updates** button. Without an internet

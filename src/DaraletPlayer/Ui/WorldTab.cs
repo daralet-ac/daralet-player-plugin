@@ -72,6 +72,8 @@ namespace DaraletPlayer.Ui {
             CoreManager.Current.RenderFrame += Core_RenderFrame;
         }
 
+        public FloatingWindow MapWindow => mapWindow;
+
         /// <summary>
         /// Every frame from login, whether or not a map is showing: loads the map image a tile a frame, so it's ready before
         /// the World tab or the Map window is first opened, and picks up a new one World data downloaded.
@@ -358,6 +360,10 @@ namespace DaraletPlayer.Ui {
             Form.Section("Map window");
             mapWindow.RenderControls("The map in a window of its own, to keep on screen alongside the rest of the plugin. "
                 + "Drag its corner to size it. What it shows is set here (Show..., Text size).");
+
+            var first = true;
+            ToolbarButtons.RenderSetting(ref first, settings, ref settings.Data.ToolbarMap, "map", "Map (the compass)",
+                "map panel");
         }
 
         private void RenderArrowSettings() {

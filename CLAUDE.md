@@ -79,6 +79,13 @@ dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj
   may not hear the eaten release either, so a hotbar also takes it from `GameDrag.CaughtOverLastItem`. If the game drops
   the item anyway within three seconds, it's moved back to the container and slot it came from (`WatchDropped`).
   `[drag-in]` lines in log.txt.
+- **Decal's hooks crash the game before login is over.** `Actions.Heading`, `Landcell`, `LocationX`, `CurrentSelection`,
+  `ChatState` and the like read the player straight from the game's memory, which isn't there at character select or
+  while logging in: an AccessViolationException, which no catch stops, and acclient dies (seen from the Map window
+  drawing during login, `ACHooksClass.get_HeadingDegrees` in the Windows event log). Nothing reads one until
+  `CharacterFilter.LoginStatus == 3`: `FloatingWindow` stays hidden until then, `SelfPosition` gives nothing, and
+  `Hotkeys.ForTheGame` and `GameDrag` check first. The main window draws at character select, so a tab mustn't read them
+  before the feed is connected (it isn't until login).
 - **Every Decal event handler and render callback is wrapped in try/catch.** An exception escaping into Decal can crash the
   client.
 - **JSON:** System.Text.Json writes dictionaries as objects; `DataContractJsonSerializer` only reads them with
@@ -402,9 +409,19 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   tinted to its colour, and kept (400 at most); ImGui's text if one can't be made. Forms are two-column tables (`Form.BeginForm`, `Form.Label`), and rows of checkboxes and pickers wrap to the
   width (`Flow`) rather than running off the side.
 
-- **Character tab** (`Ui/CharacterTab.cs`): everything the Combat Focus appraisal shows under Character Stats (gear mods,
-  ratings, ward, armor level, resistances, jewel effects), from `@playerui character`, every two seconds while the tab is
-  open. Server side, `Player.GetStatsSheetSections` (`WorldObjects/Player_StatsSheet.cs`) builds the sections and both the
+- **Character tab** (`Ui/CharacterTab.cs`), and the **Character window** (`character`, hidden to start) that's the same in
+  a `FloatingWindow`: first what the game's Character Information panel says, then everything the Combat Focus appraisal
+  shows under Character Stats (gear mods, ratings, ward, armor level, resistances, jewel effects), from `@playerui
+  character`, every two seconds while either is open. The Character Information part is the client's own, worked out in
+  the plugin from Decal's `CharacterFilter` (`Birth`, `Age`, `Deaths`, `Attributes[...].Creation` and `.Base`,
+  `EffectiveAttribute`, `BurdenUnits`, and `GetCharProperty` for any int property the player description carries:
+  augmentations, chess rank, fishing, luminance augmentations) by `Feed/RetailCharacterInfo.cs`, in the panel's own
+  sentences, taken from `client_local_English.dat`'s string table `0x23000001` (played time's units from `0x23000006`,
+  365-day years and 30-day months as the server's `/age`). The resistance and regeneration words are the client's steps,
+  which `Player.GetNaturalResistanceString` and `GetRegenBonusString` in daralet-ACE copy (unused there); the
+  overburdened line is `EncumbranceSystem`'s sums. The panel's code isn't in the data, so the augmentations' order is the
+  plugin's, and the Seer's auras (Destruction, Invulnerability, Retribution, Hardening), which share their properties with
+  Nalicana's, aren't told apart: each luminance augmentation shows once, as Nalicana's. Server side, `Player.GetStatsSheetSections` (`WorldObjects/Player_StatsSheet.cs`) builds the sections and both the
   appraisal's text (`GetStatsSheetText`) and the reply (`PlayerUiCharacter`) come from it, so they can't disagree. Each
   line is split at its first ": " into stat and value (`StatsSectionInfo.Split`); in a wide window the sections go in two
   columns.
@@ -416,7 +433,38 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `Town.IsOnMap` leaving out dungeons). Each place's Go makes it the World tab's destination (`WorldTab.GoTo`). Abandon
   (asked twice) is `@playerui abandon <contract id>`, the Contracts panel's own `HandleActionAbandonContract`, which
   keeps the starter contracts until they're done (`Player.CanAbandonContract`). Stages are available, started (a
-  progress counter too) and done.
+  progress counter too) and done. The **Quests window** (`quests`, hidden to start) is the same list in a
+  `FloatingWindow`, sharing the tab's search and picked quest.
+
+- **Toolbar buttons** (`Ui/ToolbarButtons.cs`, `Ui/ToolbarButton.cs`, `Ui/ClientElements.cs`): the game toolbar's
+  backpack, Contracts (quill) and Map (compass) buttons, and the Character Information button in the indicators beside
+  it (the burden pack), drawn again over the game's own, opening the Inventory, Quests, Map and Character windows instead
+  of the game's panels; each on or off by itself (**Toolbar button** in its window's settings,
+  `SettingsData.ToolbarInventory`, `ToolbarQuests`, `ToolbarMap`, `ToolbarCharacter`, off to start). The rest is the game's.
+  The burden pack is element `0x100000F7` in the indicators' layout `0x21000071` (INDI `0x10000611`, the panel it's
+  checked against instead of TBAR), its pictures by burden `060074A2` / `060074A3` / `060074A4` (states E, F, 0x10), with
+  `0600749B` framed over it while its panel's open (its child `0x100000F2`'s state 3). The game's cut-offs aren't in the
+  data: the plugin goes yellow over 100% and red at 200%, where `GetBurdenMod` is 0 (`RetailCharacterInfo.BurdenLevel`,
+  from Decal's `Burden`, a percent). A button's pictures are drawn in layers, chosen each frame (`ToolbarButton.Pictures`).
+  Each is a hud of its own with no padding, border or background, placed every frame exactly on the game's button,
+  which `ClientElements.TryGetScreenBox` finds by element id (`UIElementManager::GetElement`), with its screen box from
+  `UIRegion::GetScreenX0` and friends, and shown only while it and the toolbar (TBAR) are visible. Those are the client's
+  own functions, called at the addresses AcClient gives them with plain `void*`s, never through AcClient's types: they
+  aren't blittable, so .NET throws on a call taking or returning one ("Pointers cannot reference marshaled structures",
+  from `UIElement.GetChildRecursive`, every frame), and their fields' places in memory aren't promised. A call that fails
+  is logged once and the lookups stop until the next start. `UIElementManager::s_pInstance` is read from its address
+  each time: UtilityBelt.Service's copy is read once, when its type is first used. A click on an ImGui window doesn't reach the game, so the game's button
+  underneath does nothing. The pictures (`toolbar-*.png` in `Resources/ui`, normal and `-open`, the game's state 1 and 6)
+  are lit while the window's open, as the game lights a panel's button. An item dragged from the plugin's lists onto the
+  backpack goes in the main pack; one dragged from the game's pack isn't covered (`GameDrag.Cover`), so the game hears it
+  let go over its own backpack underneath. The game draws its drag icon under every ImGui window, so the buttons draw it
+  again over themselves while it's held there (`GameDrag.DrawIcon`, as the hotbars do). The ids and pictures came from the toolbar's LayoutDesc, `0x21000016` in
+  `client_local_English.dat` (inside `0x21000070`, the frame, inside `0x21000005`, the main UI, as TBAR `0x10000603`):
+  backpack `0x100001B1` (`06004CF7`, open `06004CF8`), Contracts `0x1000055A` (`060069AE` / `060069AF`), Map `0x1000019A`
+  (`06001116` / `06001118`). daralet-ACE's `libs/dat-loader` reads LayoutDescs (`LayoutDesc`, `ElementDesc`, `MediaDesc`)
+  and exports textures (`Texture.GetBitmap`); it needs `ConfigManager.Initialize(new MasterConfiguration())`, code page
+  1252 registered, and `DatManager.PortalDat` set (for `BaseProperty`), without `DatManager.Initialize`, which fails on
+  Daralet's dats reading their iteration.
 
 - **Arena and Leaderboards tabs** (`Ui/ArenaTab.cs`, `Ui/LeaderboardsTab.cs`, `Feed/ArenaCommands.cs`,
   `Feed/Leaderboards.cs`): the leaderboards are the website's (`leaderboards.js`), read from `/api/leaderboards/...` with

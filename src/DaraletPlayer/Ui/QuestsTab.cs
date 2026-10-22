@@ -12,8 +12,8 @@ namespace DaraletPlayer.Ui {
     /// what you're doing first, with each one's stage, progress and timers; under it the picked quest's description, who
     /// starts it and who takes it back, and where they are, each a destination for the World tab's arrow.
     /// </summary>
-    internal class QuestsTab {
-        /// <summary>Quick enough to follow a kill count; it's only asked for while the tab is open.</summary>
+    internal class QuestsTab : IDisposable {
+        /// <summary>Quick enough to follow a kill count; it's only asked for while the tab or the window is open.</summary>
         private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
 
         private static readonly (string Value, string Label)[] Shows = {
@@ -21,7 +21,11 @@ namespace DaraletPlayer.Ui {
         };
 
         private readonly PlayerFeed feed;
+        private readonly Settings settings;
         private readonly Action<string, float, float> goTo;
+
+        /// <summary>The quests in a window of their own: the same list, search and picked quest as the tab's.</summary>
+        private readonly FloatingWindow window;
 
         private string search = "";
         private string show = "all";
@@ -31,12 +35,45 @@ namespace DaraletPlayer.Ui {
         private uint abandoning;
 
         /// <param name="goTo">Makes a spot the World tab's destination: a name, then map x (east) and y (north).</param>
-        public QuestsTab(PlayerFeed feed, Action<string, float, float> goTo) {
+        public QuestsTab(PlayerFeed feed, Settings settings, Action<string, float, float> goTo) {
             this.feed = feed;
+            this.settings = settings;
             this.goTo = goTo;
+
+            window = new FloatingWindow("quests", "Quests", settings, new Vector2(380, 120), RenderQuests,
+                visibleByDefault: false, defaultSize: new Vector2(560, 520));
+        }
+
+        public FloatingWindow Window => window;
+
+        public void Dispose() {
+            window.Dispose();
         }
 
         public void Render() {
+            RenderSettings();
+            ImGui.Spacing();
+            RenderQuests();
+        }
+
+        private void RenderSettings() {
+            if (!Form.SettingsHeader("quests-settings", "The Quests window: whether it's on screen, its size and "
+                + "background, and the game toolbar's button for it.")) {
+                return;
+            }
+
+            Form.Section("Quests window");
+            window.RenderControls("Your quests in a window of their own, to keep on screen while you play. Drag its "
+                + "corner to size it.");
+
+            var first = true;
+            ToolbarButtons.RenderSetting(ref first, settings, ref settings.Data.ToolbarQuests, "quests", "Contracts (the "
+                + "quill)", "Contracts panel");
+            ImGui.Spacing();
+        }
+
+        /// <summary>The quests, in the tab and in the window.</summary>
+        private void RenderQuests() {
             feed.Refresh(PlayerFeed.KindQuests, RefreshInterval);
 
             if (!feed.Supports(PlayerFeed.KindQuests)) {

@@ -355,8 +355,10 @@ namespace DaraletPlayer.Ui {
                     return;
                 }
 
-                // a window that's off doesn't ask what it would show (some ask the server)
-                if (!Visible) {
+                // a window that's off doesn't ask what it would show (some ask the server). None is drawn until login is
+                // over: what they draw reads Decal's hooks (your heading, your selection), and those read the game's
+                // memory, which isn't there yet: an access violation, which no catch stops and which kills the game.
+                if (!Visible || CoreManager.Current.CharacterFilter.LoginStatus != 3) {
                     SetHudVisible(false);
                     return;
                 }

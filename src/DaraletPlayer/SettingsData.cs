@@ -89,6 +89,20 @@ namespace DaraletPlayer {
         /// <summary>A healing, stamina or mana kit on a hotbar is used on you at once, with no target to pick.</summary>
         [DataMember(Name = "oneClickHeal")] public bool OneClickHeal;
 
+        // The game toolbar's buttons drawn again over its own, opening the plugin's window instead (ToolbarButtons).
+
+        /// <summary>The backpack opens the Inventory window.</summary>
+        [DataMember(Name = "toolbarInventory")] public bool ToolbarInventory;
+
+        /// <summary>The Contracts button opens the Quests window.</summary>
+        [DataMember(Name = "toolbarQuests")] public bool ToolbarQuests;
+
+        /// <summary>The Map button opens the Map window.</summary>
+        [DataMember(Name = "toolbarMap")] public bool ToolbarMap;
+
+        /// <summary>The Character Information button (the burden pack) opens the Character window.</summary>
+        [DataMember(Name = "toolbarCharacter")] public bool ToolbarCharacter;
+
         [DataMember(Name = "loot")] public LootData Loot;
 
         /// <summary>The hotbars (the Combat tab's Hotbars): their layout, looks and hotkeys, and each character's items.</summary>

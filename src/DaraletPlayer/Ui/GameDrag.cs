@@ -193,6 +193,11 @@ namespace DaraletPlayer.Ui {
                     return;
                 }
 
+                // the main window draws at character select too, where reading the selection is an access violation
+                if (CoreManager.Current.CharacterFilter.LoginStatus != 3) {
+                    return;
+                }
+
                 var id = CoreManager.Current.Actions.CurrentSelection;
                 var item = CoreManager.Current.WorldFilter[id];
                 var spell = SpellDrag.Spell;

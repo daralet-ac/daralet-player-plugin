@@ -26,6 +26,7 @@ namespace DaraletPlayer.Ui {
         private readonly QuestsTab questsTab;
         private readonly LootTab lootTab;
         private readonly LeaderboardsTab leaderboardsTab;
+        private readonly ToolbarButtons toolbarButtons;
         private readonly MarketApi api = new MarketApi();
 
         /// <summary>
@@ -48,10 +49,12 @@ namespace DaraletPlayer.Ui {
             inventoryTab = new InventoryTab(feed, icons, settings);
             marketTab = new MarketTab(feed, api, icons);
             arenaTab = new ArenaTab(feed, api);
-            characterTab = new CharacterTab(feed);
-            questsTab = new QuestsTab(feed, worldTab.GoTo);
+            characterTab = new CharacterTab(feed, settings);
+            questsTab = new QuestsTab(feed, settings, worldTab.GoTo);
             lootTab = new LootTab(feed, settings, icons);
             leaderboardsTab = new LeaderboardsTab(feed, api);
+            toolbarButtons = new ToolbarButtons(settings, icons, inventoryTab.CarriedWindow, questsTab.Window,
+                worldTab.MapWindow, characterTab.Window);
 
             Appraisal.Start(feed, settings, icons);
 
@@ -62,8 +65,9 @@ namespace DaraletPlayer.Ui {
                     + "screen.", fellowshipTab.Render),
                 ("Combat", "Your selected target's vitals, buffs, debuffs and threat table, a tracked target to watch "
                     + "alongside it, and hotbars of items to use with a click or a hotkey.", combatTab.Render),
-                ("Character", "Your character stats, as the Combat Focus appraisal shows them: gear mods, ratings, ward, "
-                    + "armor level, resistances and jewel effects.", characterTab.Render),
+                ("Character", "What the game's Character Information panel says (age, deaths, innate attributes, "
+                    + "augmentations, burden), then your character stats, as the Combat Focus appraisal shows them: gear "
+                    + "mods, ratings, ward, armor level, resistances and jewel effects.", characterTab.Render),
                 ("Quests", "Your quests, what the game's Contracts panel lists: their progress and timers, who gives them "
                     + "and who takes them back, and where, with an arrow to point you there.", questsTab.Render),
                 ("Loot", "Loot rules in named loot profiles you can swap, and what happens when you open a corpse or a "
@@ -227,7 +231,8 @@ namespace DaraletPlayer.Ui {
             }
 
             var pieces = new IDisposable[] {
-                hud, fellowshipTab, combatTab, worldTab, inventoryTab, marketTab, lootTab, api, icons,
+                hud, toolbarButtons, fellowshipTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
+                lootTab, api, icons,
             };
 
             foreach (var piece in pieces) {

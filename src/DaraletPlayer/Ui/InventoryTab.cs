@@ -62,6 +62,8 @@ namespace DaraletPlayer.Ui {
             InventoryChanges.Start();
         }
 
+        public FloatingWindow CarriedWindow => carriedWindow;
+
         /// <summary>Bank window is on, and the server can do it.</summary>
         private bool UsesWindow => settings.Data.BankWindow && feed.Supports(PlayerFeed.KindBankWindow);
 
@@ -173,6 +175,9 @@ namespace DaraletPlayer.Ui {
             if (Form.FlowCheck(ref first, "Retail##inventory-settings", ref settings.Data.CarriedRetail, RetailTip)) {
                 settings.Changed();
             }
+
+            ToolbarButtons.RenderSetting(ref first, settings, ref settings.Data.ToolbarInventory, "inventory", "backpack",
+                "inventory");
         }
 
         private void RenderBankWindowSettings() {

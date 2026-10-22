@@ -89,15 +89,13 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         public static bool ForTheGame() {
             try {
-                if (!GameInFront()) {
+                // first: ChatState reads the game's memory, which isn't there until login is over (an access violation
+                // no catch stops)
+                if (CoreManager.Current.CharacterFilter.LoginStatus != 3 || !GameInFront()) {
                     return false;
                 }
 
-                if (CoreManager.Current.Actions.ChatState || ImGui.GetIO().WantTextInput) {
-                    return false;
-                }
-
-                return CoreManager.Current.CharacterFilter.LoginStatus == 3;
+                return !CoreManager.Current.Actions.ChatState && !ImGui.GetIO().WantTextInput;
             }
             catch (Exception ex) {
                 PluginCore.LogFile($"Couldn't tell whether a hotkey is meant for the game: {ex.Message}");

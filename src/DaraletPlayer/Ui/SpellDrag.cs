@@ -30,6 +30,11 @@ namespace DaraletPlayer.Ui {
         /// <summary>The spell the game is dragging now, or 0 (an item, or no drag).</summary>
         public static int Spell { get; private set; }
 
+        /// <summary>
+        /// The item the game is dragging now, from anywhere (its packs, the ground, a corpse), or 0 (a spell, or no drag).
+        /// </summary>
+        public static int Item { get; private set; }
+
         /// <summary>Frames the left button has been up since the drag began, to forget the spell once it's let go.</summary>
         private static int upFrames;
         private static int updatedFrame = -1;
@@ -79,11 +84,13 @@ namespace DaraletPlayer.Ui {
             hooks.Clear();
             hook = null;
             Spell = 0;
+            Item = 0;
         }
 
         private static byte OnBeginDrag(uint first, uint second, byte third) {
             try {
                 Spell = SpellOf(first, second);
+                Item = Spell != 0 ? 0 : ItemOf(first, second);
                 upFrames = 0;
                 var spell = Spell != 0 ? $": spell {Spell}" : "";
                 PluginCore.LogFile($"[spell-drag] the game began a drag: 0x{first:X8}, 0x{second:X8}, {third}{spell}");
@@ -109,14 +116,25 @@ namespace DaraletPlayer.Ui {
             return 0;
         }
 
+        /// <summary>The item in a drag's arguments: the one above the spells' range; 0 when there's none.</summary>
+        private static int ItemOf(uint first, uint second) {
+            foreach (var id in new[] { first, second }) {
+                if (id > MaxSpellId) {
+                    return unchecked((int)id);
+                }
+            }
+
+            return 0;
+        }
+
         /// <summary>
-        /// Once a frame: the spell is forgotten a couple of frames after the button's let go, which gives the plugin's
+        /// Once a frame: the spell (or item) is forgotten a couple of frames after the button's let go, which gives the plugin's
         /// windows the frame it's let go in (and the one after, when the release was kept from the game) to take it.
         /// </summary>
         public static void Update() {
             var frame = ImGui.GetFrameCount();
 
-            if (Spell == 0 || updatedFrame == frame) {
+            if ((Spell == 0 && Item == 0) || updatedFrame == frame) {
                 return;
             }
 
@@ -127,6 +145,7 @@ namespace DaraletPlayer.Ui {
             }
             else if (++upFrames > 3) {
                 Spell = 0;
+                Item = 0;
             }
         }
     }

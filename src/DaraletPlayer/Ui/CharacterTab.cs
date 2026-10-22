@@ -1,16 +1,21 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using DaraletPlayer.Feed;
+using Decal.Adapter;
+using Decal.Adapter.Wrappers;
 using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
-    /// The Character tab: your character stats, everything the Combat Focus appraisal shows under Character Stats (gear mods,
-    /// ratings, ward, armor level, resistances, jewel effects), without needing a Combat Focus. The server works them out
-    /// (@playerui character, from the same code as the appraisal), so they're the totals from your gear and your buffs.
+    /// The Character tab, and the Character window that's the same in a window of its own: first what the game's Character
+    /// Information panel says (RetailCharacterInfo, from what the client knows), then your character stats, everything the
+    /// Combat Focus appraisal shows under Character Stats (gear mods, ratings, ward, armor level, resistances, jewel
+    /// effects), without needing a Combat Focus. The server works those out (@playerui character, from the same code as the
+    /// appraisal), so they're the totals from your gear and your buffs.
     /// </summary>
-    internal class CharacterTab {
+    internal class CharacterTab : IDisposable {
         /// <summary>Often enough to follow a buff or a change of gear; it's only asked for while the tab is open.</summary>
         private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(2);
 
@@ -18,16 +23,137 @@ namespace DaraletPlayer.Ui {
         private const float TwoColumnsWidth = 640;
 
         private readonly PlayerFeed feed;
+        private readonly Settings settings;
+        private readonly FloatingWindow window;
 
-        public CharacterTab(PlayerFeed feed) {
+        /// <summary>
+        /// Decal's played time, and when it was that: Decal only hears it now and then, so the time since is added on.
+        /// </summary>
+        private int ageSeen = -1;
+        private DateTime ageSeenAt;
+
+        public CharacterTab(PlayerFeed feed, Settings settings) {
             this.feed = feed;
+            this.settings = settings;
+
+            window = new FloatingWindow("character", "Character", settings, new Vector2(420, 100), RenderContents,
+                visibleByDefault: false, defaultSize: new Vector2(420, 640));
+        }
+
+        public FloatingWindow Window => window;
+
+        public void Dispose() {
+            window.Dispose();
         }
 
         public void Render() {
+            RenderSettings();
+            ImGui.Spacing();
+            RenderContents();
+        }
+
+        private void RenderSettings() {
+            if (!Form.SettingsHeader("character-settings", "The Character window: whether it's on screen, its size and "
+                + "background, and the game's Character Information button for it.")) {
+                return;
+            }
+
+            Form.Section("Character window");
+            window.RenderControls("This tab in a window of its own, to keep on screen while you play. Drag its corner to "
+                + "size it.");
+
+            var first = true;
+            ToolbarButtons.RenderSetting(ref first, settings, ref settings.Data.ToolbarCharacter, "character",
+                "Character Information (the pack by the link indicator, which shows your burden)",
+                "Character Information panel");
+            ImGui.Spacing();
+        }
+
+        /// <summary>What the game's Character Information panel says, then the stats: the tab's and the window's.</summary>
+        private void RenderContents() {
+            if (!ImGui.BeginChild("character-contents", Vector2.Zero, false)) {
+                ImGui.EndChild();
+                return;
+            }
+
+            RenderRetail();
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+            RenderStats();
+
+            ImGui.EndChild();
+        }
+
+        private void RenderRetail() {
+            Widgets.TextColored(ItemTooltip.Heading, "Character Information");
+            Widgets.Tip("What the game's Character Information panel says, from what your client knows.");
+
+            // Decal's hooks read the game's memory, which isn't there until login is over
+            if (CoreManager.Current.CharacterFilter.LoginStatus != 3) {
+                Widgets.TextDisabled("Not logged in yet.");
+                return;
+            }
+
+            var gap = false;
+
+            foreach (var line in RetailCharacterInfo.Lines(Facts())) {
+                if (line.Length == 0) {
+                    gap = true;
+                    continue;
+                }
+
+                // the panel's blank lines, but only one between paragraphs, however many it has
+                if (gap) {
+                    ImGui.Dummy(new Vector2(0, ImGui.GetTextLineHeight() * 0.5f));
+                    gap = false;
+                }
+
+                Widgets.TextWrapped(line);
+            }
+        }
+
+        /// <summary>What the panel's made from, read from Decal now.</summary>
+        private RetailCharacterFacts Facts() {
+            var character = CoreManager.Current.CharacterFilter;
+            var attributes = character.Attributes;
+            var innate = new[] {
+                CharFilterAttributeType.Strength, CharFilterAttributeType.Endurance, CharFilterAttributeType.Coordination,
+                CharFilterAttributeType.Quickness, CharFilterAttributeType.Focus, CharFilterAttributeType.Self,
+            };
+
+            return new RetailCharacterFacts {
+                Born = DateTime.SpecifyKind(character.Birth, DateTimeKind.Utc).ToLocalTime(),
+                AgeSeconds = Age(character.Age),
+                Deaths = character.Deaths,
+                Innate = innate.Select(a => attributes[a].Creation).ToArray(),
+                BaseStrength = attributes[CharFilterAttributeType.Strength].Base,
+                BaseEndurance = attributes[CharFilterAttributeType.Endurance].Base,
+                BuffedStrength = character.EffectiveAttribute[CharFilterAttributeType.Strength],
+                BurdenUnits = character.BurdenUnits,
+                Property = character.GetCharProperty,
+            };
+        }
+
+        /// <summary>Played time, counting on from when Decal last heard it.</summary>
+        private int Age(int age) {
+            if (age != ageSeen) {
+                ageSeen = age;
+                ageSeenAt = DateTime.UtcNow;
+            }
+
+            return age + (int)(DateTime.UtcNow - ageSeenAt).TotalSeconds;
+        }
+
+        private void RenderStats() {
             feed.Refresh(PlayerFeed.KindCharacter, RefreshInterval);
 
+            Widgets.TextColored(ItemTooltip.Heading, "Character Stats");
+            Widgets.Tip("Totals from your gear and your buffs, as the Combat Focus appraisal shows them. Updated every two "
+                + "seconds while this is open.");
+
             if (!feed.Supports(PlayerFeed.KindCharacter)) {
-                Widgets.TextColored(Colors.Warning, "This server is too old for the Character tab.");
+                Widgets.TextColored(Colors.Warning, "This server is too old for character stats.");
                 return;
             }
 
@@ -35,14 +161,6 @@ namespace DaraletPlayer.Ui {
 
             if (sections == null) {
                 Widgets.TextDisabled("Loading...");
-                return;
-            }
-
-            Widgets.TextDisabled("Totals from your gear and your buffs, as the Combat Focus appraisal shows them.");
-            Widgets.Tip("Updated every two seconds while this tab is open.");
-
-            if (!ImGui.BeginChild("character-stats", System.Numerics.Vector2.Zero, false)) {
-                ImGui.EndChild();
                 return;
             }
 
@@ -54,8 +172,6 @@ namespace DaraletPlayer.Ui {
             else {
                 RenderColumns(sections);
             }
-
-            ImGui.EndChild();
         }
 
         /// <summary>
