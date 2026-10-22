@@ -135,6 +135,15 @@ namespace DaraletPlayer.Ui {
                 return;
             }
 
+            // a caster in your hand is a tool used on something (its use flags), but on a bar it's there to be wielded:
+            // pressed again once it is, it does nothing rather than raise the reticle or cast it at your selection
+            var wornGear = item.Values(LongValueKey.EquipableSlots, 0) != 0 && item.Values(LongValueKey.EquippedSlots, 0) != 0;
+
+            if (wornGear && KindOf(item) == UseKind.Target && (useOn ?? HotbarUseOn.Auto) == HotbarUseOn.Auto) {
+                PluginCore.LogFile($"[use] {item.Name} ({id:X8}) from a hotbar: already wielded, nothing to do");
+                return;
+            }
+
             if (KindOf(item) != UseKind.Target || useOn == HotbarUseOn.Pick) {
                 Use(id);
                 return;
