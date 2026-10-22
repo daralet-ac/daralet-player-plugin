@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
     <OutputType>Library</OutputType>
@@ -7,7 +7,7 @@
     <RootNamespace>DaraletPlayer</RootNamespace>
     <!-- the dll players install, named for the plugin (the code keeps the DaraletPlayer namespace) -->
     <AssemblyName>DaraletToolkit</AssemblyName>
-    <Version>0.10.0</Version>
+    <Version>0.11.0</Version>
     <Product>Daralet Toolkit</Product>
     <OutputPath>..\..\bin\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
