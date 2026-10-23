@@ -168,7 +168,8 @@ namespace DaraletPlayer.Ui {
                 Fellows = settings.Data.MapShowFellows ? feed.Fellowship?.Members : null,
                 SelfGuid = feed.Hello?.Guid ?? 0,
                 Self = hasSelf ? new Vector2(x, y) : (Vector2?)null,
-                Heading = self.Heading,
+                // only asked for once there's a position: before login there's no player, and Decal's Heading crashes the client
+                Heading = hasSelf ? self.Heading : 0,
                 Destination = CurrentDestination(),
                 Highlight = highlight,
             };
