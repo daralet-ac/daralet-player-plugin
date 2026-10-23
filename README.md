@@ -6,7 +6,7 @@ the game with:
 - **Config**: settings profiles. Every setting the plugin has (its windows and where they are, every tab's options,
   your loot profiles and hotbars) is kept in a profile, and each character picks its own, so your main and your mule
   can each have their own set up, or share one. Save a profile to a file to keep it or give it to a friend, and add one
-  from a file.
+  from a file. Client UI Override has the game's toolbar buttons open the plugin's windows instead.
 - **World**: a map of Dereth with Daralet's towns, dungeons, lifestones, portals and more. It shows where you are, where
   your fellowship is (unless they're in a dungeon), and an arrow window that points you anywhere on the map, or follows a
   fellow. Search for a place by name, or right-click the map. Inside, the Dungeon window maps the dungeon you're in,
@@ -115,8 +115,8 @@ on the other end.
 - **Market:** listing, cancelling and claiming only work when you're near a Market Broker (the market stand in
   Hebian-To). Searching works from anywhere. Market search and leaderboards come from the Daralet website, so they need
   an internet connection, the same as the website.
-- **Toolbar buttons:** tick **Toolbar button** under the Inventory, Map, Quests or Character window's settings, and the
-  game toolbar's backpack, Map (compass) or Contracts (quill) button, or the Character Information pack beside it (yellow
+- **Toolbar buttons:** tick Inventory, Quests, Map or Character under **Client UI Override** on the Config tab, and the
+  game toolbar's backpack, Contracts (quill) or Map (compass) button, or the Character Information pack beside it (yellow
   or red when you're overburdened), opens the plugin's window instead of the game's panel. The plugin draws its own copy of the button over the game's, lit while its window is open. The
   game's own keys for those panels still open the game's.
 - **Map:** the map and its places update themselves: each time the plugin starts it checks GitHub for a newer map

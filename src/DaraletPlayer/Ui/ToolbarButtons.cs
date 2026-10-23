@@ -2,13 +2,14 @@ using System;
 using Decal.Adapter;
 using Decal.Adapter.Wrappers;
 using DaraletPlayer.Feed;
+using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
     /// The game toolbar's backpack, Contracts and Map buttons, and the Character Information button (the burden pack by
     /// the link indicator), each drawn again over the game's own to open the plugin's Inventory, Quests, Map and Character
-    /// windows instead (ToolbarButton). Each is on or off by itself, from its window's settings; the game's other buttons
-    /// are left to it.
+    /// windows instead (ToolbarButton). Each is on or off by itself, from the Config tab's Client UI Override section; the
+    /// game's other buttons are left to it.
     /// </summary>
     internal class ToolbarButtons : IDisposable {
         /// <summary>The burden pack's pictures: not overburdened, overburdened, very (BurdenLevel).</summary>
@@ -57,12 +58,45 @@ namespace DaraletPlayer.Ui {
                 + "being overburdened slows you all it can.";
         }
 
-        /// <summary>The checkbox for one button, in its window's settings (a Form.Flow row).</summary>
-        public static void RenderSetting(ref bool first, Settings settings, ref bool value, string id, string button,
-            string panel) {
-            if (Form.FlowCheck(ref first, $"Toolbar button##{id}-toolbar", ref value, $"Draws the game toolbar's {button} "
-                + $"button again over the game's own, opening this window instead of the game's {panel}. It lights up "
-                + "while the window is open, as the game's does. The game's own key for it still opens the game's.")) {
+        /// <summary>The Config tab's Client UI Override section: a checkbox for each button.</summary>
+        public static void RenderSettings(Settings settings) {
+            Form.Section("Client UI Override");
+            Form.Hint("Opens the plugin's windows from the game's own buttons. Each one ticked is drawn again over the "
+                + "game's, and clicking it opens the plugin's window instead of the game's panel, lit while the window is "
+                + "open. The game's own keys for those panels still open the game's.");
+
+            var data = settings.Data;
+            var first = true;
+            Setting(ref first, settings, ref data.ToolbarInventory, "Inventory", "backpack", "Inventory", "inventory");
+            Setting(ref first, settings, ref data.ToolbarQuests, "Quests", "Contracts (the quill)", "Quests",
+                "Contracts panel");
+            Setting(ref first, settings, ref data.ToolbarMap, "Map", "Map (the compass)", "Map", "map panel");
+            Setting(ref first, settings, ref data.ToolbarCharacter, "Character", "Character Information (the pack by "
+                + "the link indicator, which shows your burden)", "Character", "Character Information panel");
+
+            var allOn = data.ToolbarInventory && data.ToolbarQuests && data.ToolbarMap && data.ToolbarCharacter;
+            ImGui.BeginDisabled(allOn);
+
+            if (Form.FlowSmallButton(ref first, "Enable all##toolbar-all", "Ticks all four, so every one of these game "
+                + "buttons opens the plugin's window.")) {
+                data.ToolbarInventory = true;
+                data.ToolbarQuests = true;
+                data.ToolbarMap = true;
+                data.ToolbarCharacter = true;
+                settings.Changed();
+            }
+
+            ImGui.EndDisabled();
+            ImGui.Spacing();
+        }
+
+        /// <summary>The checkbox for one button, in a Form.Flow row.</summary>
+        private static void Setting(ref bool first, Settings settings, ref bool value, string label, string button,
+            string window, string panel) {
+            if (Form.FlowCheck(ref first, $"{label}##toolbar-{label}", ref value, $"Draws the game toolbar's {button} "
+                + $"button again over the game's own, opening Daralet Toolkit's {window} window instead of the game's "
+                + $"{panel}. It lights up while the window is open, as the game's does. The game's own key for it still "
+                + "opens the game's.")) {
                 settings.Changed();
             }
         }

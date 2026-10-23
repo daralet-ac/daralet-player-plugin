@@ -58,17 +58,13 @@ namespace DaraletPlayer.Ui {
 
         private void RenderSettings() {
             if (!Form.SettingsHeader("quests-settings", "The Quests window: whether it's on screen, its size and "
-                + "background, and the game toolbar's button for it.")) {
+                + "background. Its toolbar button is under the Config tab's Client UI Override.")) {
                 return;
             }
 
             Form.Section("Quests window");
             window.RenderControls("Your quests in a window of their own, to keep on screen while you play. Drag its "
                 + "corner to size it.");
-
-            var first = true;
-            ToolbarButtons.RenderSetting(ref first, settings, ref settings.Data.ToolbarQuests, "quests", "Contracts (the "
-                + "quill)", "Contracts panel");
             ImGui.Spacing();
         }
 

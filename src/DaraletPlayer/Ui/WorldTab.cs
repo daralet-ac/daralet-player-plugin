@@ -371,10 +371,6 @@ namespace DaraletPlayer.Ui {
             Form.Section("Map window");
             mapWindow.RenderControls("The map in a window of its own, to keep on screen alongside the rest of the plugin. "
                 + "Drag its corner to size it. What it shows is set here (Show..., Text size).");
-
-            var first = true;
-            ToolbarButtons.RenderSetting(ref first, settings, ref settings.Data.ToolbarMap, "map", "Map (the compass)",
-                "map panel");
         }
 
         private void RenderArrowSettings() {

@@ -63,6 +63,9 @@ namespace DaraletPlayer.Ui {
             else if (message != null && DateTime.UtcNow - messageAt < MessageFor) {
                 Widgets.TextColored(Colors.Good, message);
             }
+
+            ImGui.Spacing();
+            ToolbarButtons.RenderSettings(settings);
         }
 
         private string ProfileTip => $"The settings profile {Me} uses. Picking another swaps every setting at once, and "

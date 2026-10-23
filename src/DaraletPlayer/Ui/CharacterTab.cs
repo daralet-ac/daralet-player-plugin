@@ -54,18 +54,13 @@ namespace DaraletPlayer.Ui {
 
         private void RenderSettings() {
             if (!Form.SettingsHeader("character-settings", "The Character window: whether it's on screen, its size and "
-                + "background, and the game's Character Information button for it.")) {
+                + "background. Its toolbar button is under the Config tab's Client UI Override.")) {
                 return;
             }
 
             Form.Section("Character window");
             window.RenderControls("This tab in a window of its own, to keep on screen while you play. Drag its corner to "
                 + "size it.");
-
-            var first = true;
-            ToolbarButtons.RenderSetting(ref first, settings, ref settings.Data.ToolbarCharacter, "character",
-                "Character Information (the pack by the link indicator, which shows your burden)",
-                "Character Information panel");
             ImGui.Spacing();
         }
 
