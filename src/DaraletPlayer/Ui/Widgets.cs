@@ -149,7 +149,8 @@ namespace DaraletPlayer.Ui {
             return changed;
         }
 
-        private static void PopupText(string text) {
+        /// <summary>A popup's text, wrapped to a readable width, with a little room under it.</summary>
+        public static void PopupText(string text) {
             ImGui.PushTextWrapPos(ImGui.GetFontSize() * 30);
             ImGui.TextUnformatted(text ?? "");
             ImGui.PopTextWrapPos();

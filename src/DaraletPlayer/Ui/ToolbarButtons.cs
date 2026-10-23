@@ -2,7 +2,6 @@ using System;
 using Decal.Adapter;
 using Decal.Adapter.Wrappers;
 using DaraletPlayer.Feed;
-using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
     /// <summary>
@@ -58,30 +57,33 @@ namespace DaraletPlayer.Ui {
                 + "being overburdened slows you all it can.";
         }
 
-        /// <summary>A checkbox for each button, and Enable all, in a Form.Flow row of Client UI Override.</summary>
-        public static void RenderToggles(Settings settings) {
+        /// <summary>A checkbox for each button, in Client UI Override's Form.Flow row of toggles.</summary>
+        public static void RenderToggles(ref bool first, Settings settings) {
             var data = settings.Data;
-            var first = true;
             Setting(ref first, settings, ref data.ToolbarInventory, "Inventory", "backpack", "Inventory", "inventory");
             Setting(ref first, settings, ref data.ToolbarQuests, "Quests", "Contracts (the quill)", "Quests",
                 "Contracts panel");
             Setting(ref first, settings, ref data.ToolbarMap, "Map", "Map (the compass)", "Map", "map panel");
             Setting(ref first, settings, ref data.ToolbarCharacter, "Character", "Character Information (the pack by "
                 + "the link indicator, which shows your burden)", "Character", "Character Information panel");
+        }
 
-            var allOn = data.ToolbarInventory && data.ToolbarQuests && data.ToolbarMap && data.ToolbarCharacter;
-            ImGui.BeginDisabled(allOn);
+        /// <summary>Whether all four buttons are on.</summary>
+        public static bool AllOn(SettingsData data) {
+            return data.ToolbarInventory && data.ToolbarQuests && data.ToolbarMap && data.ToolbarCharacter;
+        }
 
-            if (Form.FlowSmallButton(ref first, "Enable all##toolbar-all", "Ticks all four toolbar buttons, so every "
-                + "one of them opens the plugin's window. Bank window and Loot window are left as they are.")) {
-                data.ToolbarInventory = true;
-                data.ToolbarQuests = true;
-                data.ToolbarMap = true;
-                data.ToolbarCharacter = true;
-                settings.Changed();
-            }
+        /// <summary>Whether any of the four buttons is on.</summary>
+        public static bool AnyOn(SettingsData data) {
+            return data.ToolbarInventory || data.ToolbarQuests || data.ToolbarMap || data.ToolbarCharacter;
+        }
 
-            ImGui.EndDisabled();
+        /// <summary>Turns all four buttons on or off, for Enable all and Disable all. The caller saves.</summary>
+        public static void SetAll(SettingsData data, bool on) {
+            data.ToolbarInventory = on;
+            data.ToolbarQuests = on;
+            data.ToolbarMap = on;
+            data.ToolbarCharacter = on;
         }
 
         /// <summary>The checkbox for one button, in a Form.Flow row.</summary>

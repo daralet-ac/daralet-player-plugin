@@ -480,8 +480,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   it (the burden pack), drawn again over the game's own, opening the Inventory, Quests, Map and Character windows instead
   of the game's panels; each on or off by itself, together in the Config tab's **Client UI Override** section
   (`ClientUiOverride`, with Bank window and Loot window; `ToolbarButtons.RenderToggles`; `SettingsData.ToolbarInventory`,
-  `ToolbarQuests`, `ToolbarMap`, `ToolbarCharacter`,
-  off to start). The rest is the game's.
+  `ToolbarQuests`, `ToolbarMap`, `ToolbarCharacter`, off to start), all six in one row under **Enable all** and
+  **Disable all**. Enable all asks first when it would turn Bank window or Loot window on (`Windows.ConfirmAllOn`), as
+  their own checkboxes do, and leaves them off on a server too old for them; Disable all says what follows when either
+  was on (`Windows.NoticeAllOff`). The rest is the game's.
   The burden pack is element `0x100000F7` in the indicators' layout `0x21000071` (INDI `0x10000611`, the panel it's
   checked against instead of TBAR), its pictures by burden `060074A2` / `060074A3` / `060074A4` (states E, F, 0x10), with
   `0600749B` framed over it while its panel's open (its child `0x100000F2`'s state 3). The game's cut-offs aren't in the
