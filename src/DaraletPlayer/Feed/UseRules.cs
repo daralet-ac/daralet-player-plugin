@@ -106,11 +106,41 @@ namespace DaraletPlayer.Feed {
         };
 
         /// <summary>
+        /// The one place a ring or bracelet goes: the place asked for (a paperdoll square), else a free hand or wrist, the
+        /// left first, else the left one's. The server only takes a single place for these (an item already worn in any of
+        /// the places sent is in the way), and Decal's plain AutoWield doesn't pick one. 0 for anything else, which goes
+        /// where the game's auto-wield puts it.
+        /// </summary>
+        /// <param name="slots">Where the item goes (its EquipableSlots).</param>
+        /// <param name="asked">The place it was dropped on, or 0.</param>
+        public static uint PlaceFor(uint slots, uint asked, IEnumerable<WornItem> worn) {
+            foreach (var pair in EitherSlots) {
+                if ((slots & ~pair) != 0 || slots == 0) {
+                    continue;
+                }
+
+                var choice = slots & asked;
+
+                if (choice == 0) {
+                    var taken = worn.Aggregate(0u, (all, w) => all | (w.Slots & pair));
+                    choice = (slots & ~taken) != 0 ? slots & ~taken : slots;
+                }
+
+                // its lowest bit: the left hand or wrist
+                return choice & unchecked(~choice + 1);
+            }
+
+            return 0;
+        }
+
+        /// <summary>
         /// What you're wearing that has to come off before an item can go on, so it replaces it rather than the server
         /// saying "You must remove your..." (Player.HandleActionGetAndWieldItem; the game client takes these off itself, a
         /// plugin's wield doesn't). Empty when it fits as it is.
         /// <list type="bullet">
-        /// <item>Armor and clothing: everything covering any of its slots.</item>
+        /// <item>Armor and clothing: everything whose coverage (ClothingPriority, Decal's Coverage) shares a layer with
+        /// its, as the server's GetEquippedClothingArmor checks. Their slots can overlap without a clash: a shirt and
+        /// pants both have AbdomenWear. Without a coverage, everything worn in any of its slots.</item>
         /// <item>A ring or bracelet: nothing while either hand or wrist is free, otherwise the left one's.</item>
         /// <item>A weapon in the main hand: what's there, and for a two-hander, a caster or a bow, the shield or off-hand
         /// weapon too (the server's CheckWeaponCollision).</item>
@@ -120,7 +150,8 @@ namespace DaraletPlayer.Feed {
         /// </summary>
         /// <param name="slots">Where the item goes (its EquipableSlots).</param>
         /// <param name="bothHands">It needs the off hand empty: a two-hander, a caster, or a bow (not a thrown weapon).</param>
-        public static List<int> ToTakeOff(uint slots, bool bothHands, IEnumerable<WornItem> worn) {
+        /// <param name="coverage">The item's ClothingPriority, or 0.</param>
+        public static List<int> ToTakeOff(uint slots, bool bothHands, IEnumerable<WornItem> worn, uint coverage = 0) {
             var wearing = worn.Where(w => w.Slots != 0).ToList();
             var off = new List<int>();
 
@@ -164,7 +195,7 @@ namespace DaraletPlayer.Feed {
                 return off;
             }
 
-            TakeOff(w => (w.Slots & slots) != 0);
+            TakeOff(w => coverage != 0 && w.Coverage != 0 ? (w.Coverage & coverage) != 0 : (w.Slots & slots) != 0);
             return off;
         }
     }
@@ -174,6 +205,8 @@ namespace DaraletPlayer.Feed {
         public int Id;
         /// <summary>Where it's worn (its EquippedSlots).</summary>
         public uint Slots;
+        /// <summary>The layers it covers, for armor and clothing (its ClothingPriority), or 0.</summary>
+        public uint Coverage;
         /// <summary>A two-hander, caster or bow: nothing can be in the off hand with it.</summary>
         public bool BothHands;
     }

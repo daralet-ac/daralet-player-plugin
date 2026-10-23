@@ -76,6 +76,15 @@ dotnet test tests/DaraletPlayer.Tests/DaraletPlayer.Tests.csproj
   opened (a `/bank deposit`) didn't show in GetByContainer until the bank was reopened, though the client and the item's
   own `LongValueKey.Container` had it. The bank tab groups `WorldFilter.GetAll()` by each object's Container instead
   (`InventoryBrowser.Snapshot`, twice a second, and the frame after Decal hears any object change, `InventoryChanges`, so a move shows the moment the server answers).
+- **Decal throws away a vendor's unique item once you buy it.** A unique item (one sold back to a vendor, a market
+  listing) keeps its guid when bought, and Decal knows that guid as one of the vendor's items. The server answers a
+  purchase with the item's CreateObject (your pack as its container) and then the vendor's list again
+  (`vendor.ApproachVendor` at the end of `Player.FinalizeBuyTransaction`), and Decal releases the vendor items missing
+  from the new list, guid and all: the bought item, which then stays out of every list until the next login. Moving it
+  between packs doesn't help (the server only updates its container, which Decal no longer has); dropping it and
+  picking it up does (a fresh CreateObject). The plugin can't make the server send one, so the server does: a tenth
+  of a second after the purchase it sends each bought unique item again (`Player.ResendBoughtUniques` in daralet-ACE). For five seconds after a buy or a wield every item message (what the client sent, the server's answers,
+  Decal's changes and releases) goes in log.txt as `[inventory]` lines (`InventoryChanges.Watch.cs`).
 - **The game drops an item dragged from its pack and let go over a plugin window.** ImGui windows aren't game panels, so
   to the game the button came up over the world. `GameDrag` eats that WM_LBUTTONUP (Decal's `WindowMessage`, `e.Eat`)
   when it's over a window the drag was held over last frame (`GameDrag.Cover`, from `FloatingWindow` and `PlayerHud`) and
@@ -554,7 +563,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   unless it's a stack of the same thing), which is how items are reordered within a pack. **Worn**
   (`SettingsData.InventoryShowWorn`) slides out a paperdoll of what you're wearing on the right (`InventoryBrowser.RenderWorn`), laid
   out as the game's equipment panel by `EquipSlots` (the game's EquipMask bits, one square per slot; an item covering
-  several shows in each; an empty one shows the game's own picture of it, `EquipSlot.EmptyIcon`, found in portal.dat by the
+  several shows in each; Pants leave out AbdomenWear, which shirts have too; an empty one shows the game's own picture of it, `EquipSlot.EmptyIcon`, found in portal.dat by the
   bevelled blue frame they share and drawn as it is, `ItemIcons.DrawPlain`). The window grows by the panel's width when
   Worn is turned on and shrinks when it's off, once per window (`wornShownAs`, by host), and the Worn checkbox is above the
   packs, where it can't be squeezed out. Its items have the list's hover and right-click; dragging one onto a pack or onto
@@ -565,9 +574,13 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   or Use in its right-click menu, does what a double-click in the game's inventory does. Gear goes on with the game's own
   auto-wield (`Actions.AutoWield`), or comes off into the main pack. The server won't put anything over a taken slot
   ("You must remove your..."), and a plugin's AutoWield doesn't take anything off first the way the client's double-click
-  does, so `ItemUser.Wield` takes off what's in the way (`UseRules.ToTakeOff`: covering armor, the left ring or bracelet
-  when both are full, the main hand, the off hand for a two-hander, caster or bow, after the server's
-  `CheckWeaponCollision`) one item at a time, 250ms apart, then wields; dropping onto a Worn square does the same. A tool
+  does, so `ItemUser.Wield` takes off what's in the way (`UseRules.ToTakeOff`: armor and clothing sharing a layer of its
+  coverage, Decal's `Coverage`, the server's ClothingPriority, since a shirt and pants share AbdomenWear without
+  clashing; the left ring or bracelet when both are full, the main hand, the off hand for a two-hander, caster or bow, after the server's
+  `CheckWeaponCollision`) one item at a time, 250ms apart, then wields; dropping onto a Worn square does the same. A ring
+  or bracelet is wielded into one named place (`UseRules.PlaceFor`: the square dropped on, else a free one, left
+  first), sent as the client's own `AcClient.CM_Inventory.Event_GetAndWieldItem(item, place)`: neither Decal's plain
+  `AutoWield(id)` nor its explicit `AutoWield(id, place, 1, 0)` ever put one on the left wrist. A tool
   whose use flags have target bits (ACE's `Usable`, high 16 bits) and whose source bits (low 16) allow where it is (a
   caster's `SourceWieldedTargetRemote` only once wielded, so a caster in a pack is wielded) turns the mouse into a reticle (drawn on the foreground draw list: a plugin can't change the
   game's cursor), and the next item clicked in any list gets it (`Actions.ApplyItem`). Anything else is `UseItem`. A target
@@ -577,7 +590,7 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   tool down. Decal's names for these keys come from the network header flags: `LongValueKey.Unknown10` is the use flags
   (flag 0x10), `UsageMask` the TargetType, `Category` the ItemType. Each use logs them to log.txt (`[use]` lines).
 
-- **Dragging into the world** (`Ui/WorldDrop.cs`): an item (or pack) let go outside every ImGui window is given to what it was let go over, or dropped on the ground, as the game's own pack does. A plugin can't ask what's under the mouse, so the selection is cleared and the game is posted a left click there (`PostMessage` to `Decal.Hwnd`): whatever it selects within 300ms gets the item (`Actions.GiveItem`); nothing, and it's dropped (`Actions.DropItem`). Yourself does nothing; the bank's items are left alone. `[drop]` lines in log.txt. The game's own panels aren't ImGui windows, so letting go over one counts as the world.
+- **Dragging into the world** (`Ui/WorldDrop.cs`): an item (or pack) let go outside every ImGui window is given to what it was let go over, or dropped on the ground, as the game's own pack does. A plugin can't ask what's under the mouse, so the selection is cleared and the game is posted a left click there (`PostMessage` to `Decal.Hwnd`): whatever it selects within 300ms gets the item (`Actions.GiveItem`); nothing, and it's dropped (`Actions.DropItem`). Yourself does nothing; the bank's items are left alone. `[drop]` lines in log.txt. The game's own panels aren't ImGui windows, so letting go over one counts as the world, except the vendor window: while a vendor is open (`Actions.VendorId`), an item let go over the panel along the bottom it's shown in (ENVP, `ClientElements.Environment`, which also shows chests and corpses) goes on the sell list (`Actions.VendorAddSellList`) instead of on the ground, and while it's held there the drag's icon has the green drop ring on it (`WorldDrop.OverVendor` decides both). The vendor window's own layout is `0x21000012` (found by searching the layouts for gmVendorUI's element type `0x10000017`, which `gmVendorUI::GetUIElementType` returns), but the game never makes its root element, `0x100000B7`: `GetElement` finds nothing by that id.
 - **Dragging in from the game** (`Ui/GameDrag.cs`, first version): a plugin can't see the game's drag, so it's inferred: the left button went down outside every ImGui window (ImGui counts no window hovered while a button held from outside is down), moved, and came up over one of ours, and the dragged thing is the game's selection. What can be dragged in is anything on the ground (`GameDraggedGroundItem`): let go over a spot (`InventoryBrowser.GameDropTarget`), a pack goes in a pack slot (or takes a pack's place), anything else in a pack or at a grid slot, by `MoveItem`; elsewhere it shows red. While it's held over our windows ImGui hovers nothing, so the drag is drawn by hand: the pack's icon under the mouse over an inventory window (`GameDrag.DrawIcon`; the game's own drag icon isn't drawn over ImGui windows), and the green ring or red circle over the spot it's over (`GameDrag.OverLastItem`, the mouse against the spot's square). Each drop spot's verdict is logged when it changes (`[drop]` lines, `LogDropMark`). `[drag-in]` lines in log.txt say what was seen.
 - **Item icons** (`Ui/ItemIcons.cs`, `Feed/IconLayers.cs`): every item list (bank, Loot tab, Corpse window, Market) draws
   an item's underlay, icon and overlay before its name. UtilityBelt.Service's only icon loader is meant for its scripts

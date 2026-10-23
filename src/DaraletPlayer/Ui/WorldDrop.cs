@@ -12,6 +12,10 @@ namespace DaraletPlayer.Ui {
     /// the game is sent a left click where the item was let go, which selects whatever is there. If something is selected
     /// a moment later, the item is given to it (Actions.GiveItem, the server's own give, which an NPC or player can refuse);
     /// if nothing is, it's dropped (Actions.DropItem).
+    ///
+    /// The game's own windows aren't in the world, but the click can't tell: one let go over the vendor window went on the
+    /// ground. So while a vendor is open (Actions.VendorId), a drop on the panel it's shown in is put on its sell list
+    /// instead (Actions.VendorAddSellList), as the game's pack does.
     /// </summary>
     internal static class WorldDrop {
         private const int WM_LBUTTONDOWN = 0x0201;
@@ -37,6 +41,13 @@ namespace DaraletPlayer.Ui {
             }
 
             var actions = CoreManager.Current.Actions;
+
+            if (OverVendor(at)) {
+                PluginCore.LogFile($"[drop] 0x{id:X8} put on the vendor's sell list");
+                actions.VendorAddSellList(id);
+                return;
+            }
+
             item = id;
             clickedAt = DateTime.UtcNow;
 
@@ -47,6 +58,14 @@ namespace DaraletPlayer.Ui {
             var window = CoreManager.Current.Decal.Hwnd;
             PostMessage(window, WM_LBUTTONDOWN, new IntPtr(MK_LBUTTON), spot);
             PostMessage(window, WM_LBUTTONUP, IntPtr.Zero, spot);
+        }
+
+        /// <summary>
+        /// A spot on the panel an open vendor is shown in, where an item let go goes on its sell list. The drag's green ring
+        /// is drawn there by the same test.
+        /// </summary>
+        public static bool OverVendor(Vector2 at) {
+            return CoreManager.Current.Actions.VendorId != 0 && ClientElements.IsOver(ClientElements.Environment, at);
         }
 
         /// <summary>Every frame: once the click has had time to select something, gives the item to it or drops it.</summary>

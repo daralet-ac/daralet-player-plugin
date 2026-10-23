@@ -24,6 +24,12 @@ namespace DaraletPlayer.Ui {
         public const uint Indicators = 0x10000611;
         public const uint IndicatorBurden = 0x100000F7;
 
+        /// <summary>
+        /// The panel along the bottom (UIElement_ID ENVP) where the game shows an open vendor (its layout 0x21000012,
+        /// whose own root element 0x100000B7 the game never makes), chest or corpse.
+        /// </summary>
+        public const uint Environment = 0x100005FD;
+
         /// <summary>Set once a call has failed: logged once, and nothing is looked up again until the next start.</summary>
         private static bool broken;
 
@@ -72,6 +78,12 @@ namespace DaraletPlayer.Ui {
                     + ex);
                 return false;
             }
+        }
+
+        /// <summary>Whether a spot in the game window is on the element, while it's shown.</summary>
+        public static bool IsOver(uint id, Vector2 at) {
+            return TryGetScreenBox(id, id, out var min, out var max)
+                && at.X >= min.X && at.X < max.X && at.Y >= min.Y && at.Y < max.Y;
         }
 
         // An element starts with its region, so the same pointer serves both.

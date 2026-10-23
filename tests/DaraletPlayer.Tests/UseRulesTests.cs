@@ -61,6 +61,37 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
+        public void ClothingClashesByCoverageNotSlots() {
+            // a shirt and pants share AbdomenWear but not a layer (ClothingPriority), as the server checks
+            const uint shirtCoverage = 0x08 | 0x20 | 0x40;
+            const uint pantsCoverage = 0x02 | 0x04 | 0x10;
+            var shirtSlots = EquipSlots.ChestWear | EquipSlots.AbdomenWear | EquipSlots.UpperArmWear | EquipSlots.LowerArmWear;
+            var pantsSlots = EquipSlots.AbdomenWear | EquipSlots.UpperLegWear | EquipSlots.LowerLegWear;
+            var shirt = new WornItem { Id = 1, Slots = shirtSlots, Coverage = shirtCoverage };
+
+            Assert.AreEqual(0, UseRules.ToTakeOff(pantsSlots, false, new[] { shirt }, pantsCoverage).Count);
+            CollectionAssert.AreEqual(new[] { 1 }, UseRules.ToTakeOff(shirtSlots, false, new[] { shirt }, shirtCoverage));
+        }
+
+        [TestMethod]
+        public void ARingOrBraceletGoesInOnePlace() {
+            var bracelet = EquipSlots.WristWearLeft | EquipSlots.WristWearRight;
+            var right = new[] { Worn(1, EquipSlots.WristWearRight) };
+            var both = new[] { Worn(1, EquipSlots.WristWearRight), Worn(2, EquipSlots.WristWearLeft) };
+
+            Assert.AreEqual(EquipSlots.WristWearLeft, UseRules.PlaceFor(bracelet, 0, new WornItem[0]));
+            Assert.AreEqual(EquipSlots.WristWearLeft, UseRules.PlaceFor(bracelet, 0, right));
+            Assert.AreEqual(EquipSlots.WristWearRight, UseRules.PlaceFor(bracelet, 0, new[] { Worn(2, EquipSlots.WristWearLeft) }));
+            Assert.AreEqual(EquipSlots.WristWearLeft, UseRules.PlaceFor(bracelet, 0, both));
+            Assert.AreEqual(EquipSlots.WristWearRight, UseRules.PlaceFor(bracelet, EquipSlots.WristWearRight, both));
+            Assert.AreEqual(0u, UseRules.PlaceFor(EquipSlots.NeckWear, 0, both));
+
+            // dropped on the right wrist, the right one comes off
+            CollectionAssert.AreEqual(new[] { 1 }, UseRules.ToTakeOff(EquipSlots.WristWearRight, false, both));
+            Assert.AreEqual(0, UseRules.ToTakeOff(EquipSlots.WristWearLeft, false, right).Count);
+        }
+
+        [TestMethod]
         public void ARingGoesOnAFreeHandOrSwapsTheLeftOne() {
             var ring = EquipSlots.FingerWearLeft | EquipSlots.FingerWearRight;
 

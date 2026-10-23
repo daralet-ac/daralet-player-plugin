@@ -48,6 +48,11 @@ namespace DaraletPlayer.Ui {
                 drawList.AddText(at, ImGui.GetColorU32(ImGuiCol.Text), name);
             }
 
+            // held over the vendor's panel, the ring says it'll go on the sell list, as over a slot of ours
+            if (WillWorldDrop(id) && WorldDrop.OverVendor(ImGui.GetMousePos())) {
+                icons.DrawDropArt(drawList, at, at + new Vector2(size, size), true);
+            }
+
             ImGui.EndDragDropSource();
         }
 
@@ -69,11 +74,19 @@ namespace DaraletPlayer.Ui {
             var id = dragged;
             dragged = 0;
 
-            var inBank = holders.Any(h => h.InBank && (h.Id == id || ItemsIn(h.Id).Any(i => i.Id == id)));
-
-            if (!inBank) {
+            if (CanWorldDrop(id)) {
                 WorldDrop.Start(id, ImGui.GetMousePos());
             }
+        }
+
+        /// <summary>Let go now, the item would go into the world: it's over no window, and it isn't the bank's.</summary>
+        private bool WillWorldDrop(int id) {
+            return !ImGui.IsWindowHovered(ImGuiHoveredFlags.AnyWindow | ImGuiHoveredFlags.AllowWhenBlockedByActiveItem)
+                && CanWorldDrop(id);
+        }
+
+        private bool CanWorldDrop(int id) {
+            return !holders.Any(h => h.InBank && (h.Id == id || ItemsIn(h.Id).Any(i => i.Id == id)));
         }
 
         /// <summary>
@@ -206,7 +219,7 @@ namespace DaraletPlayer.Ui {
 
                 // one already worn stays where it is
                 if (item != null && item.Values(LongValueKey.EquippedSlots, 0) == 0) {
-                    ItemUser.Wield(dragged);
+                    ItemUser.Wield(dragged, slotMask);
                     SnapshotSoon();
                 }
 

@@ -19,6 +19,9 @@ namespace DaraletPlayer.Ui {
 
         /// <summary>The item to put on once what's in its way is off, or 0.</summary>
         private static int wielding;
+
+        /// <summary>The one place it goes (UseRules.PlaceFor), or 0 for the game's auto-wield to choose.</summary>
+        private static uint wieldingPlace;
         private static readonly Queue<int> inTheWay = new Queue<int>();
 
         /// <summary>The worn item coming off now, or 0.</summary>
@@ -31,8 +34,11 @@ namespace DaraletPlayer.Ui {
             CoreManager.Current.Actions.MoveItem(id, CoreManager.Current.CharacterFilter.Id, 0, false);
         }
 
-        /// <summary>Puts an item on, first taking off what's worn where it goes (UseRules.ToTakeOff).</summary>
-        public static void Wield(int id) {
+        /// <summary>
+        /// Puts an item on, first taking off what's worn where it goes (UseRules.ToTakeOff). A ring or bracelet goes in the
+        /// place asked for (the paperdoll square it was dropped on), else a free one.
+        /// </summary>
+        public static void Wield(int id, uint asked = 0) {
             var item = CoreManager.Current.WorldFilter[id];
 
             if (item == null) {
@@ -40,10 +46,13 @@ namespace DaraletPlayer.Ui {
             }
 
             var slots = unchecked((uint)item.Values(LongValueKey.EquipableSlots, 0));
-            var off = UseRules.ToTakeOff(slots, BothHands(item), WornItems(except: id));
+            var coverage = unchecked((uint)item.Values(LongValueKey.Coverage, 0));
+            var worn = WornItems(except: id);
+            var place = UseRules.PlaceFor(slots, asked, worn);
+            var off = UseRules.ToTakeOff(place != 0 ? place : slots, BothHands(item), worn, coverage);
 
             if (off.Count == 0) {
-                CoreManager.Current.Actions.AutoWield(id);
+                PutOn(id, place);
                 return;
             }
 
@@ -51,6 +60,7 @@ namespace DaraletPlayer.Ui {
             PluginCore.LogFile($"[use] {item.Name}: taking off {string.Join(", ", names)} first");
 
             wielding = id;
+            wieldingPlace = place;
             takingOff = 0;
             lastOffAt = DateTime.MinValue;
             inTheWay.Clear();
@@ -66,6 +76,7 @@ namespace DaraletPlayer.Ui {
                 .Select(o => new WornItem {
                     Id = o.Id,
                     Slots = unchecked((uint)o.Values(LongValueKey.EquippedSlots, 0)),
+                    Coverage = unchecked((uint)o.Values(LongValueKey.Coverage, 0)),
                     BothHands = BothHands(o),
                 })
                 .ToList();
@@ -108,10 +119,26 @@ namespace DaraletPlayer.Ui {
 
             // gone while the rest came off (dropped, banked): nothing to put on
             if (CoreManager.Current.WorldFilter[wielding] != null) {
-                CoreManager.Current.Actions.AutoWield(wielding);
+                PutOn(wielding, wieldingPlace);
             }
 
             wielding = 0;
+        }
+
+        /// <summary>
+        /// The wield itself: where the game's auto-wield puts it, or in the one place named, sent as the client's own
+        /// GetAndWieldItem (CM_Inventory::Event_GetAndWieldItem, what the game sends for a drop on its paperdoll), which the
+        /// server checks as ever. Decal's AutoWield with explicit placement sent nothing the server acted on for the left
+        /// wrist or hand.
+        /// </summary>
+        private static void PutOn(int id, uint place) {
+            if (place == 0) {
+                CoreManager.Current.Actions.AutoWield(id);
+                return;
+            }
+
+            PluginCore.LogFile($"[use] {CoreManager.Current.WorldFilter[id]?.Name} ({id:X8}): wielding in 0x{place:X8}");
+            AcClient.CM_Inventory.Event_GetAndWieldItem(unchecked((uint)id), place);
         }
 
         /// <summary>

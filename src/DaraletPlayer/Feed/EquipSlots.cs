@@ -82,7 +82,8 @@ namespace DaraletPlayer.Feed {
             Slot("Hands", HandWear, 1, 5, 0x06006D7D),
             Slot("Upper legs", UpperLegArmor, 2, 5, 0x06006D89),
             Slot("Right ring", FingerWearRight, 3, 5, 0x06000F6B),
-            Slot("Pants", AbdomenWear | UpperLegWear | LowerLegWear, 4, 5, 0x060032C4),
+            // not AbdomenWear: shirts are worn there too, and pants always cover a leg
+            Slot("Pants", UpperLegWear | LowerLegWear, 4, 5, 0x060032C4),
 
             Slot("Lower legs", LowerLegArmor, 2, 6, 0x06006D83),
 

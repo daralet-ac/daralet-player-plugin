@@ -35,5 +35,16 @@ namespace DaraletPlayer.Tests {
             Assert.AreEqual(7u, EquipSlots.ItemIn(EquipSlots.All.Single(s => s.Name == "Lower arms"), worn));
             Assert.AreEqual(0u, EquipSlots.ItemIn(EquipSlots.All.Single(s => s.Name == "Head"), worn));
         }
+
+        [TestMethod]
+        public void AShirtDoesntShowAsPants() {
+            var shirt = (Guid: 7u, Worn: EquipSlots.ChestWear | EquipSlots.AbdomenWear | EquipSlots.UpperArmWear
+                | EquipSlots.LowerArmWear);
+            var pants = (Guid: 8u, Worn: EquipSlots.AbdomenWear | EquipSlots.UpperLegWear | EquipSlots.LowerLegWear);
+
+            Assert.AreEqual(7u, EquipSlots.ItemIn(EquipSlots.All.Single(s => s.Name == "Shirt"), new[] { shirt }));
+            Assert.AreEqual(0u, EquipSlots.ItemIn(EquipSlots.All.Single(s => s.Name == "Pants"), new[] { shirt }));
+            Assert.AreEqual(8u, EquipSlots.ItemIn(EquipSlots.All.Single(s => s.Name == "Pants"), new[] { shirt, pants }));
+        }
     }
 }
