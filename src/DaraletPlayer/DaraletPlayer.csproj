@@ -7,7 +7,7 @@
     <RootNamespace>DaraletPlayer</RootNamespace>
     <!-- the dll players install, named for the plugin (the code keeps the DaraletPlayer namespace) -->
     <AssemblyName>DaraletToolkit</AssemblyName>
-    <Version>0.12.0</Version>
+    <Version>0.13.0</Version>
     <Product>Daralet Toolkit</Product>
     <OutputPath>..\..\bin\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
