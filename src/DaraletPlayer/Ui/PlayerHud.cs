@@ -44,7 +44,6 @@ namespace DaraletPlayer.Ui {
             icons = new ItemIcons(settings);
             ItemUser.Icons = icons;
 
-            configTab = new ConfigTab(settings);
             fellowshipTab = new FellowshipTab(feed, settings);
             combatTab = new CombatTab(feed, settings, icons);
             worldTab = new WorldTab(feed, settings);
@@ -54,6 +53,7 @@ namespace DaraletPlayer.Ui {
             characterTab = new CharacterTab(feed, settings);
             questsTab = new QuestsTab(feed, settings, worldTab.GoTo);
             lootTab = new LootTab(feed, settings, icons);
+            configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow));
             leaderboardsTab = new LeaderboardsTab(feed, api);
             toolbarButtons = new ToolbarButtons(settings, icons, inventoryTab.CarriedWindow, questsTab.Window,
                 worldTab.MapWindow, characterTab.Window);

@@ -8,8 +8,8 @@ namespace DaraletPlayer.Ui {
     /// <summary>
     /// The game toolbar's backpack, Contracts and Map buttons, and the Character Information button (the burden pack by
     /// the link indicator), each drawn again over the game's own to open the plugin's Inventory, Quests, Map and Character
-    /// windows instead (ToolbarButton). Each is on or off by itself, from the Config tab's Client UI Override section; the
-    /// game's other buttons are left to it.
+    /// windows instead (ToolbarButton). Each is on or off by itself, from the Config tab's Client UI Override section
+    /// (ClientUiOverride); the game's other buttons are left to it.
     /// </summary>
     internal class ToolbarButtons : IDisposable {
         /// <summary>The burden pack's pictures: not overburdened, overburdened, very (BurdenLevel).</summary>
@@ -58,13 +58,8 @@ namespace DaraletPlayer.Ui {
                 + "being overburdened slows you all it can.";
         }
 
-        /// <summary>The Config tab's Client UI Override section: a checkbox for each button.</summary>
-        public static void RenderSettings(Settings settings) {
-            Form.Section("Client UI Override");
-            Form.Hint("Opens the plugin's windows from the game's own buttons. Each one ticked is drawn again over the "
-                + "game's, and clicking it opens the plugin's window instead of the game's panel, lit while the window is "
-                + "open. The game's own keys for those panels still open the game's.");
-
+        /// <summary>A checkbox for each button, and Enable all, in a Form.Flow row of Client UI Override.</summary>
+        public static void RenderToggles(Settings settings) {
             var data = settings.Data;
             var first = true;
             Setting(ref first, settings, ref data.ToolbarInventory, "Inventory", "backpack", "Inventory", "inventory");
@@ -77,8 +72,8 @@ namespace DaraletPlayer.Ui {
             var allOn = data.ToolbarInventory && data.ToolbarQuests && data.ToolbarMap && data.ToolbarCharacter;
             ImGui.BeginDisabled(allOn);
 
-            if (Form.FlowSmallButton(ref first, "Enable all##toolbar-all", "Ticks all four, so every one of these game "
-                + "buttons opens the plugin's window.")) {
+            if (Form.FlowSmallButton(ref first, "Enable all##toolbar-all", "Ticks all four toolbar buttons, so every "
+                + "one of them opens the plugin's window. Bank window and Loot window are left as they are.")) {
                 data.ToolbarInventory = true;
                 data.ToolbarQuests = true;
                 data.ToolbarMap = true;
@@ -87,7 +82,6 @@ namespace DaraletPlayer.Ui {
             }
 
             ImGui.EndDisabled();
-            ImGui.Spacing();
         }
 
         /// <summary>The checkbox for one button, in a Form.Flow row.</summary>

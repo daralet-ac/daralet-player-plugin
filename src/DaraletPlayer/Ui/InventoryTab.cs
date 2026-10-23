@@ -179,25 +179,9 @@ namespace DaraletPlayer.Ui {
 
         private void RenderBankWindowSettings() {
             Form.Section("Bank window");
-            RenderWindowToggle();
+            Form.Hint("The plugin's own window for your bank, in place of the game's. It's switched on under the Config "
+                + "tab's Client UI Override.");
             bankWindow.RenderControls(null, showToggle: false);
-        }
-
-        private void RenderWindowToggle() {
-            ImGui.BeginDisabled(!feed.Supports(PlayerFeed.KindBankWindow));
-
-            var tip = feed.Supports(PlayerFeed.KindBankWindow)
-                ? "Opening a bank opens this plugin's bank window instead of the game's (the server leaves the game's "
-                    + "out). Closing the window closes the bank, and walking away closes both. "
-                    + "Its size and background are below."
-                : "This server is too old for the plugin's own bank window.";
-            var confirmOn = Windows.ConfirmOn("bank", "bank window");
-
-            if (Widgets.GuardedCheckbox("Bank window", ref settings.Data.BankWindow, tip, confirmOn, Windows.NoticeOff("bank"))) {
-                settings.Changed();
-            }
-
-            ImGui.EndDisabled();
         }
 
         private void RefreshBank() {

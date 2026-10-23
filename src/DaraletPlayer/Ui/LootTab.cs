@@ -53,6 +53,8 @@ namespace DaraletPlayer.Ui {
                 inUse: CorpseInUse, alwaysOnlyInUse: true, onClose: CloseCorpse);
         }
 
+        public FloatingWindow CorpseWindow => corpseWindow;
+
         private LootData Data => settings.Data.Loot;
 
         private string Me => CoreManager.Current.CharacterFilter.Name;
@@ -114,8 +116,9 @@ namespace DaraletPlayer.Ui {
         }
 
         private void RenderSettings() {
-            if (!Form.SettingsHeader("loot-settings", "The Corpse window: whether it opens, its size and background, and "
-                + "whether it takes the place of the game's corpse and chest window.")) {
+            if (!Form.SettingsHeader("loot-settings", "The Corpse window: whether it opens, and its size and background. "
+                + "Loot window, which has it take the place of the game's corpse and chest window, is under the Config "
+                + "tab's Client UI Override.")) {
                 return;
             }
 
@@ -123,10 +126,6 @@ namespace DaraletPlayer.Ui {
             corpseWindow.RenderControls("Whether the Corpse window opens at all. When on, it opens by itself when you open "
                 + "a corpse or chest it has something to show for (with Loot window on, every one) and goes when that "
                 + "closes. Unticked, it never opens.");
-
-            var first = true;
-            Form.Flow(ref first, Form.CheckWidth("Loot window"));
-            RenderLootWindowCheckbox();
             ImGui.Spacing();
         }
 
@@ -146,29 +145,6 @@ namespace DaraletPlayer.Ui {
                 ImGui.EndCombo();
             }
             Widgets.Tip(current.Tip);
-        }
-
-        private void RenderLootWindowCheckbox() {
-            var supported = feed.Supports(PlayerFeed.KindLootWindow);
-            var tip = supported
-                ? "Opening a corpse or a chest shows everything in it in the Corpse window instead of the game's window (the server leaves the game's out), with what your rules match marked. Click an item to loot it. Closing the window closes the corpse, and walking away closes both. Works with the looter on or off."
-                : "This server is too old for the plugin's own loot window.";
-
-            ImGui.BeginDisabled(!supported);
-
-            var confirmOn = Windows.ConfirmOn("corpses and chests", "Corpse window");
-            var noticeOff = Windows.NoticeOff("corpse and chest");
-
-            if (Widgets.GuardedCheckbox("Loot window", ref settings.Data.LootWindow, tip, confirmOn, noticeOff)) {
-                settings.Changed();
-
-                // it's now the only window for a corpse, so it has to be allowed to show
-                if (settings.Data.LootWindow) {
-                    corpseWindow.Visible = true;
-                }
-            }
-
-            ImGui.EndDisabled();
         }
 
         /// <summary>The loot profile in use, and making, renaming and sharing profiles, as a form.</summary>

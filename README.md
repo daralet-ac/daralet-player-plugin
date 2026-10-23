@@ -6,7 +6,8 @@ the game with:
 - **Config**: settings profiles. Every setting the plugin has (its windows and where they are, every tab's options,
   your loot profiles and hotbars) is kept in a profile, and each character picks its own, so your main and your mule
   can each have their own set up, or share one. Save a profile to a file to keep it or give it to a friend, and add one
-  from a file. Client UI Override has the game's toolbar buttons open the plugin's windows instead.
+  from a file. Client UI Override puts the plugin's windows in place of the game's: its toolbar buttons, and the bank
+  and corpse windows.
 - **World**: a map of Dereth with Daralet's towns, dungeons, lifestones, portals and more. It shows where you are, where
   your fellowship is (unless they're in a dungeon), and an arrow window that points you anywhere on the map, or follows a
   fellow. Search for a place by name, or right-click the map. Inside, the Dungeon window maps the dungeon you're in,
@@ -22,11 +23,11 @@ the game with:
 - **Loot**: a looter with loot profiles (sets of rules) you write yourself, using the same filters as the market search. Each character picks
   a loot profile, and you can swap them at any time. When you open a corpse or a chest, it can loot automatically, ask first, or just point
   out what matches. It can also salvage what you tell it to. A rule can ask for how well a stat rolled rather than the stat
-  itself, and can mark what it finds with a coloured frame and a symbol. Loot window shows corpses and chests in the
-  plugin's window instead of the game's.
+  itself, and can mark what it finds with a coloured frame and a symbol. Loot window (on the Config tab) shows corpses
+  and chests in the plugin's window instead of the game's.
 - **Inventory**: the packs you carry, anywhere, and your bank while it's open, as a list or a grid of icons. Move items
-  between packs, and deposit, withdraw, sort and search without typing `/bank` commands. Bank window opens your bank in
-  the plugin's own window instead of the game's. Loot highlights shows which of your items your loot rules would mark.
+  between packs, and deposit, withdraw, sort and search without typing `/bank` commands. Bank window (on the Config tab)
+  opens your bank in the plugin's own window instead of the game's. Loot highlights shows which of your items your loot rules would mark.
 - **Market**: your listings, sales and expired items, with buttons for the Market Broker (list, cancel, claim), plus a
   search of the whole market like the website's.
 - **Arena**: queue, challenge, leave and watch duels, with your ratings and the latest results.

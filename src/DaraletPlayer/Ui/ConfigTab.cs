@@ -14,6 +14,7 @@ namespace DaraletPlayer.Ui {
         private static readonly TimeSpan MessageFor = TimeSpan.FromSeconds(5);
 
         private readonly Settings settings;
+        private readonly ClientUiOverride clientUiOverride;
 
         private string profileName = "";
         /// <summary>The profile the name box was filled in for: another, swapped in anywhere, fills it again.</summary>
@@ -26,8 +27,9 @@ namespace DaraletPlayer.Ui {
         /// <summary>The files From file found when it was pressed.</summary>
         private List<string> exportFiles = new List<string>();
 
-        public ConfigTab(Settings settings) {
+        public ConfigTab(Settings settings, ClientUiOverride clientUiOverride) {
             this.settings = settings;
+            this.clientUiOverride = clientUiOverride;
         }
 
         private static string Me => CoreManager.Current.CharacterFilter.Name;
@@ -65,7 +67,7 @@ namespace DaraletPlayer.Ui {
             }
 
             ImGui.Spacing();
-            ToolbarButtons.RenderSettings(settings);
+            clientUiOverride.Render();
         }
 
         private string ProfileTip => $"The settings profile {Me} uses. Picking another swaps every setting at once, and "

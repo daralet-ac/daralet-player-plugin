@@ -315,7 +315,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   a move sent the moment the last landed was always dropped unanswered,
   giving up after 8 seconds (a full pack). The Corpse window shows "Looting..." with Cancel while it works, in every mode
   but chat. It starts off; there's no way to tell from a plugin whether VirindiTank's looter is on, so the tab just warns.
-  **Loot window** (`SettingsData.LootWindow`) hides the game's corpse and chest window (see above): the Corpse window then
+  **Loot window** (`SettingsData.LootWindow`, switched under the Config tab's Client UI Override) hides the game's corpse
+  and chest window (see above): the Corpse window then
   lists everything in it (`Looter.Everything`), matched or not, with Loot all, and works with the looter off too. **Grid**
   (`SettingsData.LootGrid`) shows it as 32-pixel icons, 8 a row (the window sizes itself), in a section per outcome (Keep,
   Salvage, Notify, Ignore, no rule), with the rule marks and the stack bottom right; Ctrl+click ticks and unticks for
@@ -478,7 +479,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   backpack, Contracts (quill) and Map (compass) buttons, and the Character Information button in the indicators beside
   it (the burden pack), drawn again over the game's own, opening the Inventory, Quests, Map and Character windows instead
   of the game's panels; each on or off by itself, together in the Config tab's **Client UI Override** section
-  (`ToolbarButtons.RenderSettings`; `SettingsData.ToolbarInventory`, `ToolbarQuests`, `ToolbarMap`, `ToolbarCharacter`,
+  (`ClientUiOverride`, with Bank window and Loot window; `ToolbarButtons.RenderToggles`; `SettingsData.ToolbarInventory`,
+  `ToolbarQuests`, `ToolbarMap`, `ToolbarCharacter`,
   off to start). The rest is the game's.
   The burden pack is element `0x100000F7` in the indicators' layout `0x21000071` (INDI `0x10000611`, the panel it's
   checked against instead of TBAR), its pictures by burden `060074A2` / `060074A3` / `060074A4` (states E, F, 0x10), with
@@ -532,7 +534,8 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   line shows under the buttons, and hovering it shows the whole reply. Carried and Bank are each a `InventoryBrowser`
   (`carried: true` for yours), with their own selected pack and search. **Show my packs** on the Bank view
   (`SettingsData.BankShowCarried`) lists your packs there too, above the bank's, to drag between them. **Bank window**
-  (`SettingsData.BankWindow`) hides the game's bank window (see above) and opens the plugin's own, a `FloatingWindow` you
+  (`SettingsData.BankWindow`, switched under the Config tab's Client UI Override) hides the game's bank window (see
+  above) and opens the plugin's own, a `FloatingWindow` you
   size yourself (`defaultSize`, its size saved like its position), with its own `InventoryBrowser`. It opens and closes with the
   bank, which `InventoryTab` follows every frame, so it works with the main window closed. The **Inventory window** (controls
   on the Carried tab, window id `carried`, hidden by default) is Carried in a `FloatingWindow` with its own `InventoryBrowser`
