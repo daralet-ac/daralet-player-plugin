@@ -61,8 +61,8 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// A spot on the panel an open vendor is shown in, where an item let go goes on its sell list. The drag's green ring
-        /// is drawn there by the same test.
+        /// A spot on the panel an open vendor is shown in, where an item let go goes on its sell list. VendorDrop shows the
+        /// Selling tab and its ring there by the same test.
         /// </summary>
         public static bool OverVendor(Vector2 at) {
             return CoreManager.Current.Actions.VendorId != 0 && ClientElements.IsOver(ClientElements.Environment, at);

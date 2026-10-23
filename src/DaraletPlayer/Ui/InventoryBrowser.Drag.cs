@@ -48,9 +48,9 @@ namespace DaraletPlayer.Ui {
                 drawList.AddText(at, ImGui.GetColorU32(ImGuiCol.Text), name);
             }
 
-            // held over the vendor's panel, the ring says it'll go on the sell list, as over a slot of ours
+            // held over the vendor's window, it turns to Selling and rings the slot under the mouse, as the game does
             if (WillWorldDrop(id) && WorldDrop.OverVendor(ImGui.GetMousePos())) {
-                icons.DrawDropArt(drawList, at, at + new Vector2(size, size), true);
+                VendorDrop.Hover(icons);
             }
 
             ImGui.EndDragDropSource();

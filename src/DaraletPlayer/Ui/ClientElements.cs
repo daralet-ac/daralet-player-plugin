@@ -30,6 +30,12 @@ namespace DaraletPlayer.Ui {
         /// </summary>
         public const uint Environment = 0x100005FD;
 
+        // the vendor window's tabs (a UIElement_Panel, element type 8), its Selling tab, and the Selling page's list of
+        // 32-pixel slots, in its layout 0x21000012
+        public const uint VendorTabs = 0x100000B8;
+        public const uint VendorSellingTab = 0x100000BB;
+        public const uint VendorSellingList = 0x100000CE;
+
         /// <summary>Set once a call has failed: logged once, and nothing is looked up again until the next start.</summary>
         private static bool broken;
 
@@ -76,6 +82,33 @@ namespace DaraletPlayer.Ui {
                 broken = true;
                 PluginCore.Log("The game's toolbar buttons can't be found, so the plugin's are off until it next starts: "
                     + ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Opens a tab of a panel of tabs (UIElement_Panel::OpenTab, by the tab's element id), as the game's own code does:
+        /// gmVendorUI::UpdateDragOver opens the Selling tab this way while something's dragged over the vendor window.
+        /// False when the panel isn't there or the call fails.
+        /// </summary>
+        public static unsafe bool OpenTab(uint panelId, uint tabId) {
+            if (broken) {
+                return false;
+            }
+
+            try {
+                var manager = *(void**)ManagerAddress;
+                var panel = manager == null ? null : GetElement(manager, panelId);
+
+                if (panel == null || !IsVisible(panel)) {
+                    return false;
+                }
+
+                return ((delegate* unmanaged[Thiscall]<void*, uint, byte>)0x46C110)(panel, tabId) != 0;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's panels can't be reached, so the plugin's lookups are off until it next starts: " + ex);
                 return false;
             }
         }
