@@ -539,9 +539,14 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
 - **Inventory tab** (`Ui/InventoryTab.cs`, `Ui/InventoryBrowser*.cs`, `Ui/BankCommandBar.cs`, `Feed/BankCommands.cs`): sub tabs Carried
   (your packs, anywhere) and Bank (the bank's packs, while it's open). The `/bank` buttons are a `BankCommandBar` above the
   items in each, and in the Bank window: one bar, shared, so its "what" box carries over. Deposit with the box empty
-  is Deposit packs (your "deposit"-tagged packs), with words in it a deposit of those. A bank pack has a **Tags**
+  is Deposit packs (your "deposit"-tagged packs), with words in it a deposit of those. A bank pack, or a side pack you
+  carry (`Holder.CarriedPack`, in the Retail view too), has a **Tags**
   drop-down of every `/bank` word, ticked when the pack has it (`BankCommands.HasTag` / `ToggleTag`, comma-separated
-  groups), each tick sending `/bank inscribe` at once (the plugin keeps what it sent until the next bank reply). Groups are
+  groups), each tick sending `/bank inscribe` at once (the plugin keeps what it sent until the next bank reply). A carried
+  pack has no number, so the plugin appraises it (`Actions.RequestId`) and sends the command without one: the server
+  takes the pack last examined (`FindPack` with `carriedToo`, which `/bank inscribe` only allows since daralet-ACE's
+  `carried-pack-inscribe`). Decal only learns an inscription from an appraisal, and the server sends none when it
+  changes, so the pack is appraised again a second later (`InventoryBrowser.RefreshCarried`). Groups are
   OR (a comma) and the words in one AND (a space): the list's **OR** makes each tick its own group (`ToggleTag`), its
   **AND** adds the word to a picked group, or a new one (`ToggleInGroup`), and ticks then show that group. And an
   **Icon** drop-down of every style and color `/bank icon` takes (`BankCommands.PackIcons`, copied from daralet-ACE's

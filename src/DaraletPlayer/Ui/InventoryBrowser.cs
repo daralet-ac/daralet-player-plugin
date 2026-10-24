@@ -59,6 +59,8 @@ namespace DaraletPlayer.Ui {
             public bool InBank;
             /// <summary>The bank pack's number in /bank packs, or 0.</summary>
             public int PackNumber;
+            /// <summary>One of your side packs (not the main pack), which has no number: commands name it by examining it.</summary>
+            public bool CarriedPack;
             public string Inscription;
             public IconLayers Icon;
             /// <summary>How many items it holds and has room for (0: not known).</summary>
@@ -236,7 +238,7 @@ namespace DaraletPlayer.Ui {
             var holder = HolderOf(selected);
             var searching = search.Trim().Length > 0;
 
-            if (!searching && holder?.PackNumber > 0) {
+            if (!searching && HasPackSettings(holder)) {
                 RenderPackSettings(holder);
             }
 

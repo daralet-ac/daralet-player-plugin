@@ -1,12 +1,23 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
+using Decal.Adapter;
 using DaraletPlayer.Feed;
 using ImGuiNET;
 
 namespace DaraletPlayer.Ui {
-    /// <summary>A bank pack's Tags and Icon drop-downs. Each pick is sent at once (/bank inscribe, /bank icon).</summary>
+    /// <summary>
+    /// A pack's Tags and Icon drop-downs, for the bank's packs and your side packs. Each pick is sent at once (/bank
+    /// inscribe, /bank icon).
+    /// </summary>
     internal partial class InventoryBrowser {
-        /// <summary>The pack's tags as last sent, kept until the server's next bank reply says what they are.</summary>
+        /// <summary>How long after a change to a carried pack it's appraised again, for Decal to hear its new tags.</summary>
+        private static readonly TimeSpan CarriedRefreshDelay = TimeSpan.FromSeconds(1);
+
+        /// <summary>
+        /// The pack's tags as last sent, kept until the server's next bank reply (or, for a pack you carry, its next
+        /// appraisal) says what they are.
+        /// </summary>
         private string inscription = "";
         private int inscriptionFor;
         private string inscriptionSeen;
@@ -15,7 +26,20 @@ namespace DaraletPlayer.Ui {
         private bool tagAnd;
         private int tagGroup = -1;
 
+        /// <summary>A carried pack to appraise again, and when.</summary>
+        private int refreshPack;
+        private DateTime refreshAt;
+
+        /// <summary>The carried packs appraised for their tags when first shown.</summary>
+        private readonly HashSet<int> appraisedPacks = new HashSet<int>();
+
+        private static bool HasPackSettings(Holder holder) => holder != null && (holder.PackNumber > 0 || holder.CarriedPack);
+
         private void RenderPackSettings(Holder holder) {
+            if (holder.CarriedPack) {
+                RefreshCarried(holder);
+            }
+
             if (inscriptionFor != holder.Id || holder.Inscription != inscriptionSeen) {
                 if (inscriptionFor != holder.Id) {
                     tagGroup = -1;
@@ -33,7 +57,42 @@ namespace DaraletPlayer.Ui {
 
         private void SetTags(Holder holder, string tags) {
             inscription = tags;
-            feed.SendCommand(BankCommands.Inscribe(holder.PackNumber, tags));
+            SendPackCommand(holder, BankCommands.Inscribe(holder.PackNumber, tags));
+        }
+
+        /// <summary>
+        /// A pack you carry has no number in /bank packs, so the command goes without one and the server takes the pack
+        /// last examined: it's appraised just before, which the server hears first (both go the same way, in order).
+        /// </summary>
+        private void SendPackCommand(Holder holder, string command) {
+            if (holder.CarriedPack) {
+                CoreManager.Current.Actions.RequestId(holder.Id);
+                refreshPack = holder.Id;
+                refreshAt = DateTime.UtcNow + CarriedRefreshDelay;
+            }
+
+            feed.SendCommand(command);
+        }
+
+        /// <summary>
+        /// Decal only learns a pack's inscription from an appraisal, and the server sends none when it changes one, so
+        /// a carried pack is appraised when first shown, and again a moment after each change.
+        /// </summary>
+        private void RefreshCarried(Holder holder) {
+            if (refreshPack == holder.Id && DateTime.UtcNow >= refreshAt) {
+                refreshPack = 0;
+                CoreManager.Current.Actions.RequestId(holder.Id);
+                return;
+            }
+
+            // once a pack: its reply sets HasIdData
+            if (!(CoreManager.Current.WorldFilter[holder.Id]?.HasIdData ?? true) && appraisedPacks.Add(holder.Id)) {
+                CoreManager.Current.Actions.RequestId(holder.Id);
+            }
+        }
+
+        private string CarriedNote(Holder holder) {
+            return holder.CarriedPack ? " The pack is examined first, so the command knows which pack you mean." : "";
         }
 
         /// <summary>Every word /bank inscribe knows, ticked when the pack has it.</summary>
@@ -47,7 +106,7 @@ namespace DaraletPlayer.Ui {
             ImGui.SetNextWindowSizeConstraints(new Vector2(font * 33, 0), new Vector2(float.MaxValue, font * 30));
 
             if (!ImGui.BeginCombo("##bank-tag-list", preview, ImGuiComboFlags.HeightLarge)) {
-                Widgets.Tip($"What this pack collects, for deposits, withdrawals and sorts. Tick the words in the list: each tick tags the pack at once ({BankCommands.Inscribe(holder.PackNumber, "...")}).");
+                Widgets.Tip($"What this pack collects, for deposits, withdrawals and sorts. Tick the words in the list: each tick tags the pack at once ({BankCommands.Inscribe(holder.PackNumber, "...")})." + CarriedNote(holder));
                 return;
             }
 
@@ -178,12 +237,12 @@ namespace DaraletPlayer.Ui {
             ImGui.SetNextWindowSizeConstraints(new Vector2(font * 30, 0), new Vector2(float.MaxValue, font * 30));
 
             if (!ImGui.BeginCombo("##bank-icon-list", "Icon", ImGuiComboFlags.HeightLarge)) {
-                Widgets.Tip($"Changes this pack's icon to a pack, sack or pouch in a color ({BankCommands.Icon(holder.PackNumber, "<style>", "<color>")}). Only the icon changes.");
+                Widgets.Tip($"Changes this pack's icon to a pack, sack or pouch in a color ({BankCommands.Icon(holder.PackNumber, "<style>", "<color>")}). Only the icon changes." + CarriedNote(holder));
                 return;
             }
 
             if (ImGui.Selectable("Its own icon")) {
-                feed.SendCommand(BankCommands.IconDefault(holder.PackNumber));
+                SendPackCommand(holder, BankCommands.IconDefault(holder.PackNumber));
             }
             Widgets.Tip($"Gives the pack back the icon it came with: {BankCommands.IconDefault(holder.PackNumber)}.");
 
@@ -212,7 +271,7 @@ namespace DaraletPlayer.Ui {
                     var width = cell - swatch - style.ItemSpacing.X * 2;
 
                     if (ImGui.Selectable($"{color}##icon-{iconStyle}-{color}", false, ImGuiSelectableFlags.None, new Vector2(width, 0))) {
-                        feed.SendCommand(command);
+                        SendPackCommand(holder, command);
                     }
                     Widgets.Tip($"A {color} {label.ToLowerInvariant()}: {command}.");
 

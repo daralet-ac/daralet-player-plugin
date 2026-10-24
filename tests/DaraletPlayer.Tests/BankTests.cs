@@ -22,6 +22,12 @@ namespace DaraletPlayer.Tests {
             // PackIcons.TryParse reads "small pouch" as one style
             Assert.AreEqual("/bank icon 3 small pouch blue", BankCommands.Icon(3, "small pouch", "blue"));
             Assert.AreEqual("/bank icon 3 default", BankCommands.IconDefault(3));
+
+            // a pack you carry has no number: the server takes the one last examined
+            Assert.AreEqual("/bank inscribe weapons", BankCommands.Inscribe(0, "weapons"));
+            Assert.AreEqual("/bank inscribe clear", BankCommands.Inscribe(0, ""));
+            Assert.AreEqual("/bank icon sack red", BankCommands.Icon(0, "sack", "red"));
+            Assert.AreEqual("/bank icon default", BankCommands.IconDefault(0));
         }
 
         [TestMethod]

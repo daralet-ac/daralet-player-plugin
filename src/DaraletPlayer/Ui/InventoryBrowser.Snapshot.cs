@@ -139,6 +139,8 @@ namespace DaraletPlayer.Ui {
                     Id = pack.Id,
                     Label = pack.Name + Tags(inscription),
                     Detail = inscription,
+                    CarriedPack = true,
+                    Inscription = inscription,
                     Icon = ItemIcons.Of(pack),
                     Count = contents[pack.Id].Count,
                     Capacity = pack.Values(LongValueKey.ItemSlots, 0),

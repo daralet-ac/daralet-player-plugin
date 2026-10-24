@@ -91,22 +91,28 @@ namespace DaraletPlayer.Feed {
         private static string[] BagColors() => new[] { "brown", "black", "white", "gray", "blue", "teal", "green", "yellow", "red", "purple" };
         private static string[] PouchColors() => new[] { "brown", "black", "gray", "blue", "teal", "green", "yellow", "red", "purple" };
 
-        /// <summary>/bank icon for a pack in the bank, by its number: a style and color, or its own icon back.</summary>
+        /// <summary>
+        /// /bank icon for a pack in the bank, by its number: a style and color, or its own icon back. With no number (0)
+        /// it's for the pack last examined, which is how a pack you carry is named.
+        /// </summary>
         public static string Icon(int packNumber, string style, string color) {
-            return $"/bank icon {packNumber} {style} {color}";
+            return $"/bank icon {Number(packNumber)}{style} {color}";
         }
 
         public static string IconDefault(int packNumber) {
-            return $"/bank icon {packNumber} default";
+            return $"/bank icon {Number(packNumber)}default";
         }
 
         /// <summary>
-        /// /bank inscribe for a pack in the bank, by its number. "clear" clears it, which the server reads as no tags.
+        /// /bank inscribe for a pack in the bank, by its number, or with no number (0) the pack last examined, carried or
+        /// banked. "clear" clears it, which the server reads as no tags.
         /// </summary>
         public static string Inscribe(int packNumber, string tags) {
             var cleaned = Clean(tags);
-            return $"/bank inscribe {packNumber} {(cleaned.Length == 0 ? "clear" : cleaned)}";
+            return $"/bank inscribe {Number(packNumber)}{(cleaned.Length == 0 ? "clear" : cleaned)}";
         }
+
+        private static string Number(int packNumber) => packNumber > 0 ? packNumber + " " : "";
 
         /// <summary>
         /// Whether an inscription has this tag word, alone or in a group ("swords t6" has both "swords" and "t6").

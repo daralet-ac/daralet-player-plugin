@@ -100,6 +100,10 @@ namespace DaraletPlayer.Ui {
                 Widgets.Tip(string.IsNullOrEmpty(holder.Detail) ? "The pack whose items these are. Pick another on the right." : holder.Detail);
             }
 
+            if (HasPackSettings(holder)) {
+                RenderPackSettings(holder);
+            }
+
             var items = ItemsIn(selected);
             var slots = holder == null ? 0 : Slots(holder, items.Count);
 
