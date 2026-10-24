@@ -7,7 +7,8 @@ the game with:
   your loot profiles and hotbars) is kept in a profile, and each character picks its own, so your main and your mule
   can each have their own set up, or share one. Save a profile to a file to keep it or give it to a friend, and add one
   from a file. Client UI Override puts the plugin's windows in place of the game's: its toolbar buttons, and the bank
-  and corpse windows.
+  and corpse windows. Hide game UI hides all of the game's UI and the plugin's windows for screenshots, and brings them
+  back, with a key (F1 to start) or `/dap hideui` and `/dap showui`. Tick Keep plugin windows to hide only the game's UI.
 - **World**: a map of Dereth with Daralet's towns, dungeons, lifestones, portals and more. It shows where you are, where
   your fellowship is (unless they're in a dungeon), and an arrow window that points you anywhere on the map, or follows a
   fellow. Search for a place by name, or right-click the map. Inside, the Dungeon window maps the dungeon you're in,

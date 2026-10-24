@@ -183,16 +183,34 @@ namespace DaraletPlayer {
             }
         }
 
-        /// <summary>/dap (or @dap) shows and hides the window.</summary>
+        /// <summary>
+        /// /dap (or @dap) shows and hides the window; /dap hideui hides the game's UI and the plugin's windows, or shows them
+        /// again, and /dap showui only shows them (HideGameUi).
+        /// </summary>
         private void Core_CommandLineText(object sender, ChatParserInterceptEventArgs e) {
             try {
-                var text = e.Text?.Trim();
-                var isDap = string.Equals(text, "/dap", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(text, "@dap", StringComparison.OrdinalIgnoreCase);
+                var words = (e.Text ?? "").Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-                if (isDap) {
-                    e.Eat = true;
-                    hud.Toggle();
+                if (words.Length == 0 || !(string.Equals(words[0], "/dap", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(words[0], "@dap", StringComparison.OrdinalIgnoreCase))) {
+                    return;
+                }
+
+                var argument = words.Length > 1 ? words[1].ToLowerInvariant() : "";
+
+                switch (argument) {
+                    case "":
+                        e.Eat = true;
+                        hud.Toggle();
+                        break;
+                    case "hideui":
+                        e.Eat = true;
+                        HideGameUi.Toggle();
+                        break;
+                    case "showui":
+                        e.Eat = true;
+                        HideGameUi.Show();
+                        break;
                 }
             }
             catch (Exception ex) {

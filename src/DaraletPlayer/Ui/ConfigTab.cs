@@ -15,6 +15,7 @@ namespace DaraletPlayer.Ui {
 
         private readonly Settings settings;
         private readonly ClientUiOverride clientUiOverride;
+        private readonly HideGameUi hideGameUi;
 
         private string profileName = "";
         /// <summary>The profile the name box was filled in for: another, swapped in anywhere, fills it again.</summary>
@@ -27,9 +28,10 @@ namespace DaraletPlayer.Ui {
         /// <summary>The files From file found when it was pressed.</summary>
         private List<string> exportFiles = new List<string>();
 
-        public ConfigTab(Settings settings, ClientUiOverride clientUiOverride) {
+        public ConfigTab(Settings settings, ClientUiOverride clientUiOverride, HideGameUi hideGameUi) {
             this.settings = settings;
             this.clientUiOverride = clientUiOverride;
+            this.hideGameUi = hideGameUi;
         }
 
         private static string Me => CoreManager.Current.CharacterFilter.Name;
@@ -68,6 +70,7 @@ namespace DaraletPlayer.Ui {
 
             ImGui.Spacing();
             clientUiOverride.Render();
+            hideGameUi.Render();
         }
 
         private string ProfileTip => $"The settings profile {Me} uses. Picking another swaps every setting at once, and "

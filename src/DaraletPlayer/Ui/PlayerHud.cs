@@ -28,6 +28,7 @@ namespace DaraletPlayer.Ui {
         private readonly LootTab lootTab;
         private readonly LeaderboardsTab leaderboardsTab;
         private readonly ToolbarButtons toolbarButtons;
+        private readonly HideGameUi hideGameUi;
         private readonly MarketApi api = new MarketApi();
 
         /// <summary>
@@ -53,7 +54,9 @@ namespace DaraletPlayer.Ui {
             characterTab = new CharacterTab(feed, settings);
             questsTab = new QuestsTab(feed, settings, worldTab.GoTo);
             lootTab = new LootTab(feed, settings, icons);
-            configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow));
+            // the hud is made below: these read the field when called
+            hideGameUi = new HideGameUi(settings, () => hud.Visible, shown => hud.Visible = shown);
+            configTab = new ConfigTab(settings, new ClientUiOverride(settings, feed, lootTab.CorpseWindow), hideGameUi);
             leaderboardsTab = new LeaderboardsTab(feed, api);
             toolbarButtons = new ToolbarButtons(settings, icons, inventoryTab.CarriedWindow, questsTab.Window,
                 worldTab.MapWindow, characterTab.Window);
@@ -243,8 +246,9 @@ namespace DaraletPlayer.Ui {
                 PluginCore.Log(ex);
             }
 
+            // the game's UI back first, whatever fails after
             var pieces = new IDisposable[] {
-                hud, toolbarButtons, fellowshipTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
+                hideGameUi, hud, toolbarButtons, fellowshipTab, combatTab, worldTab, inventoryTab, questsTab, characterTab, marketTab,
                 lootTab, api, icons,
             };
 

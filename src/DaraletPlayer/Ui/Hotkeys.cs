@@ -67,7 +67,8 @@ namespace DaraletPlayer.Ui {
             down[key] = now;
         }
 
-        private static bool IsDown(int key) {
+        /// <summary>Whether the key is held now, read straight from Windows (no ImGui frame needed).</summary>
+        public static bool IsDown(int key) {
             return (GetAsyncKeyState(key) & 0x8000) != 0;
         }
 

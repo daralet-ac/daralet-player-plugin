@@ -121,6 +121,12 @@ namespace DaraletPlayer {
         /// <summary>The Character Information button (the burden pack) opens the Character window.</summary>
         [DataMember(Name = "toolbarCharacter")] public bool ToolbarCharacter;
 
+        /// <summary>The key that hides and shows the game's UI and the plugin's windows, for screenshots (HideGameUi).</summary>
+        [DataMember(Name = "hideUiKey")] public HotkeyBinding HideUiKey;
+
+        /// <summary>Hiding the game's UI leaves the plugin's own windows showing.</summary>
+        [DataMember(Name = "hideUiKeepPluginWindows")] public bool HideUiKeepPluginWindows;
+
         [DataMember(Name = "loot")] public LootData Loot;
 
         /// <summary>The hotbars (the Combat tab's Hotbars): their layout, looks and hotkeys, and each character's items.</summary>
@@ -200,6 +206,8 @@ namespace DaraletPlayer {
             Hotbars = new HotbarData();
             OneClickHeal = true;
             LfgChatLinks = true;
+            // F1: the game ignores Ctrl and Shift on its own keys (Ctrl+Shift+F12 opened the inventory, any S stopped running)
+            HideUiKey = new HotkeyBinding(0x70);
         }
     }
 }

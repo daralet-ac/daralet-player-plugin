@@ -81,7 +81,7 @@ namespace DaraletPlayer.Ui {
                     return;
                 }
 
-                var shown = enabled() && CoreManager.Current.CharacterFilter.LoginStatus == 3
+                var shown = enabled() && !HideGameUi.On && CoreManager.Current.CharacterFilter.LoginStatus == 3
                     && ClientElements.TryGetScreenBox(elementId, panelId, out min, out max);
 
                 if (hud.Visible != shown) {

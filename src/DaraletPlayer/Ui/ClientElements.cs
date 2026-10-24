@@ -113,6 +113,56 @@ namespace DaraletPlayer.Ui {
             }
         }
 
+        /// <summary>UIFlow::m_instance, which runs the game's UI modes (character select, in the world...).</summary>
+        private const int UiFlowAddress = 0x83E72C;
+
+        /// <summary>UIFlow::_curUI: the mode's UI, a UIMainFramework.</summary>
+        private const int CurrentUiOffset = 0x94;
+
+        /// <summary>gmGamePlayUI's vtable, which tells the in-world UI from the other modes'.</summary>
+        private const int GamePlayUiVtable = 0x7C3828;
+
+        /// <summary>gmGamePlayUI's root element, which gmGamePlayUI::SetupChildren makes and every panel is in.</summary>
+        private const int GamePlayRootOffset = 0x9C;
+
+        /// <summary>
+        /// Shows or hides all of the game's in-world UI: UIElement::SetVisible on gmGamePlayUI's root element. Not
+        /// UIElementManager::SetVisible, which only sees to the cursor and mouse capture, nor UIFramework::ForceHidden,
+        /// which only hides panels flagged as hideable, and none start that way. False when the game isn't showing its
+        /// in-world UI, the call fails, or the root isn't as asked after it. Showing is tried even after another lookup
+        /// broke, so a hidden UI can always be put back.
+        /// </summary>
+        public static unsafe bool SetUiVisible(bool shown) {
+            if (broken && !shown) {
+                return false;
+            }
+
+            try {
+                var flow = *(byte**)UiFlowAddress;
+                var ui = flow == null ? null : *(byte**)(flow + CurrentUiOffset);
+
+                // character select, or between modes: nothing of the in-world UI to show or hide
+                if (ui == null || *(int*)ui != GamePlayUiVtable) {
+                    return false;
+                }
+
+                var root = *(void**)(ui + GamePlayRootOffset);
+
+                if (root == null) {
+                    return false;
+                }
+
+                ((delegate* unmanaged[Thiscall]<void*, byte, void>)0x462390)(root, (byte)(shown ? 1 : 0));
+                return IsVisible(root) == shown;
+            }
+            catch (Exception ex) {
+                broken = true;
+                PluginCore.Log("The game's UI can't be " + (shown ? "shown" : "hidden") + ", so the plugin's lookups are off "
+                    + "until it next starts: " + ex);
+                return false;
+            }
+        }
+
         /// <summary>Whether a spot in the game window is on the element, while it's shown.</summary>
         public static bool IsOver(uint id, Vector2 at) {
             return TryGetScreenBox(id, id, out var min, out var max)

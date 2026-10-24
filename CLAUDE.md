@@ -162,7 +162,7 @@ records in `PlayerUiSnapshots.cs`; tests on both sides pin the names (`PlayerUiP
 The `hello` reply lists every request the server answers (`kinds`, from `PlayerUi.Kinds`). Add each new request there, and
 have its tab check `PlayerFeed.Supports(kind)`, so a newer plugin on an older server says what's missing instead of waiting.
 
-`/dap` (or `@dap`) shows and hides the window.
+`/dap` (or `@dap`) shows and hides the window; `/dap hideui` and `/dap showui` are Hide game UI's (below).
 
 Requests so far: `hello`; `fellowship` (your fellowship with vitals and map places, or `null`); `position` (where you
 are on the map, which the plugin only asks indoors); `targets <guid> [guid]` (up to four
@@ -523,6 +523,21 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   and exports textures (`Texture.GetBitmap`); it needs `ConfigManager.Initialize(new MasterConfiguration())`, code page
   1252 registered, and `DatManager.PortalDat` set (for `BaseProperty`), without `DatManager.Initialize`, which fails on
   Daralet's dats reading their iteration.
+
+- **Hide game UI** (`Ui/HideGameUi.cs`, the Config tab's section of that name, `SettingsData.HideUiKey`, F1 to start:
+  the game ignores Ctrl and Shift on its own keys, so Ctrl+Shift+F12 opened the inventory and any S stopped running): for screenshots. `ClientElements.SetUiVisible` calls `UIElement::SetVisible` (`0x462390`) on the in-world UI's
+  root element: `UIFlow::m_instance` (`0x83E72C`), its current UI at `+0x94`, which must have `gmGamePlayUI`'s vtable
+  (`0x7C3828`), and that UI's root at `+0x9C` (stored by `gmGamePlayUI::SetupChildren`). Two look-alikes that don't work
+  (read from `acclient.exe` with capstone): `UIElementManager::SetVisible` (`0x459440`) only handles the cursor and mouse
+  capture, so the first build of this hid nothing of the game's; `UIFramework::ForceHidden` (vtable `+0x2c`) only hides
+  child frameworks with `m_bCanForceHide` (`+0x7c`), which the constructor clears. It also hides every `FloatingWindow` and
+  the main window while `HideGameUi.PluginWindowsHidden` (unless Keep plugin windows, `SettingsData.HideUiKeepPluginWindows`),
+  keeping each one's own setting, and the toolbar buttons while `HideGameUi.On` either way (the toolbar they sit on is gone). Other plugins' windows and
+  Decal's bar stay. It's hidden again once a second while on, in case the game shows it itself. Never saved: logging out
+  clears it (the game sets its UI up again for the next login, so nothing is called then), and the plugin shutting down
+  or reloading shows it again. Its key is read straight from Windows on Decal's RenderFrame, not through
+  `Hotkeys.Pressed`, which only runs when some window draws, and with every window hidden nothing would. `/dap hideui`
+  toggles it and `/dap showui` only shows. `[hide-ui]` lines in log.txt.
 
 - **Arena and Leaderboards tabs** (`Ui/ArenaTab.cs`, `Ui/LeaderboardsTab.cs`, `Feed/ArenaCommands.cs`,
   `Feed/Leaderboards.cs`): the leaderboards are the website's (`leaderboards.js`), read from `/api/leaderboards/...` with
