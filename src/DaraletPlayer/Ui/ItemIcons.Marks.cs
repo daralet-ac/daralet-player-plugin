@@ -7,6 +7,12 @@ namespace DaraletPlayer.Ui {
     /// <summary>What's drawn over an icon: a loot rule's mark and a stack's count.</summary>
     internal partial class ItemIcons {
         /// <summary>
+        /// The plugin's one set of icons, for the marks' letters, which need its labels: the marks are drawn from static
+        /// code all over. Null before it's made and once it's disposed.
+        /// </summary>
+        private static ItemIcons current;
+
+        /// <summary>
         /// A loot rule's mark over an icon: its highlight as a frame, its symbol in the top left corner (the bottom right is
         /// a stack's count). Nothing for a rule without one.
         /// </summary>
@@ -59,13 +65,71 @@ namespace DaraletPlayer.Ui {
             DrawSymbol(drawList, LootMarks.IconOf(rule) ?? LootMarks.Circle, spot, symbol, ColorU32(LootMarks.IconColor(rule)));
         }
 
-        /// <summary>One of LootMarks.Icons, filled with the colour and outlined in black.</summary>
-        private static void DrawSymbol(ImDrawListPtr drawList, string icon, Vector2 at, float size, uint color) {
+        /// <summary>One of LootMarks.Icons in a square, filled with the colour and outlined in black.</summary>
+        public static void DrawSymbol(ImDrawListPtr drawList, string icon, Vector2 at, float size, uint color) {
             var black = ImGui.GetColorU32(new Vector4(0, 0, 0, 1));
             var center = at + new Vector2(size / 2, size / 2);
             var radius = size / 2;
+            var letter = LootMarks.LetterOf(icon);
+
+            if (letter != null) {
+                DrawLetter(drawList, letter, center, size, color);
+                return;
+            }
 
             switch (icon) {
+                case LootMarks.Square: {
+                    var half = new Vector2(radius * 0.72f, radius * 0.72f);
+                    drawList.AddRectFilled(center - half, center + half, color);
+                    drawList.AddRect(center - half, center + half, black);
+                    break;
+                }
+
+                case LootMarks.Heart:
+                    Outlined(drawList, color, black, (c, o) => {
+                        var lobe = radius * 0.47f;
+                        drawList.AddCircleFilled(center + o + new Vector2(-radius * 0.45f, -radius * 0.25f), lobe, c);
+                        drawList.AddCircleFilled(center + o + new Vector2(radius * 0.45f, -radius * 0.25f), lobe, c);
+                        drawList.AddTriangleFilled(center + o + new Vector2(-radius * 0.9f, -radius * 0.08f),
+                            center + o + new Vector2(radius * 0.9f, -radius * 0.08f), center + o + new Vector2(0, radius * 0.9f), c);
+                    });
+                    break;
+
+                case LootMarks.Plus:
+                    Outlined(drawList, color, black, (c, o) => {
+                        var arm = radius * 0.85f;
+                        var half = Math.Max(1f, radius * 0.24f);
+                        drawList.AddRectFilled(center + o - new Vector2(arm, half), center + o + new Vector2(arm, half), c);
+                        drawList.AddRectFilled(center + o - new Vector2(half, arm), center + o + new Vector2(half, arm), c);
+                    });
+                    break;
+
+                case LootMarks.Cross: {
+                    var arm = radius * 0.62f;
+                    var thickness = Math.Max(2f, size * 0.2f);
+                    Stroke(drawList, new[] { center - new Vector2(arm, arm), center + new Vector2(arm, arm) }, thickness, color, black);
+                    Stroke(drawList, new[] { center + new Vector2(arm, -arm), center + new Vector2(-arm, arm) }, thickness, color, black);
+                    break;
+                }
+
+                case LootMarks.Check: {
+                    var thickness = Math.Max(2f, size * 0.2f);
+                    Stroke(drawList, new[] {
+                        center + new Vector2(-radius * 0.7f, 0), center + new Vector2(-radius * 0.2f, radius * 0.55f),
+                        center + new Vector2(radius * 0.75f, -radius * 0.6f),
+                    }, thickness, color, black);
+                    break;
+                }
+
+                case LootMarks.Arrow:
+                    Outlined(drawList, color, black, (c, o) => {
+                        var shaft = Math.Max(1f, radius * 0.26f);
+                        drawList.AddTriangleFilled(center + o + new Vector2(0, -radius * 0.9f),
+                            center + o + new Vector2(radius * 0.8f, -radius * 0.05f), center + o + new Vector2(-radius * 0.8f, -radius * 0.05f), c);
+                        drawList.AddRectFilled(center + o + new Vector2(-shaft, -radius * 0.1f), center + o + new Vector2(shaft, radius * 0.9f), c);
+                    });
+                    break;
+
                 case LootMarks.Star:
                     DrawStar(drawList, center, radius, color, black);
                     break;
@@ -135,20 +199,58 @@ namespace DaraletPlayer.Ui {
         }
 
         /// <summary>
-        /// A $ drawn with lines, not a font (ImGui's would be stretched and blurred at these sizes): a bar down the middle,
-        /// and an S of two half-ellipses over it, black under a thinner coloured one for the outline.
+        /// A shape outlined by drawing it in black a pixel off each way, then in its colour: for shapes made of several
+        /// pieces, whose own outlines would cross inside it. The callback draws the shape in a colour at an offset.
+        /// </summary>
+        private static void Outlined(ImDrawListPtr drawList, uint color, uint outline, Action<uint, Vector2> shape) {
+            foreach (var offset in new[] {
+                new Vector2(-1, 0), new Vector2(1, 0), new Vector2(0, -1), new Vector2(0, 1),
+                new Vector2(-1, -1), new Vector2(1, -1), new Vector2(-1, 1), new Vector2(1, 1),
+            }) {
+                shape(outline, offset);
+            }
+
+            shape(color, Vector2.Zero);
+        }
+
+        /// <summary>A thick line through the points, black under a thinner coloured one, with round ends.</summary>
+        private static void Stroke(ImDrawListPtr drawList, Vector2[] points, float thickness, uint color, uint outline) {
+            drawList.AddPolyline(ref points[0], points.Length, outline, ImDrawFlags.None, thickness + 2);
+            drawList.AddCircleFilled(points[0], thickness / 2 + 1, outline);
+            drawList.AddCircleFilled(points[points.Length - 1], thickness / 2 + 1, outline);
+            drawList.AddPolyline(ref points[0], points.Length, color, ImDrawFlags.None, thickness);
+            drawList.AddCircleFilled(points[0], thickness / 2, color);
+            drawList.AddCircleFilled(points[points.Length - 1], thickness / 2, color);
+        }
+
+        /// <summary>
+        /// A grade letter, bold on a black outline, filling the square: drawn sharp by GDI+ (DrawLabel) when the plugin's
+        /// icons are there, else ImGui's text.
+        /// </summary>
+        private static void DrawLetter(ImDrawListPtr drawList, string letter, Vector2 center, float size, uint color) {
+            // a capital is about 0.7 of the font's size, and the label adds its outline round it
+            var pixels = Math.Max(6, (int)Math.Round(size * 1.15f));
+            var labelSize = current?.LabelSize(letter, pixels);
+
+            if (labelSize.HasValue && current.DrawLabel(drawList, letter, center - labelSize.Value / 2, pixels, color)) {
+                return;
+            }
+
+            var textSize = ImGui.CalcTextSize(letter);
+            var (r, g, b, a) = PackedColor.Unpack(color);
+            OutlinedText(drawList, letter, center - textSize / 2, new Vector4(r, g, b, a));
+        }
+
+        /// <summary>
+        /// A $ drawn with lines, not a font (ImGui's would be stretched and blurred at these sizes): an S of two
+        /// half-ellipses and a bar down the middle, each black under a thinner coloured one for the outline. The bar runs
+        /// well past the S at both ends, so the $ doesn't read as an S.
         /// </summary>
         private static void DrawDollar(ImDrawListPtr drawList, Vector2 at, float size, uint color, uint outline) {
-            var thickness = Math.Max(1.5f, size * 0.14f);
+            var thickness = Math.Max(1.5f, size * 0.13f);
             var center = at + new Vector2(size / 2, size / 2);
             var rx = size * 0.27f;
-            var ry = size * 0.19f;
-
-            var half = Math.Max(0.75f, size * 0.06f);
-            var barTop = new Vector2(center.X - half, at.Y);
-            var barBottom = new Vector2(center.X + half, at.Y + size);
-            drawList.AddRectFilled(barTop, barBottom, color);
-            drawList.AddRect(barTop - new Vector2(0.5f, 0.5f), barBottom + new Vector2(0.5f, 0.5f), outline);
+            var ry = size * 0.17f;
 
             // the top bowl from its upper right, over the top and down the left to the middle, then the bottom bowl from
             // the middle, round the right and the bottom to its lower left (angles clockwise from the right, y down)
@@ -172,12 +274,20 @@ namespace DaraletPlayer.Ui {
 
             var first = points[0];
             var last = points[points.Length - 1];
+            var bar = Math.Max(1.5f, thickness * 0.8f);
+            var barTop = new Vector2(center.X, at.Y + bar / 2 + 1);
+            var barBottom = new Vector2(center.X, at.Y + size - bar / 2 - 1);
+
+            // every outline first, then every fill, so the S and the bar share one outline round the whole $
             drawList.AddPolyline(ref points[0], points.Length, outline, ImDrawFlags.None, thickness + 2);
             drawList.AddCircleFilled(first, thickness / 2 + 1, outline);
             drawList.AddCircleFilled(last, thickness / 2 + 1, outline);
+            drawList.AddLine(barTop - new Vector2(0, 1), barBottom + new Vector2(0, 1), outline, bar + 2);
+
             drawList.AddPolyline(ref points[0], points.Length, color, ImDrawFlags.None, thickness);
             drawList.AddCircleFilled(first, thickness / 2, color);
             drawList.AddCircleFilled(last, thickness / 2, color);
+            drawList.AddLine(barTop, barBottom, color, bar);
         }
 
         private static uint ColorU32((byte R, byte G, byte B) color) {

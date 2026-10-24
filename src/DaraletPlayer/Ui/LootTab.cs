@@ -204,10 +204,12 @@ namespace DaraletPlayer.Ui {
 
             if (Form.FlowSmallButton(ref first, "Example", "Adds the Example Loot Profile and uses it: rules showing off what "
                 + "loot rules can do (roll quality, marks, unlearned scrolls, each outcome), to copy from or change.")) {
-                var example = ExampleLoot.Make();
-                example.Name = data.UniqueName(example.Name);
-                AddList(example);
-                ShowListMessage($"Added \"{example.Name}\", and switched to it. Click its rules to see how each is made.");
+                AddExample(data, ExampleLoot.Make());
+            }
+
+            if (Form.FlowSmallButton(ref first, "Example (colorless)", "Adds the Example Loot Profile (colorless) and uses "
+                + "it: the same rules as Example, marked white, gray and black instead of gold, silver and bronze.")) {
+                AddExample(data, ExampleLoot.MakeColorless());
             }
 
             if (Form.FlowSmallButton(ref first, "Copy", "Makes a copy of this loot profile and uses it, to change without "
@@ -227,6 +229,12 @@ namespace DaraletPlayer.Ui {
                 settings.Changed();
                 selectedRule = 0;
             }
+        }
+
+        private void AddExample(LootData data, LootList example) {
+            example.Name = data.UniqueName(example.Name);
+            AddList(example);
+            ShowListMessage($"Added \"{example.Name}\", and switched to it. Click its rules to see how each is made.");
         }
 
         /// <summary>Export, To file, Import and From file.</summary>

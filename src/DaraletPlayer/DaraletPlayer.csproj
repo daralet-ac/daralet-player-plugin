@@ -44,6 +44,8 @@
     <EmbeddedResource Include="Resources\locations.xml" LogicalName="DaraletPlayer.Resources.locations.xml" />
     <!-- the Example Loot Profile, as the Loot tab's To file saves one (Feed/ExampleLoot.cs) -->
     <EmbeddedResource Include="Resources\example-loot-profile.json" LogicalName="DaraletPlayer.Resources.example-loot-profile.json" />
+    <!-- the same, marked in white, gray and black instead of gold, silver and bronze -->
+    <EmbeddedResource Include="Resources\example-loot-profile-colorless.json" LogicalName="DaraletPlayer.Resources.example-loot-profile-colorless.json" />
     <!-- the game's own UI pictures, from the client: the main pack, the selection frame, the target reticles (ItemIcons.DrawArt) -->
     <EmbeddedResource Include="Resources\ui\*.png" LogicalName="DaraletPlayer.Resources.ui.%(Filename)%(Extension)" />
   </ItemGroup>

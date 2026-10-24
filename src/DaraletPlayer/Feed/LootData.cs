@@ -54,10 +54,12 @@ namespace DaraletPlayer.Feed {
         /// <summary>Misc only: scrolls of spells this character hasn't learned (Loot.KnowsScrollSpell).</summary>
         [DataMember(Name = "unlearnedSpellsOnly")] public bool UnlearnedSpellsOnly;
         [DataMember(Name = "values")] public Dictionary<string, string> Values;
-        /// <summary>The colour of the frame round what it decides (LootMarks.Highlights), or "".</summary>
+        /// <summary>The colour of the frame round what it decides, "#RRGGBB" (or an old LootMarks.Highlights name), or "".</summary>
         [DataMember(Name = "highlight")] public string Highlight;
         /// <summary>The symbol on what it decides (LootMarks.Icons), or "".</summary>
         [DataMember(Name = "icon")] public string Icon;
+        /// <summary>The symbol's own colour, "#RRGGBB", or "" to take the highlight's (gold without one).</summary>
+        [DataMember(Name = "iconColor")] public string IconColor;
         /// <summary>
         /// Filters (by MarketFilter.Key) switched to roll quality: their box in Values is the lowest roll quality, 0 to 100.
         /// Only a "min" filter for a stat that rolls can be (Loot.RollStatsFor).
@@ -95,6 +97,7 @@ namespace DaraletPlayer.Feed {
             Values = new Dictionary<string, string>();
             Highlight = "";
             Icon = "";
+            IconColor = "";
             RollFilters = new List<string>();
             Folder = "";
         }
@@ -153,7 +156,7 @@ namespace DaraletPlayer.Feed {
 
         private void SetDefaults() {
             Mode = CorpseMode.ConfirmBoth;
-            Lists = new List<LootList> { new LootList(), ExampleLoot.Make() };
+            Lists = new List<LootList> { new LootList(), ExampleLoot.Make(), ExampleLoot.MakeColorless() };
             ActiveList = new Dictionary<string, string>();
         }
 

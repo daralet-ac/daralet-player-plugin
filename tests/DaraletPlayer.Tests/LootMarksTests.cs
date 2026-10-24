@@ -51,12 +51,46 @@ namespace DaraletPlayer.Tests {
         }
 
         [TestMethod]
+        public void PickedColoursAreHexAndOldNamesStillRead() {
+            Assert.AreEqual("#FF8000", LootMarks.Hex((255, 128, 0)));
+            Assert.AreEqual(((byte)255, (byte)128, (byte)0), LootMarks.Parse("#FF8000"));
+            Assert.AreEqual(((byte)70, (byte)150, (byte)255), LootMarks.Parse("Blue"), "rules saved before the picker");
+            Assert.IsNotNull(LootMarks.Parse("Silver"));
+            Assert.IsNotNull(LootMarks.Parse("Bronze"));
+            Assert.IsNull(LootMarks.Parse(""));
+            Assert.IsNull(LootMarks.Parse("#12345"));
+            Assert.IsNull(LootMarks.Parse("#GGGGGG"));
+        }
+
+        [TestMethod]
+        public void TheIconsOwnColourComesFirst() {
+            var rule = new LootRule { Icon = LootMarks.Star, Highlight = "#0000FF", IconColor = "#FF0000" };
+            Assert.AreEqual(((byte)255, (byte)0, (byte)0), LootMarks.IconColor(rule));
+
+            rule.IconColor = "";
+            Assert.AreEqual(((byte)0, (byte)0, (byte)255), LootMarks.IconColor(rule));
+        }
+
+        [TestMethod]
+        public void GradeLettersAreIcons() {
+            foreach (var letter in new[] { "S", "A", "B", "C", "D", "E", "F" }) {
+                var rule = new LootRule { Icon = LootMarks.LetterPrefix + letter };
+                Assert.AreEqual(rule.Icon, LootMarks.IconOf(rule));
+                Assert.AreEqual(letter, LootMarks.LetterOf(rule.Icon));
+            }
+
+            Assert.IsNull(LootMarks.LetterOf(LootMarks.Star));
+            Assert.IsNull(LootMarks.LetterOf("LetterZ"));
+        }
+
+        [TestMethod]
         public void MarksAreSavedWithTheRule() {
-            var rule = new LootRule { Highlight = "Gold", Icon = LootMarks.Diamond, RollFilters = { Filter("Weapon", "minAttackMod").Key } };
+            var rule = new LootRule { Highlight = "Gold", Icon = LootMarks.Diamond, IconColor = "#123456", RollFilters = { Filter("Weapon", "minAttackMod").Key } };
             var copy = rule.Copy();
 
             Assert.AreEqual("Gold", copy.Highlight);
             Assert.AreEqual(LootMarks.Diamond, copy.Icon);
+            Assert.AreEqual("#123456", copy.IconColor);
             CollectionAssert.AreEqual(rule.RollFilters, copy.RollFilters);
         }
 
@@ -66,6 +100,7 @@ namespace DaraletPlayer.Tests {
 
             Assert.AreEqual("", rule.Highlight);
             Assert.AreEqual("", rule.Icon);
+            Assert.AreEqual("", rule.IconColor);
             Assert.IsNotNull(rule.RollFilters);
         }
 

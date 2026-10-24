@@ -26,7 +26,43 @@ namespace DaraletPlayer.Tests {
 
         [TestMethod]
         public void ExampleProfileOnlyUsesFiltersThatExist() {
+            foreach (var example in new[] { ExampleLoot.Make(), ExampleLoot.MakeColorless() }) {
+                CheckFiltersExist(example);
+            }
+
+            // new settings have both after an empty profile, which stays the one in use
+            var data = new LootData();
+            Assert.AreEqual(ExampleLoot.Name, data.Lists[1].Name);
+            Assert.AreEqual(ExampleLoot.ColorlessName, data.Lists[2].Name);
+            Assert.AreSame(data.Lists[0], data.ActiveFor("Someone"));
+        }
+
+        [TestMethod]
+        public void TheColorlessExampleIsTheExampleInWhiteGrayAndBlack() {
             var example = ExampleLoot.Make();
+            var colorless = ExampleLoot.MakeColorless();
+            var gold = LootMarks.Parse("Gold");
+
+            Assert.AreEqual(example.Rules.Count, colorless.Rules.Count);
+
+            for (var i = 0; i < example.Rules.Count; i++) {
+                Assert.AreEqual(example.Rules[i].Name, colorless.Rules[i].Name);
+                var was = LootMarks.Parse(example.Rules[i].Highlight);
+                var now = LootMarks.HighlightColor(colorless.Rules[i]);
+
+                if (was == gold) {
+                    Assert.AreEqual(((byte)255, (byte)255, (byte)255), now, example.Rules[i].Name);
+                }
+                else if (was == LootMarks.Parse("Silver")) {
+                    Assert.AreEqual(((byte)128, (byte)128, (byte)128), now, example.Rules[i].Name);
+                }
+                else if (was == LootMarks.Parse("Bronze")) {
+                    Assert.AreEqual(((byte)0, (byte)0, (byte)0), now, example.Rules[i].Name);
+                }
+            }
+        }
+
+        private static void CheckFiltersExist(LootList example) {
             Assert.IsTrue(example.Rules.Count > 5);
 
             foreach (var rule in example.Rules) {
@@ -44,11 +80,6 @@ namespace DaraletPlayer.Tests {
                     Assert.IsTrue(Loot.UsesRoll(rule, MarketSearch.Filters.Single(f => f.Key == key)), $"{rule.Name}: {key} can't be a roll filter");
                 }
             }
-
-            // new settings have it after an empty profile, which stays the one in use
-            var data = new LootData();
-            Assert.AreEqual(ExampleLoot.Name, data.Lists[1].Name);
-            Assert.AreSame(data.Lists[0], data.ActiveFor("Someone"));
         }
 
         [TestMethod]

@@ -55,6 +55,7 @@ namespace DaraletPlayer.Ui {
 
         public ItemIcons(Settings settings) {
             this.settings = settings;
+            current = this;
         }
 
         public bool Shown => !settings.Data.CompactLists;
@@ -398,6 +399,10 @@ namespace DaraletPlayer.Ui {
 
         public void Dispose() {
             disposed = true;
+
+            if (current == this) {
+                current = null;
+            }
 
             foreach (var texture in recolored) {
                 texture.Dispose();

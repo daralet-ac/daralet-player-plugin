@@ -340,7 +340,11 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   `ItemLines` use) can be switched to a roll quality on its own (`LootRule.RollFilters`, by filter key): its box is then the
   lowest roll quality, 0 to 100, rounded as the tooltip shows it, and an item without that roll doesn't match. Switching
   empties the box. A rule can also mark what it decides (`LootMarks`: `LootRule.Highlight`, a frame colour, and `Icon`, a
-  symbol drawn with ImGui shapes in the top left corner, in the frame's colour or gold), drawn by `ItemIcons.DrawMark` in
+  symbol in the top left corner, in `IconColor`, else the frame's colour, else gold). Colours are picked freely (ImGui's picker) or from
+  the ready-made swatches beside it (`LootMarks.Highlights`: gold, silver, bronze and more), and saved as `#RRGGBB`; the
+  swatches' names, which rules were saved with before the picker, are still read. Shapes are drawn with ImGui shapes; the grade
+  letters S to F (`LetterS`...) with `DrawLabel`'s GDI+ text, through the one `ItemIcons` (`ItemIcons.current`), since
+  the marks are drawn from static code. The editor's icon picker draws each symbol. Marks are drawn by `ItemIcons.DrawMark` in
   the Corpse window, the Test tab and, with **Loot highlights** (`SettingsData.InventoryLootMarks`), the Inventory tab, which has
   every listed item described to match it. Item tooltips (bank, packs, Loot tab, Corpse window) end with the rule that decides the item, in its outcome's colour (`ItemTooltip.Show(..., rule)`). The first rule that matches decides the mark too, so an earlier rule without
   one hides a later one's.
@@ -354,8 +358,10 @@ leave nulls out (`PlayerUiProtocol.BuildMessages(..., omitNulls: true)`): each i
   kind a gem, and those without one count as Other. The market search still goes by the Market API's word. New
   settings get the
   **Example Loot Profile** (`Feed/ExampleLoot.cs`, read from `Resources/example-loot-profile.json`, a profile as
-  To file saves one: to change it, save one and copy it over) after "My loot"; the Example button adds it again, and a test checks its
-  filter keys exist. **To file / From file** save and load profiles as `.json` in `Documents\Decal Plugins\Daralet Toolkit\Loot
+  To file saves one: to change it, save one and copy it over) after "My loot", then **Example Loot Profile (colorless)**
+  (`example-loot-profile-colorless.json`, `ExampleLoot.MakeColorless`), the same rules marked white, 50% gray and black
+  instead of gold, silver and bronze: change both together. The Example buttons add them again, and tests check their
+  filter keys exist and that the colorless one still matches the other. **To file / From file** save and load profiles as `.json` in `Documents\Decal Plugins\Daralet Toolkit\Loot
   Profiles` (`LootFiles`).
 
 - **Fellowship tab** (`Ui/FellowshipTab.cs`): sub tabs Members (the members and their vitals, and the fellowship window)

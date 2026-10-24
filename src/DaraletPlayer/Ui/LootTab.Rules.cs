@@ -193,13 +193,11 @@ namespace DaraletPlayer.Ui {
         private static bool RenderMarkChoices(LootRule rule) {
             Form.Label("Highlight", "A coloured frame round the icon of what this rule decides: in the Corpse window, the "
                 + "Test tab, and the Inventory tab with Loot highlights on.");
-            ImGui.SetNextItemWidth(Form.ControlWidth);
-            var changed = Widgets.Choice("##rule-highlight", LootMarks.HighlightChoices, ref rule.Highlight);
+            var changed = RenderMarkColor("##rule-highlight", ref rule.Highlight, LootMarks.DefaultIconColor,
+                "Frames what this rule decides. Click the colour to pick any, or one of the ready-made ones after it.");
 
-            Form.Label("Icon", "A symbol in the top left corner of the icon of what this rule decides, in the highlight's "
-                + "colour (gold without one).");
-            ImGui.SetNextItemWidth(Form.ControlWidth);
-            changed |= Widgets.Choice("##rule-icon", LootMarks.Icons, ref rule.Icon);
+            Form.Label("Icon", "A symbol in the top left corner of the icon of what this rule decides.");
+            changed |= RenderIconPicker(rule);
 
             if (LootMarks.Marks(rule)) {
                 ImGui.SameLine();
@@ -209,7 +207,127 @@ namespace DaraletPlayer.Ui {
                 Widgets.Tip("How the mark looks on an item's icon.");
             }
 
+            if (LootMarks.IconOf(rule) != null) {
+                Form.Label("Icon colour", "The symbol's colour. Off, it takes the highlight's (gold without one).");
+                changed |= RenderMarkColor("##rule-icon-color", ref rule.IconColor,
+                    LootMarks.HighlightColor(rule) ?? LootMarks.DefaultIconColor,
+                    "Gives the symbol a colour of its own. Off, it takes the highlight's (gold without one).");
+            }
+
             return changed;
+        }
+
+        /// <summary>
+        /// A mark's colour: a checkbox for whether it has one ("" when not) and a swatch that opens ImGui's colour picker.
+        /// Picking a colour with the box off turns it on. Off, the swatch shows what it would start as.
+        /// </summary>
+        private static bool RenderMarkColor(string id, ref string value, (byte R, byte G, byte B) fallback, string tip) {
+            var picked = LootMarks.Parse(value);
+            var color = picked ?? fallback;
+            var on = picked.HasValue;
+            var changed = false;
+
+            if (ImGui.Checkbox(id + "-on", ref on)) {
+                value = on ? LootMarks.Hex(color) : "";
+                changed = true;
+            }
+            Widgets.Tip(tip);
+
+            ImGui.SameLine();
+            var rgb = new Vector3(color.R / 255f, color.G / 255f, color.B / 255f);
+
+            if (ImGui.ColorEdit3(id, ref rgb, ImGuiColorEditFlags.NoInputs)) {
+                value = LootMarks.Hex((Byte(rgb.X), Byte(rgb.Y), Byte(rgb.Z)));
+                changed = true;
+            }
+            Widgets.Tip("Click to pick any colour.");
+
+            // a bar between the picker and the ready-made colours, or the picker looks like one of them
+            var swatch = ImGui.GetFrameHeight();
+            ImGui.SameLine();
+            var barAt = ImGui.GetCursorScreenPos();
+            var barWidth = Math.Max(2f, ImGui.GetStyle().ItemSpacing.X);
+            ImGui.Dummy(new Vector2(barWidth, swatch));
+            var x = (float)Math.Round(barAt.X + barWidth / 2);
+            ImGui.GetWindowDrawList().AddLine(new Vector2(x, barAt.Y + 2), new Vector2(x, barAt.Y + swatch - 2),
+                ImGui.GetColorU32(ImGuiCol.Separator), 2);
+
+            // the ready-made colours after it, wrapping to the column's width
+            var first = false;
+
+            foreach (var (_, name, preset) in LootMarks.Highlights) {
+                Form.Flow(ref first, swatch);
+                var shown = new Vector4(preset.R / 255f, preset.G / 255f, preset.B / 255f, 1);
+
+                if (ImGui.ColorButton(id + "-" + name, shown, ImGuiColorEditFlags.NoTooltip, new Vector2(swatch, swatch))) {
+                    value = LootMarks.Hex(preset);
+                    changed = true;
+                }
+                Widgets.Tip(name);
+
+                if (on && picked == preset) {
+                    ImGui.GetWindowDrawList().AddRect(ImGui.GetItemRectMin(), ImGui.GetItemRectMax(),
+                        ImGui.GetColorU32(ImGuiCol.Text), 0, ImDrawFlags.None, 2);
+                }
+            }
+
+            return changed;
+        }
+
+        private static byte Byte(float value) {
+            return (byte)Math.Round(Math.Max(0, Math.Min(1, value)) * 255);
+        }
+
+        /// <summary>The rule's symbol, picked from a grid of them drawn as they'll look, in the symbol's colour.</summary>
+        private static bool RenderIconPicker(LootRule rule) {
+            var label = LootMarks.Icons.FirstOrDefault(i => i.Value == rule.Icon).Label ?? "None";
+            ImGui.SetNextItemWidth(Form.ControlWidth);
+
+            if (!ImGui.BeginCombo("##rule-icon", label, ImGuiComboFlags.HeightLargest)) {
+                return false;
+            }
+
+            var changed = false;
+
+            if (ImGui.Selectable("None", string.IsNullOrEmpty(rule.Icon))) {
+                rule.Icon = "";
+                changed = true;
+            }
+
+            var cell = (float)Math.Round(ImGui.GetFrameHeight() * 1.4f);
+            var spacing = ImGui.GetStyle().ItemSpacing.X;
+            var perRow = Math.Max(1, (int)((ImGui.GetContentRegionAvail().X + spacing) / (cell + spacing)));
+            var color = ColorOf(LootMarks.IconColor(rule));
+            var shown = 0;
+
+            foreach (var (value, name) in LootMarks.Icons) {
+                if (value.Length == 0) {
+                    continue;
+                }
+
+                if (shown % perRow != 0) {
+                    ImGui.SameLine();
+                }
+
+                var at = ImGui.GetCursorScreenPos();
+
+                if (ImGui.Selectable("##icon-" + value, rule.Icon == value, ImGuiSelectableFlags.None, new Vector2(cell, cell))) {
+                    rule.Icon = value;
+                    changed = true;
+                }
+                Widgets.Tip(name);
+
+                var pad = cell * 0.15f;
+                ItemIcons.DrawSymbol(ImGui.GetWindowDrawList(), value, at + new Vector2(pad, pad), cell - pad * 2, color);
+                shown++;
+            }
+
+            ImGui.EndCombo();
+            return changed;
+        }
+
+        private static uint ColorOf((byte R, byte G, byte B) color) {
+            return ImGui.GetColorU32(new Vector4(color.R / 255f, color.G / 255f, color.B / 255f, 1));
         }
 
         /// <summary>Category, tiers, name words, and Salvageable and Sellable only: rows of the rule's form.</summary>
